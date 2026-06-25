@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ryewired — Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div id="shell">
+
+  <header id="admin-header">
+    <div id="admin-logo">
+      <img src="icon.png" alt="Ryewired">
+      <span id="admin-title">Ryewired</span>
+      <span id="admin-subtitle">Component Admin</span>
+    </div>
+    <button id="btn-new-component" class="btn-primary">
+      <i class="fa-solid fa-plus"></i> New Component
+    </button>
+  </header>
+
+  <div id="admin-body">
+
+    <!-- List -->
+    <aside id="comp-list-panel">
+      <div class="panel-header">
+        Components
+        <span id="comp-count" class="badge">0</span>
+      </div>
+      <div id="comp-search-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input id="comp-search" type="text" placeholder="Filter…" autocomplete="off" spellcheck="false">
+      </div>
+      <div id="comp-list"></div>
+    </aside>
+
+    <!-- Editor -->
+    <main id="editor-panel">
+
+      <div id="editor-empty">
+        <i class="fa-solid fa-microchip"></i>
+        <p>Select a component or create a new one</p>
+      </div>
+
+      <div id="editor-form" class="hidden">
+
+        <div id="editor-tabs">
+          <button class="tab active" data-tab="form">
+            <i class="fa-solid fa-pen-to-square"></i> Form
+          </button>
+          <button class="tab" data-tab="json">
+            <i class="fa-solid fa-code"></i> JSON
+          </button>
+          <button class="tab" data-tab="test">
+            <i class="fa-solid fa-flask"></i> Preview
+          </button>
+        </div>
+
+        <!-- Form tab -->
+        <div id="tab-form" class="tab-content">
+          <div class="form-grid">
+
+            <div class="field-group">
+              <label>ID <span class="hint-text">(no spaces)</span></label>
+              <input type="text" id="f-id" placeholder="e.g. op_amp_741" class="field">
+            </div>
+
+            <div class="field-group">
+              <label>Label</label>
+              <input type="text" id="f-label" placeholder="e.g. 741 Op-Amp" class="field">
+            </div>
+
+            <div class="field-group">
+              <label>Symbol</label>
+              <input type="text" id="f-symbol" placeholder="U" class="field short">
+            </div>
+
+            <div class="field-group">
+              <label>Category</label>
+              <select id="f-category" class="field">
+                <option value="passive">Passive</option>
+                <option value="semiconductor">Semiconductor</option>
+                <option value="switch">Switch</option>
+                <option value="ic">IC</option>
+                <option value="power">Power</option>
+                <option value="source">Signal Source</option>
+              </select>
+            </div>
+
+            <div class="field-group full">
+              <label>Description</label>
+              <input type="text" id="f-description" placeholder="Brief one-line description" class="field">
+            </div>
+
+            <div class="field-group">
+              <label>Legs</label>
+              <input type="number" id="f-legs" value="2" min="1" max="40" class="field short">
+            </div>
+
+            <div class="field-group">
+              <label>Leg Span (holes)</label>
+              <input type="number" id="f-leg-span" value="2" min="1" max="40" class="field short">
+            </div>
+
+            <div class="field-group">
+              <label>Behavior Type</label>
+              <select id="f-behavior" class="field">
+                <option value="resistor">Resistor</option>
+                <option value="capacitor">Capacitor</option>
+                <option value="diode">Diode</option>
+                <option value="led">LED</option>
+                <option value="potentiometer">Potentiometer</option>
+                <option value="bjt_npn">BJT NPN</option>
+                <option value="bjt_pnp">BJT PNP</option>
+                <option value="switch_spst">Switch SPST</option>
+                <option value="dc_supply">DC Supply</option>
+                <option value="signal_generator">Signal Generator</option>
+                <option value="op_amp">Op-Amp</option>
+                <option value="ic_delay">IC: Delay</option>
+                <option value="ic_inverter">IC: Inverter</option>
+                <option value="passthrough">Passthrough</option>
+                <option value="custom_dsp">Custom DSP</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <label>Body Color</label>
+              <input type="color" id="f-body-color" value="#888888" class="field short">
+            </div>
+
+            <div class="field-group">
+              <label>Body Width (px)</label>
+              <input type="number" id="f-body-width" value="28" class="field short">
+            </div>
+
+            <div class="field-group">
+              <label>Body Height (px)</label>
+              <input type="number" id="f-body-height" value="14" class="field short">
+            </div>
+
+          </div>
+
+          <div class="section-header">
+            Editable Properties
+            <button id="btn-add-prop" class="btn-small">
+              <i class="fa-solid fa-plus"></i> Add
+            </button>
+          </div>
+          <div id="props-builder"></div>
+
+          <div class="section-header">
+            Failure Modes
+            <button id="btn-add-failure" class="btn-small">
+              <i class="fa-solid fa-plus"></i> Add
+            </button>
+          </div>
+          <div id="failures-builder"></div>
+        </div>
+
+        <!-- JSON tab -->
+        <div id="tab-json" class="tab-content hidden">
+          <div id="json-toolbar">
+            <button id="btn-format-json" class="btn-small">
+              <i class="fa-solid fa-align-left"></i> Format
+            </button>
+            <button id="btn-apply-json" class="btn-small">
+              <i class="fa-solid fa-arrow-left"></i> Apply to Form
+            </button>
+            <span id="json-status"></span>
+          </div>
+          <textarea id="json-editor" spellcheck="false"></textarea>
+        </div>
+
+        <!-- Preview tab -->
+        <div id="tab-test" class="tab-content hidden">
+          <p class="hint-block">
+            Summary of what the sim engine will see. Save and reload the main app to test on the board.
+          </p>
+          <pre id="test-preview"></pre>
+        </div>
+
+        <div id="editor-actions">
+          <button id="btn-save-component" class="btn-primary">
+            <i class="fa-regular fa-floppy-disk"></i> Save Component
+          </button>
+          <button id="btn-delete-component" class="btn-danger">
+            <i class="fa-solid fa-trash-can"></i> Delete
+          </button>
+          <span id="save-status"></span>
+        </div>
+
+      </div><!-- #editor-form -->
+    </main>
+
+  </div><!-- #admin-body -->
+</div><!-- #shell -->
+
+<script src="js/admin.js"></script>
+</body>
+</html>

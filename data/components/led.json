@@ -1,0 +1,34 @@
+{
+  "id": "led",
+  "label": "LED",
+  "category": "semiconductor",
+  "symbol": "D",
+  "description": "Light-emitting diode. Emits light proportional to current.",
+  "legs": 2,
+  "leg_span": 2,
+  "polarized": true,
+  "properties": [
+    { "key": "color", "label": "Color", "type": "select", "options": ["Red","Green","Blue","Yellow","White","Orange","UV"], "default": "Red" },
+    { "key": "forward_voltage", "label": "Forward Voltage (V)", "type": "number", "default": 2.0 },
+    { "key": "max_current_ma", "label": "Max Current (mA)", "type": "number", "default": 20 }
+  ],
+  "behavior": { "type": "led" },
+  "failure_modes": {
+    "over_current": { "threshold_multiplier": 1.5, "result": "burn", "message": "LED burned out from too much current. Always use a current-limiting resistor in series. R = (Vsupply - Vforward) / Imax" },
+    "reverse_voltage": { "threshold_v": -5, "result": "silent_fail", "message": "LED is connected backwards. The flat side (cathode / shorter leg) goes toward ground." }
+  },
+  "color_map": {
+    "Red":    { "hex": "#ff2200", "vf": 2.0 },
+    "Green":  { "hex": "#00cc44", "vf": 2.1 },
+    "Blue":   { "hex": "#0044ff", "vf": 3.2 },
+    "Yellow": { "hex": "#ffcc00", "vf": 2.1 },
+    "White":  { "hex": "#ffffff", "vf": 3.3 },
+    "Orange": { "hex": "#ff7700", "vf": 2.0 },
+    "UV":     { "hex": "#8800ff", "vf": 3.4 }
+  },
+  "visual": {
+    "body_width": 10,
+    "body_height": 16,
+    "lead_length": 10
+  }
+}

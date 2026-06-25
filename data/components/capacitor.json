@@ -1,0 +1,27 @@
+{
+  "id": "capacitor",
+  "label": "Capacitor",
+  "category": "passive",
+  "symbol": "C",
+  "description": "Stores charge. Used for filtering, coupling, and timing.",
+  "legs": 2,
+  "leg_span": 2,
+  "orientation": "vertical",
+  "properties": [
+    { "key": "capacitance", "label": "Capacitance", "type": "number", "default": 0.000001, "unit": "F", "display_unit": "µF", "display_multiplier": 1000000 },
+    { "key": "voltage_rating", "label": "Voltage Rating (V)", "type": "select", "options": ["6.3V","10V","16V","25V","35V","50V","63V","100V"], "default": "25V" },
+    { "key": "type", "label": "Type", "type": "select", "options": ["Electrolytic","Film","Ceramic"], "default": "Electrolytic" },
+    { "key": "polarized", "label": "Polarized", "type": "boolean", "default": true }
+  ],
+  "behavior": { "type": "capacitor" },
+  "failure_modes": {
+    "over_voltage": { "threshold_multiplier": 1.1, "result": "explode", "message": "Capacitor voltage rating exceeded. Electrolytic caps can rupture violently when over-volted. Use a cap rated for higher voltage." },
+    "reverse_polarity": { "result": "explode", "message": "Electrolytic capacitor connected backwards. Polarity matters — the longer leg (or stripe on the sleeve) is positive." }
+  },
+  "visual": {
+    "body_color": "#2a6eb5",
+    "body_width": 14,
+    "body_height": 22,
+    "lead_length": 10
+  }
+}

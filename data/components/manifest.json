@@ -1,0 +1,11 @@
+[
+  "resistor.json",
+  "capacitor.json",
+  "led.json",
+  "diode.json",
+  "potentiometer.json",
+  "transistor_npn.json",
+  "switch.json",
+  "power_supply.json",
+  "signal_generator.json"
+]

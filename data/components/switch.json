@@ -1,0 +1,20 @@
+{
+  "id": "switch_spst",
+  "label": "Switch (SPST)",
+  "category": "switch",
+  "symbol": "SW",
+  "description": "Single-pole single-throw switch. On/off.",
+  "legs": 2,
+  "leg_span": 2,
+  "properties": [
+    { "key": "type", "label": "Action", "type": "select", "options": ["Latching","Momentary (NO)","Momentary (NC)"], "default": "Latching" },
+    { "key": "state", "label": "Initial State", "type": "select", "options": ["Open","Closed"], "default": "Open" }
+  ],
+  "behavior": { "type": "switch_spst" },
+  "failure_modes": {},
+  "visual": {
+    "body_color": "#333333",
+    "body_width": 22,
+    "body_height": 14
+  }
+}

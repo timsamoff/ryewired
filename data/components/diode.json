@@ -1,0 +1,33 @@
+{
+  "id": "diode",
+  "label": "Diode",
+  "category": "semiconductor",
+  "symbol": "D",
+  "description": "Allows current in one direction only. Used for rectification and clipping.",
+  "legs": 2,
+  "leg_span": 2,
+  "polarized": true,
+  "leg_labels": ["A", "K"],
+  "properties": [
+    { "key": "model", "label": "Model", "type": "select", "options": ["1N4148","1N4001","1N34A (Germanium)","BAT41 (Schottky)","1N5817 (Schottky)"], "default": "1N4148" },
+    { "key": "forward_voltage", "label": "Forward Voltage (V)", "type": "number", "default": 0.7 }
+  ],
+  "model_params": {
+    "1N4148":         { "vf": 0.7,  "max_current_ma": 200,  "type": "silicon" },
+    "1N4001":         { "vf": 0.7,  "max_current_ma": 1000, "type": "silicon" },
+    "1N34A (Germanium)": { "vf": 0.25, "max_current_ma": 75, "type": "germanium" },
+    "BAT41 (Schottky)":  { "vf": 0.35, "max_current_ma": 100, "type": "schottky" },
+    "1N5817 (Schottky)": { "vf": 0.45, "max_current_ma": 1000, "type": "schottky" }
+  },
+  "behavior": { "type": "diode" },
+  "failure_modes": {
+    "over_current": { "result": "burn", "message": "Diode current exceeded its maximum rating and it burned out." },
+    "reverse_voltage": { "result": "burn", "message": "Reverse breakdown voltage exceeded. The diode failed." }
+  },
+  "visual": {
+    "body_color": "#222222",
+    "body_width": 18,
+    "body_height": 10,
+    "lead_length": 12
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "signal_generator",
+  "label": "Signal Generator",
+  "category": "source",
+  "symbol": "SIG",
+  "description": "Audio signal source. Choose a waveform or load an audio file.",
+  "legs": 2,
+  "leg_span": 2,
+  "leg_labels": ["OUT", "GND"],
+  "properties": [
+    { "key": "waveform", "label": "Waveform", "type": "select", "options": ["Sine","Square","Sawtooth","Triangle","White Noise","Pink Noise","Audio File"], "default": "Sine" },
+    { "key": "frequency", "label": "Frequency (Hz)", "type": "number", "default": 440, "min": 1, "max": 20000 },
+    { "key": "amplitude", "label": "Amplitude (V)", "type": "number", "default": 1.0, "min": 0.01, "max": 12 },
+    { "key": "audio_file", "label": "Audio File", "type": "audio_file", "default": null }
+  ],
+  "behavior": { "type": "signal_generator" },
+  "failure_modes": {},
+  "visual": {
+    "body_color": "#1a6b3c",
+    "body_width": 34,
+    "body_height": 24,
+    "lead_length": 10
+  }
+}

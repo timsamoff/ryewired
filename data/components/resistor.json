@@ -1,0 +1,26 @@
+{
+  "id": "resistor",
+  "label": "Resistor",
+  "category": "passive",
+  "symbol": "R",
+  "description": "Fixed resistor. Limits current flow.",
+  "legs": 2,
+  "leg_span": 2,
+  "orientation": "horizontal",
+  "color_bands": true,
+  "properties": [
+    { "key": "resistance", "label": "Resistance (Ω)", "type": "number", "default": 10000, "unit": "Ω", "series": "E24" },
+    { "key": "power_rating", "label": "Power Rating", "type": "select", "options": ["0.125W", "0.25W", "0.5W", "1W", "2W"], "default": "0.25W" },
+    { "key": "tolerance", "label": "Tolerance", "type": "select", "options": ["1%", "5%", "10%"], "default": "5%" }
+  ],
+  "behavior": { "type": "resistor" },
+  "failure_modes": {
+    "over_power": { "threshold_multiplier": 2.0, "result": "burn", "message": "Resistor exceeded its power rating and burned out. Power = V²/R — use a higher wattage resistor or reduce voltage." }
+  },
+  "visual": {
+    "body_color": "#d4a843",
+    "body_width": 28,
+    "body_height": 12,
+    "lead_length": 12
+  }
+}
