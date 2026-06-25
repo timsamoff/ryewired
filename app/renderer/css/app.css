@@ -13,23 +13,23 @@
   --rw-blue:            #2B579A;
 
   /* ── UI surfaces (warm walnut darks) ── */
-  --bg-base:            #120D0B;
-  --bg-panel:           #1C1410;
-  --bg-raised:          #261A15;
-  --bg-elevated:        #30211A;
-  --bg-input:           #0E0907;
+  --bg-base:            #0D0A08; /* #120D0B; */
+  --bg-panel:           #1E1612; /* #1C1410; */
+  --bg-raised:          #2D201A; /* #261A15; */
+  --bg-elevated:        #3C2A22; /* #30211A; */
+  --bg-input:           #1A120E; /* #0E0907; */
   --bg-overlay:         rgba(10, 6, 4, 0.82);
 
   /* ── Borders ── */
-  --border:             #3A2218;
-  --border-light:       #4E2E1E;
+  --border:             #4D3224; /* #3A2218; */
+  --border-light:       #6B4634; /* #4E2E1E; */
   --border-focus:       var(--rw-blue);
 
   /* ── Text ── */
-  --text-primary:       #F2E8E2;
-  --text-secondary:     #A07868;
-  --text-dim:           #5C3828;
-  --text-placeholder:   #4A2E20;
+  --text-primary:       #F5F0ED; /* #F2E8E2; */
+  --text-secondary:     #C9B0A0; /* #C4A898; */ /* #A07868; */
+  --text-dim:           #8A6A58; /* #5C3828; */
+  --text-placeholder:   #6B503E; /* #4A2E20; */
   --text-on-accent:     #FFFFFF;
   --text-on-alert:      #FFFFFF;
 
@@ -48,15 +48,15 @@
   --success-subtle:     rgba(42, 122, 74, 0.15);
 
   /* ── Board surface ── */
-  --board-bg:           var(--rw-white);
-  --board-hole:         #3A2E24;
+  --board-bg:           #EAE5E0; /* var(--rw-white); */
+  --board-hole:         #4A3E34; /* #3A2E24; */
   --board-hole-shadow:  #251E16;
   --board-stripe:       #F0EDE5;
   --board-bus-r:        var(--rw-red);
   --board-bus-b:        var(--rw-blue);
   --board-bus-r-bg:     rgba(176, 32, 46, 0.07);
   --board-bus-b-bg:     rgba(43, 87, 154, 0.07);
-  --board-label:        #B8A898;
+  --board-label:        #8A7A6A; /* #B8A898; */
   --board-hover:        rgba(43, 87, 154, 0.25);
   --board-selected:     rgba(200, 120, 32, 0.45);
   --board-wire-start:   rgba(200, 120, 32, 0.55);
@@ -211,8 +211,10 @@ input, select, textarea {
 
 .menu-item:hover > span,
 .menu-item.open > span {
-  background: var(--bg-raised);
+  background: var(--accent-subtle);
   color: var(--text-primary);
+  /* background: var(--bg-raised);
+  color: var(--text-primary); */
 }
 
 /* Dropdown */
@@ -360,7 +362,8 @@ input, select, textarea {
   gap: 5px;
   width: 32px;
   height: 32px;
-  background: none;
+  background: rgba(255,255,255,0.03);
+  /* background: none; */
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
@@ -380,6 +383,12 @@ input, select, textarea {
   background: var(--bg-raised);
   border-color: var(--border-light);
   color: var(--text-primary);
+  /* background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent); */
+  /* background: var(--bg-raised);
+  border-color: var(--border-light);
+  color: var(--text-primary); */
 }
 
 .tb-btn.active {
@@ -848,7 +857,11 @@ input, select, textarea {
   -webkit-appearance: none;
 }
 
-.prop-input:focus { border-color: var(--border-focus); }
+.prop-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(43, 87, 154, 0.15);
+  /* border-color: var(--border-focus); */
+}
 select.prop-input { cursor: pointer; }
 
 .prop-range-wrap {
