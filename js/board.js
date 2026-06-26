@@ -284,8 +284,8 @@ const Board = (() => {
     for (let col = 0; col < COLS; col++) {
       // Skip the break gap column
       if (col === RAIL_BREAK) continue;
-      drawRailHole(col, minusY, c, 'blue');
-      drawRailHole(col, plusY,  c, 'red');
+      drawRailHole(col, minusY, c, 'blue', isTop ? 'rtm' : 'rbm');
+      drawRailHole(col, plusY,  c, 'red',  isTop ? 'rtp' : 'rbp');
     }
   }
 
@@ -294,20 +294,33 @@ const Board = (() => {
     ctx.beginPath(); ctx.moveTo(bx2, y); ctx.lineTo(x2, y); ctx.stroke();
   }
 
-  function drawRailHole(col, y, c, color) {
+  function drawRailHole(col, y, c, color, railRow) {
     const x = holeX(col);
+
+    // Hover / wire-start highlight
+    const isHover     = _hoverHole?.row === railRow && _hoverHole?.col === col;
+    const isWireStart = _wiringStart?.row === railRow && _wiringStart?.col === col;
+
+    if (isHover || isWireStart) {
+      ctx.beginPath();
+      ctx.arc(x, y, HOLE_R * 2.8, 0, Math.PI * 2);
+      ctx.fillStyle = isWireStart ? c.wireStart : c.hover;
+      ctx.fill();
+    }
+
     // Shadow
     ctx.beginPath();
     ctx.arc(x + 0.5, y + 0.5, HOLE_R, 0, Math.PI * 2);
     ctx.fillStyle = c.holeShadow;
     ctx.fill();
-    // Hole
+    // Tinted hole ring
     ctx.beginPath();
     ctx.arc(x, y, HOLE_R, 0, Math.PI * 2);
     ctx.fillStyle = color === 'blue'
       ? 'rgba(43,87,154,0.35)'
       : 'rgba(176,32,46,0.35)';
     ctx.fill();
+    // Inner hole
     ctx.beginPath();
     ctx.arc(x, y, HOLE_R - 1, 0, Math.PI * 2);
     ctx.fillStyle = c.hole;
@@ -342,9 +355,9 @@ const Board = (() => {
       if ((col + 1) % 5 !== 0 && col !== 0) continue; // every 5th + col 1
       const num = col + 1;
       const x   = holeX(col);
-      // Above row j (top of upper half)
-      ctx.fillText(num, x, L.rowY[9] - HOLE_PITCH / 2 - 2);
-      // Below row a (bottom of lower half)
+      // Above row f (index 5, topmost row of upper half)
+      ctx.fillText(num, x, L.rowY[5] - HOLE_PITCH / 2 - 2);
+      // Below row a (index 0, bottommost row of lower half)
       ctx.fillText(num, x, L.rowY[0] + HOLE_PITCH / 2 + 9);
     }
 

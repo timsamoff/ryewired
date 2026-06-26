@@ -1,12 +1,8 @@
 {
   "name": "ryewired-admin",
   "version": "0.1.0",
-  "description": "Ryewired — Component definition admin tool",
+  "description": "Ryewired — Component Admin Tool",
   "main": "main.js",
-  "scripts": {
-    "start": "electron ."
-  },
-  "devDependencies": {
-    "electron": "^42.5.0"
-  }
+  "scripts": { "start": "electron ." },
+  "devDependencies": { "electron": "^28.0.0" }
 }

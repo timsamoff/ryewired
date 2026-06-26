@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Untitled — Ryewired</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Titlebar ── -->
+  <header id="titlebar">
+    <div id="titlebar-left">
+      <img src="icon.png" id="app-icon" alt="Ryewired">
+      <span id="app-name">Ryewired</span>
+      <span id="app-file-name">Untitled</span>
+      <span id="app-dirty" class="hidden">●</span>
+    </div>
+
+    <nav id="menubar">
+      <div class="menu-item" id="menu-file">
+        <span>File</span>
+        <div class="dropdown">
+          <button class="dd-item" data-action="new"><i class="fa-regular fa-file"></i>New Layout<span class="shortcut">Ctrl+N</span></button>
+          <button class="dd-item" data-action="open"><i class="fa-regular fa-folder-open"></i>Open Layout…<span class="shortcut">Ctrl+O</span></button>
+          <div class="dd-sep"></div>
+          <button class="dd-item" data-action="save"><i class="fa-regular fa-floppy-disk"></i>Save<span class="shortcut">Ctrl+S</span></button>
+          <button class="dd-item" data-action="save-as"><i class="fa-solid fa-floppy-disk"></i>Save As…<span class="shortcut">Ctrl+Shift+S</span></button>
+          <div class="dd-sep"></div>
+          <button class="dd-item" data-action="import-audio"><i class="fa-solid fa-music"></i>Import Audio…</button>
+        </div>
+      </div>
+
+      <div class="menu-item" id="menu-edit">
+        <span>Edit</span>
+        <div class="dropdown">
+          <button class="dd-item" data-action="undo"><i class="fa-solid fa-rotate-left"></i>Undo<span class="shortcut">Ctrl+Z</span></button>
+          <button class="dd-item" data-action="redo"><i class="fa-solid fa-rotate-right"></i>Redo<span class="shortcut">Ctrl+Shift+Z</span></button>
+          <div class="dd-sep"></div>
+          <button class="dd-item" data-action="delete"><i class="fa-solid fa-trash-can"></i>Delete Selected<span class="shortcut">Del</span></button>
+          <button class="dd-item" data-action="clear"><i class="fa-solid fa-broom"></i>Clear Board</button>
+        </div>
+      </div>
+
+      <div class="menu-item" id="menu-sim">
+        <span>Simulation</span>
+        <div class="dropdown">
+          <button class="dd-item" data-action="sim-run"><i class="fa-solid fa-play"></i>Run<span class="shortcut">Space</span></button>
+          <button class="dd-item" data-action="sim-stop"><i class="fa-solid fa-stop"></i>Stop<span class="shortcut">Esc</span></button>
+          <div class="dd-sep"></div>
+          <button class="dd-item" data-action="sim-reset"><i class="fa-solid fa-arrows-rotate"></i>Reset Failures</button>
+        </div>
+      </div>
+
+      <div class="menu-item" id="menu-view">
+        <span>View</span>
+        <div class="dropdown">
+          <button class="dd-item" data-action="toggle-scope"><i class="fa-solid fa-wave-square"></i>Oscilloscope<span class="shortcut">Ctrl+D</span></button>
+          <button class="dd-item" data-action="toggle-spectrum"><i class="fa-solid fa-chart-column"></i>Spectrum Analyzer<span class="shortcut">Ctrl+Shift+D</span></button>
+          <div class="dd-sep"></div>
+          <button class="dd-item" data-action="toggle-palette"><i class="fa-solid fa-sidebar"></i>Toggle Palette</button>
+          <button class="dd-item" data-action="toggle-props"><i class="fa-solid fa-sliders"></i>Toggle Properties</button>
+          <div class="dd-sep"></div>
+          <button class="dd-item" data-action="zoom-fit"><i class="fa-solid fa-expand"></i>Fit Board to Window<span class="shortcut">Ctrl+0</span></button>
+          <div class="dd-sep"></div>
+          <button class="dd-item" data-action="help"><i class="fa-solid fa-circle-question"></i>Help</button>
+        </div>
+      </div>
+    </nav>
+
+    <div id="titlebar-right">
+      <div id="sim-indicator" class="stopped">
+        <i class="fa-solid fa-circle-dot"></i>
+        <span id="sim-indicator-label">Stopped</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Toolbar ── -->
+  <div id="toolbar">
+    <div id="toolbar-left">
+      <button class="tb-btn" data-action="new" title="New Layout (Ctrl+N)"><i class="fa-regular fa-file"></i></button>
+      <button class="tb-btn" data-action="open" title="Open Layout (Ctrl+O)"><i class="fa-regular fa-folder-open"></i></button>
+      <button class="tb-btn" data-action="save" title="Save (Ctrl+S)"><i class="fa-regular fa-floppy-disk"></i></button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" data-action="undo" title="Undo (Ctrl+Z)"><i class="fa-solid fa-rotate-left"></i></button>
+      <button class="tb-btn" data-action="redo" title="Redo (Ctrl+Shift+Z)"><i class="fa-solid fa-rotate-right"></i></button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn wire-btn" id="btn-wire-mode" data-action="wire-mode" title="Wiring Mode (W) — click a hole to start, click another to finish">
+        <i class="fa-solid fa-bezier-curve"></i>
+      </button>
+      <button class="tb-btn danger-hover" data-action="delete" title="Delete Selected (Del)"><i class="fa-solid fa-trash-can"></i></button>
+      <button class="tb-btn danger-hover" data-action="clear" title="Clear Board"><i class="fa-solid fa-broom"></i></button>
+    </div>
+
+    <div id="toolbar-center">
+      <button class="tb-run" id="btn-run" data-action="sim-run" title="Run Simulation (Space)">
+        <i class="fa-solid fa-play"></i><span>Run</span>
+      </button>
+      <button class="tb-stop" id="btn-stop" data-action="sim-stop" title="Stop Simulation (Esc)" disabled>
+        <i class="fa-solid fa-stop"></i><span>Stop</span>
+      </button>
+      <button class="tb-btn" data-action="sim-reset" title="Reset Failures — clears burned components, keeps layout">
+        <i class="fa-solid fa-arrows-rotate"></i>
+      </button>
+    </div>
+
+    <div id="toolbar-right">
+      <div id="zoom-controls">
+        <button class="tb-btn" data-action="zoom-out" title="Zoom Out (-)"><i class="fa-solid fa-minus"></i></button>
+        <span id="zoom-level">100%</span>
+        <button class="tb-btn" data-action="zoom-in"  title="Zoom In (+)"><i class="fa-solid fa-plus"></i></button>
+        <button class="tb-btn" data-action="zoom-fit" title="Fit to Window (Ctrl+0)"><i class="fa-solid fa-expand"></i></button>
+      </div>
+      <div class="tb-sep"></div>
+      <button class="tb-btn toggle-btn" id="btn-toggle-scope"    data-action="toggle-scope"    title="Oscilloscope (Ctrl+D)"><i class="fa-solid fa-wave-square"></i><span>OSC</span></button>
+      <button class="tb-btn toggle-btn" id="btn-toggle-spectrum"  data-action="toggle-spectrum"  title="Spectrum (Ctrl+Shift+D)"><i class="fa-solid fa-chart-column"></i><span>FFT</span></button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" data-action="import-audio" title="Import Audio File"><i class="fa-solid fa-music"></i></button>
+    </div>
+  </div>
+
+  <!-- ── Main layout ── -->
+  <div id="main-layout">
+
+    <!-- Palette -->
+    <aside id="palette" class="panel">
+      <div class="panel-titlebar">
+        <i class="fa-solid fa-microchip"></i>
+        <span>Components</span>
+      </div>
+      <div id="palette-search-wrap">
+        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+        <input id="palette-search" type="text" placeholder="Search components…" autocomplete="off" spellcheck="false">
+      </div>
+      <div id="palette-list"></div>
+    </aside>
+
+    <!-- Board -->
+    <main id="board-area">
+      <div id="board-scroll">
+        <div id="board-transform">
+          <canvas id="board-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Oscilloscope -->
+      <div id="scope-panel" class="instrument-panel hidden">
+        <div class="instrument-titlebar">
+          <div class="instrument-title"><i class="fa-solid fa-wave-square"></i><span>Oscilloscope</span></div>
+          <div class="instrument-controls">
+            <label class="inst-ctrl">
+              <span>V/div</span>
+              <input type="range" id="scope-vdiv" min="0.1" max="5" step="0.1" value="1">
+              <span id="scope-vdiv-val" class="ctrl-val">1.0</span>
+            </label>
+            <label class="inst-ctrl">
+              <span>ms/div</span>
+              <input type="range" id="scope-tdiv" min="0.5" max="50" step="0.5" value="5">
+              <span id="scope-tdiv-val" class="ctrl-val">5.0</span>
+            </label>
+            <button class="inst-close" data-action="toggle-scope"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+        <canvas id="scope-canvas"></canvas>
+      </div>
+
+      <!-- Spectrum -->
+      <div id="spectrum-panel" class="instrument-panel hidden">
+        <div class="instrument-titlebar">
+          <div class="instrument-title"><i class="fa-solid fa-chart-column"></i><span>Spectrum Analyzer</span></div>
+          <div class="instrument-controls">
+            <button class="inst-close" data-action="toggle-spectrum"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+        <canvas id="spectrum-canvas"></canvas>
+      </div>
+    </main>
+
+    <!-- Properties -->
+    <aside id="props-panel" class="panel">
+      <div class="panel-titlebar">
+        <i class="fa-solid fa-sliders"></i>
+        <span>Properties</span>
+      </div>
+      <div id="props-content">
+        <div class="props-empty">
+          <i class="fa-solid fa-arrow-pointer"></i>
+          <p>Select a component to edit its properties</p>
+        </div>
+      </div>
+    </aside>
+
+  </div><!-- #main-layout -->
+
+  <!-- ── Status bar ── -->
+  <footer id="statusbar">
+    <div id="status-left">
+      <span id="status-coords" class="status-mono"></span>
+    </div>
+    <div id="status-center">
+      <span id="status-msg">Drop a component to get started — press <kbd>W</kbd> to wire holes together</span>
+    </div>
+    <div id="status-right">
+      <span id="status-wire-mode" class="status-mono"></span>
+      <span id="status-component-count" class="status-mono"></span>
+    </div>
+  </footer>
+
+  <!-- ── Help modal ── -->
+  <div id="help-overlay" class="hidden">
+    <div id="help-backdrop"></div>
+    <div id="help-box">
+      <div id="help-header">
+        <img src="icon.png" alt="Ryewired">
+        <h2>Ryewired</h2>
+        <div id="help-version">Version 0.1.0</div>
+      </div>
+      <div id="help-body">
+        <p>An audio circuit breadboard simulator for hobbyists. Drop components from the palette onto the board, wire holes together, then press <strong>Run</strong> to simulate.</p>
+        <p>Connect a Signal Generator and open the Oscilloscope or Spectrum Analyzer to see how your circuit shapes audio. Try "illegal" connections — the sim will tell you what went wrong.</p>
+        <div class="help-shortcuts">
+          <div class="help-shortcut-row"><span>Run / Stop</span><kbd>Space</kbd></div>
+          <div class="help-shortcut-row"><span>Wiring mode</span><kbd>W</kbd></div>
+          <div class="help-shortcut-row"><span>Delete selected</span><kbd>Del</kbd></div>
+          <div class="help-shortcut-row"><span>Zoom in / out</span><kbd>+</kbd> / <kbd>–</kbd></div>
+          <div class="help-shortcut-row"><span>Fit to window</span><kbd>Ctrl+0</kbd></div>
+          <div class="help-shortcut-row"><span>Search components</span><kbd>Ctrl+F</kbd></div>
+          <div class="help-shortcut-row"><span>Cancel / close</span><kbd>Esc</kbd></div>
+        </div>
+      </div>
+      <div id="help-footer">
+        <button id="help-close"><i class="fa-solid fa-xmark"></i> Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Failure overlay ── -->
+  <div id="failure-overlay" class="hidden">
+    <div id="failure-backdrop"></div>
+    <div id="failure-box">
+      <div id="failure-header">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span id="failure-title">Component Failure</span>
+      </div>
+      <div id="failure-icon-wrap"><span id="failure-icon">💥</span></div>
+      <div id="failure-message"></div>
+      <div id="failure-actions">
+        <button id="failure-dismiss">
+          <i class="fa-solid fa-arrows-rotate"></i> Reset &amp; Continue
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden file input fallback -->
+  <input type="file" id="file-input" accept=".rw" style="display:none">
+
+</div><!-- #app -->
+
+<script src="js/utils.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/components-registry.js"></script>
+<script src="js/board.js"></script>
+<script src="js/wire.js"></script>
+<script src="js/simulation.js"></script>
+<script src="js/audio-engine.js"></script>
+<script src="js/oscilloscope.js"></script>
+<script src="js/properties-panel.js"></script>
+<script src="js/palette.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

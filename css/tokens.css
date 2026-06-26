@@ -1,0 +1,95 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   RYEWIRED — Shared Design Tokens
+   Loaded by both app (css/app.css) and admin (admin/renderer/css/admin.css).
+   No rules here — variables only.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* ── Source palette ── */
+  --rw-brown:           #5C4033;
+  --rw-white:           #FDFDFD;
+  --rw-red:             #B0202E;
+  --rw-blue:            #2B579A;
+
+  /* ── UI surfaces ── */
+  --bg-base:            #0D0A08;
+  --bg-panel:           #1E1612;
+  --bg-raised:          #2D201A;
+  --bg-elevated:        #3C2A22;
+  --bg-input:           #1A120E;
+  --bg-overlay:         rgba(10, 6, 4, 0.82);
+
+  /* ── Borders ── */
+  --border:             #4D3224;
+  --border-light:       #6B4634;
+  --border-focus:       var(--rw-blue);
+
+  /* ── Text ── */
+  --text-primary:       #F5F0ED;
+  --text-secondary:     #C9B0A0;
+  --text-dim:           #8A6A58;
+  --text-placeholder:   #6B503E;
+  --text-on-accent:     #FFFFFF;
+  --text-on-alert:      #FFFFFF;
+
+  /* ── Accent / functional ── */
+  --accent:             var(--rw-blue);
+  --accent-hover:       #3568B8;
+  --accent-dim:         #1A3A6A;
+  --accent-subtle:      rgba(43, 87, 154, 0.15);
+  --alert:              var(--rw-red);
+  --alert-hover:        #D02838;
+  --alert-dim:          #6A1018;
+  --alert-subtle:       rgba(176, 32, 46, 0.15);
+  --warning:            #C87820;
+  --warning-subtle:     rgba(200, 120, 32, 0.15);
+  --success:            #2A7A4A;
+  --success-subtle:     rgba(42, 122, 74, 0.15);
+
+  /* ── Board surface ── */
+  --board-bg:           #EAE5E0;
+  --board-hole:         #4A3E34;
+  --board-hole-shadow:  #251E16;
+  --board-stripe:       #F0EDE5;
+  --board-bus-r:        var(--rw-red);
+  --board-bus-b:        var(--rw-blue);
+  --board-bus-r-bg:     rgba(176, 32, 46, 0.07);
+  --board-bus-b-bg:     rgba(43, 87, 154, 0.07);
+  --board-label:        #8A7A6A;
+  --board-hover:        rgba(43, 87, 154, 0.25);
+  --board-selected:     rgba(200, 120, 32, 0.45);
+  --board-wire-start:   rgba(200, 120, 32, 0.55);
+
+  /* ── Instruments ── */
+  --scope-bg:           #080C08;
+  --scope-grid:         #101810;
+  --scope-grid-center:  #1A2A1A;
+  --scope-trace:        #4AE880;
+  --scope-trace-glow:   rgba(74, 232, 128, 0.4);
+  --spectrum-bar:       var(--rw-blue);
+
+  /* ── Sim states ── */
+  --sim-stopped:        var(--text-dim);
+  --sim-running:        var(--success);
+  --sim-running-pulse:  rgba(42, 122, 74, 0.3);
+
+  /* ── Typography ── */
+  --font-ui:            'Inter', system-ui, sans-serif;
+  --font-mono:          'IBM Plex Mono', 'Consolas', monospace;
+
+  /* ── Sizing ── */
+  --titlebar-h:         36px;
+  --toolbar-h:          44px;
+  --palette-w:          210px;
+  --props-w:            250px;
+  --statusbar-h:        26px;
+  --radius-sm:          4px;
+  --radius:             6px;
+  --radius-lg:          10px;
+
+  /* ── Transitions ── */
+  --t-fast:             0.08s ease;
+  --t-med:              0.15s ease;
+}

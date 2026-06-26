@@ -1,11 +1,11 @@
 {
   "name": "ryewired",
   "version": "0.1.0",
-  "description": "Ryewired — Audio circuit breadboard simulator for hobbyists",
+  "description": "Ryewired — Audio circuit breadboard simulator",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev"
+    "dev":   "electron . --dev"
   },
   "devDependencies": {
     "electron": "^28.0.0"
