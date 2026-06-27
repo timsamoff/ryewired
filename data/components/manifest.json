@@ -1,11 +1,12 @@
 [
-  "resistor.json",
   "capacitor.json",
-  "led.json",
+  "capacitor_electrolytic.json",
   "diode.json",
+  "led.json",
   "potentiometer.json",
-  "transistor_npn.json",
-  "switch.json",
   "power_supply.json",
-  "signal_generator.json"
+  "resistor.json",
+  "signal_generator.json",
+  "switch.json",
+  "transistor_npn.json"
 ]

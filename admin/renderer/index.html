@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <title>Ryewired — Admin</title>
+  <!-- Shared tokens loaded via <link> (more reliable than @import across contexts) -->
+  <link rel="stylesheet" href="../../css/tokens.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="../../css/tokens.css">
   <link rel="stylesheet" href="css/admin.css">
 </head>
 <body>
@@ -64,22 +65,18 @@
         <!-- Form tab -->
         <div id="tab-form" class="tab-content">
           <div class="form-grid">
-
             <div class="field-group">
               <label>ID <span class="hint-text">(no spaces)</span></label>
               <input type="text" id="f-id" placeholder="e.g. op_amp_741" class="field">
             </div>
-
             <div class="field-group">
               <label>Label</label>
               <input type="text" id="f-label" placeholder="e.g. 741 Op-Amp" class="field">
             </div>
-
             <div class="field-group">
               <label>Symbol</label>
               <input type="text" id="f-symbol" placeholder="U" class="field short">
             </div>
-
             <div class="field-group">
               <label>Category</label>
               <select id="f-category" class="field">
@@ -91,22 +88,18 @@
                 <option value="source">Signal Source</option>
               </select>
             </div>
-
             <div class="field-group full">
               <label>Description</label>
               <input type="text" id="f-description" placeholder="Brief one-line description" class="field">
             </div>
-
             <div class="field-group">
               <label>Legs</label>
               <input type="number" id="f-legs" value="2" min="1" max="40" class="field short">
             </div>
-
             <div class="field-group">
               <label>Leg Span (holes)</label>
               <input type="number" id="f-leg-span" value="2" min="1" max="40" class="field short">
             </div>
-
             <div class="field-group">
               <label>Behavior Type</label>
               <select id="f-behavior" class="field">
@@ -127,37 +120,49 @@
                 <option value="custom_dsp">Custom DSP</option>
               </select>
             </div>
-
             <div class="field-group">
               <label>Body Color</label>
               <input type="color" id="f-body-color" value="#888888" class="field short">
             </div>
-
             <div class="field-group">
               <label>Body Width (px)</label>
               <input type="number" id="f-body-width" value="28" class="field short">
             </div>
-
             <div class="field-group">
               <label>Body Height (px)</label>
               <input type="number" id="f-body-height" value="14" class="field short">
             </div>
-
           </div>
 
+          <!-- Editable Properties -->
           <div class="section-header">
             Editable Properties
-            <button id="btn-add-prop" class="btn-small">
-              <i class="fa-solid fa-plus"></i> Add
-            </button>
+            <button id="btn-add-prop" class="btn-small"><i class="fa-solid fa-plus"></i> Add</button>
           </div>
           <div id="props-builder"></div>
 
+          <!-- Failure Modes -->
           <div class="section-header">
             Failure Modes
-            <button id="btn-add-failure" class="btn-small">
-              <i class="fa-solid fa-plus"></i> Add
+            <button id="btn-add-failure" class="btn-small"><i class="fa-solid fa-plus"></i> Add</button>
+          </div>
+          <div class="admin-help-block" id="failure-help">
+            <button class="admin-help-toggle" id="btn-failure-help">
+              <i class="fa-solid fa-circle-question"></i> What are failure modes?
             </button>
+            <div class="admin-help-body hidden" id="failure-help-body">
+              <p>Failure modes define what happens when a component is pushed beyond its limits during simulation.</p>
+              <dl>
+                <dt>Mode key</dt>
+                <dd>Internal trigger name used by the sim engine. Common keys: <code>over_current</code>, <code>over_voltage</code>, <code>reverse_polarity</code>, <code>over_power</code>.</dd>
+                <dt>Result</dt>
+                <dd>The visual effect shown to the user: <code>burn</code> (component goes dark with ✕), <code>explode</code> (💥 overlay), <code>smoke</code> (💨), <code>silent_fail</code> (stops working, no drama).</dd>
+                <dt>Threshold ×</dt>
+                <dd>How many times over the rated value triggers the failure. Example: <code>1.5</code> means the component fails at 150% of its rating. Leave blank for failures that trigger at any violation (e.g. reverse polarity).</dd>
+                <dt>Message</dt>
+                <dd>Plain-English explanation shown to the user. Write it as if explaining to a beginner — what went wrong and how to fix it.</dd>
+              </dl>
+            </div>
           </div>
           <div id="failures-builder"></div>
         </div>
@@ -178,15 +183,16 @@
 
         <!-- Preview tab -->
         <div id="tab-test" class="tab-content hidden">
-          <p class="hint-block">
-            Summary of what the sim engine will see. Save and reload the main app to test on the board.
-          </p>
+          <p class="hint-block">Summary of what the sim engine will see. Save and reload the main app to test on the board.</p>
           <pre id="test-preview"></pre>
         </div>
 
         <div id="editor-actions">
           <button id="btn-save-component" class="btn-primary">
-            <i class="fa-regular fa-floppy-disk"></i> Save Component
+            <i class="fa-regular fa-floppy-disk"></i> Save
+          </button>
+          <button id="btn-duplicate-component" class="btn-small" id="btn-duplicate-component">
+            <i class="fa-solid fa-copy"></i> Duplicate
           </button>
           <button id="btn-delete-component" class="btn-danger">
             <i class="fa-solid fa-trash-can"></i> Delete

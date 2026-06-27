@@ -582,3 +582,97 @@ body.dragging  #board-canvas { cursor: grabbing; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--rw-brown); }
+
+/* ── Rotation controls ────────────────────────────────────────────────────── */
+
+.prop-rotate-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prop-rotate-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.prop-rotate-btn:hover {
+  background: var(--accent-subtle);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.prop-rotate-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  min-width: 32px;
+  text-align: center;
+}
+
+/* ── Capacitance unit display ─────────────────────────────────────────────── */
+
+.prop-cap-unit {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--accent);
+  letter-spacing: 0;
+  text-transform: none;
+  margin-left: 6px;
+  padding: 1px 5px;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-dim);
+  border-radius: 3px;
+}
+
+/* ── Help modal support/copyright footer ─────────────────────────────────── */
+
+#help-support,
+#help-copyright {
+  font-size: 11px;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+#help-support a,
+#help-copyright a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--t-fast);
+}
+
+#help-support a:hover,
+#help-copyright a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+#help-support i {
+  color: var(--rw-red);
+  margin-right: 3px;
+}
+
+#help-copyright {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  margin-bottom: 12px;
+}
+
+/* ── Context menu prevention on board ────────────────────────────────────── */
+
+#board-scroll {
+  -webkit-user-select: none;
+  user-select: none;
+}

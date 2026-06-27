@@ -164,7 +164,7 @@ const Storage = (() => {
     const dirtyEl = document.getElementById('app-dirty');
     if (nameEl)  nameEl.textContent = _fileName || 'Untitled';
     if (dirtyEl) dirtyEl.classList.toggle('hidden', !dirty);
-    document.title = (_fileName || 'Untitled') + ' — Ryewired';
+    document.title = 'Ryewired — ' + (_fileName || 'Untitled');
   }
 
   function markDirty()   { updateTitle(true); }

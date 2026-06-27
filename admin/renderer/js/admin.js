@@ -413,3 +413,53 @@
   await loadList();
 
 })();
+
+// ── Duplicate component ───────────────────────────────────────────────────────
+// Appended after main admin.js bootstrap
+
+(function wireAdminExtras() {
+  // Wait for DOM
+  document.addEventListener('DOMContentLoaded', () => {
+    initDuplicateButton();
+    initFailureHelp();
+  });
+
+  // Also run immediately in case DOMContentLoaded already fired
+  if (document.readyState !== 'loading') {
+    initDuplicateButton();
+    initFailureHelp();
+  }
+
+  function initDuplicateButton() {
+    const btn = document.getElementById('btn-duplicate-component');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const form = document.getElementById('editor-form');
+      if (!form || form.classList.contains('hidden')) return;
+      const def = readForm();
+      const newId = def.id.replace(/_copy\d*$/, '') + '_copy';
+      def.id = newId;
+      const filename = newId.replace(/\s+/g,'_').replace(/[^a-z0-9_]/gi,'') + '.json';
+      const result = await window.admin.saveComponent(filename, def);
+      if (result.ok) {
+        const saveStatus = document.getElementById('save-status');
+        if (saveStatus) { saveStatus.textContent = `✓ Duplicated as ${filename}`; setTimeout(() => saveStatus.textContent = '', 2500); }
+        await loadList();
+        await openComponent(filename);
+      }
+    });
+  }
+
+  function initFailureHelp() {
+    const btn  = document.getElementById('btn-failure-help');
+    const body = document.getElementById('failure-help-body');
+    if (!btn || !body) return;
+    btn.addEventListener('click', () => {
+      body.classList.toggle('hidden');
+      const icon = btn.querySelector('i');
+      if (icon) icon.className = body.classList.contains('hidden')
+        ? 'fa-solid fa-circle-question'
+        : 'fa-solid fa-circle-chevron-up';
+    });
+  }
+})();

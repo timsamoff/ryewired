@@ -1,0 +1,33 @@
+{
+  "id": "capacitor_electrolytic",
+  "label": "Capacitor (Electrolytic)",
+  "category": "passive",
+  "symbol": "C+",
+  "description": "Polarized electrolytic capacitor. Stripe side is negative (–).",
+  "legs": 2,
+  "leg_span": 2,
+  "polarized": true,
+  "leg_labels": ["+", "–"],
+  "properties": [
+    { "key": "capacitance", "label": "Capacitance (F)", "type": "number", "default": 0.0001, "min": 0.000000000001, "step": "any" },
+    { "key": "voltage_rating", "label": "Voltage Rating", "type": "select", "options": ["6.3V","10V","16V","25V","35V","50V","63V","100V"], "default": "25V" }
+  ],
+  "behavior": { "type": "capacitor" },
+  "failure_modes": {
+    "over_voltage": {
+      "threshold_multiplier": 1.1,
+      "result": "explode",
+      "message": "Electrolytic capacitor voltage rating exceeded. These can rupture violently when over-volted. Use a cap rated for higher voltage."
+    },
+    "reverse_polarity": {
+      "result": "explode",
+      "message": "Electrolytic capacitor connected backwards. The stripe side (–) must connect toward ground, the plain side (+) toward positive voltage."
+    }
+  },
+  "visual": {
+    "body_color": "#1a4a8a",
+    "body_width": 14,
+    "body_height": 22,
+    "lead_length": 10
+  }
+}

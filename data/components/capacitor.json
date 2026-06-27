@@ -1,27 +1,29 @@
 {
   "id": "capacitor",
-  "label": "Capacitor",
+  "label": "Capacitor (Film/Ceramic)",
   "category": "passive",
   "symbol": "C",
-  "description": "Stores charge. Used for filtering, coupling, and timing.",
+  "description": "Non-polarized film or ceramic capacitor. Can be placed either way.",
   "legs": 2,
   "leg_span": 2,
-  "orientation": "vertical",
+  "polarized": false,
   "properties": [
-    { "key": "capacitance", "label": "Capacitance", "type": "number", "default": 0.000001, "unit": "F", "display_unit": "µF", "display_multiplier": 1000000 },
-    { "key": "voltage_rating", "label": "Voltage Rating (V)", "type": "select", "options": ["6.3V","10V","16V","25V","35V","50V","63V","100V"], "default": "25V" },
-    { "key": "type", "label": "Type", "type": "select", "options": ["Electrolytic","Film","Ceramic"], "default": "Electrolytic" },
-    { "key": "polarized", "label": "Polarized", "type": "boolean", "default": true }
+    { "key": "capacitance", "label": "Capacitance (F)", "type": "number", "default": 0.000001, "min": 0.000000000001, "step": "any" },
+    { "key": "voltage_rating", "label": "Voltage Rating", "type": "select", "options": ["16V","25V","50V","100V","250V","630V"], "default": "50V" },
+    { "key": "type", "label": "Type", "type": "select", "options": ["Film","Ceramic","Monolithic"], "default": "Film" }
   ],
   "behavior": { "type": "capacitor" },
   "failure_modes": {
-    "over_voltage": { "threshold_multiplier": 1.1, "result": "explode", "message": "Capacitor voltage rating exceeded. Electrolytic caps can rupture violently when over-volted. Use a cap rated for higher voltage." },
-    "reverse_polarity": { "result": "explode", "message": "Electrolytic capacitor connected backwards. Polarity matters — the longer leg (or stripe on the sleeve) is positive." }
+    "over_voltage": {
+      "threshold_multiplier": 1.2,
+      "result": "burn",
+      "message": "Capacitor voltage rating exceeded. Use a higher-rated capacitor."
+    }
   },
   "visual": {
-    "body_color": "#2a6eb5",
-    "body_width": 14,
-    "body_height": 22,
+    "body_color": "#c8a040",
+    "body_width": 22,
+    "body_height": 12,
     "lead_length": 10
   }
 }
