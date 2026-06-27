@@ -28,7 +28,11 @@ let _panScrollY = 0;
     document.getElementById('spectrum-canvas')
   );
 
-  Board.onSelect(inst => PropertiesPanel.show(inst));
+  Board.onSelect((inst, wire) => {
+    PropertiesPanel.show(inst, wire);
+    // Add body class when a component is selected (for CSS cursor hints)
+    document.body.classList.toggle('comp-selected', !!inst);
+  });
 
   Board.onPlace(inst => {
     Storage.markDirty();
@@ -89,6 +93,7 @@ function handleAction(action) {
       PropertiesPanel.hide();
       updateComponentCount();
       Storage.markDirty();
+      document.body.classList.remove('comp-selected');
       break;
     case 'clear':         confirmClear();        break;
     case 'sim-run':       runSim();              break;
@@ -288,10 +293,19 @@ function initPan() {
     scroll.style.cursor = '';
   });
 
-  // Scroll wheel zooms (no modifier needed)
+  // Scroll wheel: zoom toward pointer
   scroll.addEventListener('wheel', e => {
     e.preventDefault();
+    const rect   = scroll.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;  // offset within scroll container
+    const mouseY = e.clientY - rect.top;
+    const oldZ   = _zoomLevel;
     if (e.deltaY < 0) zoomIn(); else zoomOut();
+    const newZ   = _zoomLevel;
+    if (newZ === oldZ) return;
+    // Shift scroll so the point under the pointer stays fixed
+    scroll.scrollLeft = (scroll.scrollLeft + mouseX) * (newZ / oldZ) - mouseX;
+    scroll.scrollTop  = (scroll.scrollTop  + mouseY) * (newZ / oldZ) - mouseY;
   }, { passive: false });
 }
 

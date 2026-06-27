@@ -676,3 +676,69 @@ body.dragging  #board-canvas { cursor: grabbing; }
   -webkit-user-select: none;
   user-select: none;
 }
+
+/* ── Flip / orientation buttons ──────────────────────────────────────────── */
+
+.prop-flip-wrap {
+  display: flex;
+  gap: 6px;
+}
+
+.prop-flip-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.prop-flip-btn:hover {
+  background: var(--accent-subtle);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.prop-flip-btn.active {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.prop-flip-btn i { font-size: 12px; }
+
+/* ── Wire color picker in props ──────────────────────────────────────────── */
+
+input[type="color"].prop-input {
+  padding: 3px 5px;
+  height: 34px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Leg drag targets ────────────────────────────────────────────────────── */
+
+/* Cursor hint when hovering over board in non-jumper mode with component selected */
+body.comp-selected #board-canvas {
+  cursor: default;
+}
+
+/* ── Selected wire highlight in props ─────────────────────────────────────── */
+
+.prop-wire-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.2);
+  vertical-align: middle;
+  margin-right: 4px;
+}
