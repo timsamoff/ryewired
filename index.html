@@ -84,8 +84,8 @@
       <button class="tb-btn" data-action="open" title="Open Layout (Ctrl+O)"><i class="fa-regular fa-folder-open"></i></button>
       <button class="tb-btn" data-action="save" title="Save (Ctrl+S)"><i class="fa-regular fa-floppy-disk"></i></button>
       <div class="tb-sep"></div>
-      <button class="tb-btn" data-action="undo" title="Undo (Ctrl+Z)"><i class="fa-solid fa-rotate-left"></i></button>
-      <button class="tb-btn" data-action="redo" title="Redo (Ctrl+Shift+Z)"><i class="fa-solid fa-rotate-right"></i></button>
+      <button class="tb-btn" id="btn-undo" data-action="undo" title="Undo (Ctrl+Z)" disabled><i class="fa-solid fa-rotate-left"></i></button>
+      <button class="tb-btn" id="btn-redo" data-action="redo" title="Redo (Ctrl+Shift+Z)" disabled><i class="fa-solid fa-rotate-right"></i></button>
       <div class="tb-sep"></div>
       <button class="tb-btn wire-btn" id="btn-wire-mode" data-action="wire-mode" title="Jumper Mode (W) — click a hole to start a jumper, click another to finish">
         <i class="fa-solid fa-bezier-curve"></i>
@@ -276,6 +276,7 @@
 <script src="js/oscilloscope.js"></script>
 <script src="js/properties-panel.js"></script>
 <script src="js/palette.js"></script>
-<script src="js/app.js"></script>
+<script src="js/history.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

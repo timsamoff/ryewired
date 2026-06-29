@@ -1,45 +1,58 @@
 // ── Storage Module ────────────────────────────────────────────────────────────
-// File System Access API (Chrome/Edge 86+) with download/input fallback.
 
 const Storage = (() => {
-
-  const FILE_EXT       = 'rw';
-  const FILE_MIME      = 'application/json';
-  const FILE_DESC      = 'Ryewired Layout';
-  const MANIFEST_PATH  = './data/components/manifest.json';
-  const COMPONENT_BASE = './data/components/';
-  const APP_VERSION    = '0.1.0';
+  const FILE_EXT      = 'rw';
+  const FILE_MIME     = 'application/json';
+  const FILE_DESC     = 'Ryewired Layout';
+  const MANIFEST_PATH = './data/components/manifest.json';
+  const COMP_BASE     = './data/components/';
+  const APP_VERSION   = '0.1.0';
 
   const supportsFilePicker = typeof window.showSaveFilePicker === 'function';
-
   let _fileHandle = null;
   let _fileName   = 'Untitled';
 
   // ── Component loading ───────────────────────────────────────────────────────
-
   async function loadAllComponents() {
     try {
       const res = await fetch(MANIFEST_PATH);
-      if (!res.ok) throw new Error(`Manifest fetch failed: ${res.status}`);
+      if (!res.ok) throw new Error(`${res.status}`);
       const manifest = await res.json();
       const defs = await Promise.all(
-        manifest.map(filename =>
-          fetch(COMPONENT_BASE + filename)
-            .then(r => r.ok ? r.json() : null)
-            .catch(() => null)
-        )
+        manifest.map(f => fetch(COMP_BASE+f).then(r=>r.ok?r.json():null).catch(()=>null))
       );
       const loaded = defs.filter(Boolean);
       console.log(`[Storage] Loaded ${loaded.length} components`);
       return loaded;
-    } catch (err) {
+    } catch(err) {
       console.error('[Storage] Component load error:', err);
       return [];
     }
   }
 
-  // ── Layout: New ─────────────────────────────────────────────────────────────
+  // ── Layout migration ────────────────────────────────────────────────────────
+  // Converts old-format instances (inst.row/col) to new legs[] model.
+  function migrateLayout(layout) {
+    if (!layout?.components) return layout;
+    layout.components = layout.components.map(inst => {
+      if (inst.legs) return inst; // already new format
+      // Build legs from old row/col + def span
+      const defId   = inst.defId;
+      const row     = inst.row ?? 3;
+      const col     = inst.col ?? 10;
+      const legSpan = 1; // default 2-leg span of 1
+      inst.legs = [
+        { row, col },
+        { row, col: Math.min(62, col + legSpan) }
+      ];
+      // Remove legacy fields
+      delete inst.row; delete inst.col; delete inst.orientation;
+      return inst;
+    });
+    return layout;
+  }
 
+  // ── New layout ──────────────────────────────────────────────────────────────
   function newLayout() {
     _fileHandle = null;
     _fileName   = 'Untitled';
@@ -47,124 +60,106 @@ const Storage = (() => {
     return true;
   }
 
-  // ── Layout: Save ───────────────────────────────────────────────────────────
-
-  async function saveLayout(data, forceDialog = false) {
+  // ── Save ────────────────────────────────────────────────────────────────────
+  async function saveLayout(data, forceDialog=false) {
     const json = JSON.stringify(data, null, 2);
-
     if (supportsFilePicker) {
       try {
-        if (!_fileHandle || forceDialog) {
+        if (!_fileHandle||forceDialog) {
           _fileHandle = await window.showSaveFilePicker({
-            suggestedName: (_fileName || 'untitled') + '.' + FILE_EXT,
-            types: [{ description: FILE_DESC, accept: { [FILE_MIME]: ['.' + FILE_EXT] } }]
+            suggestedName: (_fileName||'untitled')+'.'+FILE_EXT,
+            types: [{description:FILE_DESC, accept:{[FILE_MIME]:['.' +FILE_EXT]}}]
           });
         }
-        const writable = await _fileHandle.createWritable();
-        await writable.write(json);
-        await writable.close();
-        _fileName = _fileHandle.name.replace(/\.[^.]+$/, '');
+        const w = await _fileHandle.createWritable();
+        await w.write(json); await w.close();
+        _fileName = _fileHandle.name.replace(/\.[^.]+$/,'');
         updateTitle(false);
-        return { saved: true, fileName: _fileHandle.name };
-      } catch (err) {
-        if (err.name === 'AbortError') return { saved: false };
-        console.warn('[Storage] FilePicker save failed, using download fallback:', err);
+        return { saved:true, fileName:_fileHandle.name };
+      } catch(err) {
+        if (err.name==='AbortError') return { saved:false };
       }
     }
-
-    // Fallback: download
-    downloadJson(json, (_fileName || 'untitled') + '.' + FILE_EXT);
+    downloadJson(json, (_fileName||'untitled')+'.'+FILE_EXT);
     updateTitle(false);
-    return { saved: true, fileName: _fileName + '.' + FILE_EXT };
+    return { saved:true, fileName:_fileName+'.'+FILE_EXT };
   }
 
-  // ── Layout: Open ───────────────────────────────────────────────────────────
-
+  // ── Open ────────────────────────────────────────────────────────────────────
   async function openLayout() {
+    let raw = null;
     if (supportsFilePicker) {
       try {
         const [handle] = await window.showOpenFilePicker({
-          types: [{ description: FILE_DESC, accept: { [FILE_MIME]: ['.' + FILE_EXT] } }],
-          multiple: false
+          types:[{description:FILE_DESC, accept:{[FILE_MIME]:['.' +FILE_EXT]}}], multiple:false
         });
         _fileHandle = handle;
         const file  = await handle.getFile();
-        const text  = await file.text();
-        _fileName   = file.name.replace(/\.[^.]+$/, '');
+        raw         = await file.text();
+        _fileName   = file.name.replace(/\.[^.]+$/,'');
         updateTitle(false);
-        return JSON.parse(text);
-      } catch (err) {
-        if (err.name === 'AbortError') return null;
-        console.warn('[Storage] FilePicker open failed, using input fallback:', err);
+      } catch(err) {
+        if (err.name==='AbortError') return null;
       }
     }
-
-    // Fallback: file input
-    return new Promise(resolve => {
-      const input = document.getElementById('file-input');
-      input.onchange = async () => {
-        const file = input.files[0];
-        if (!file) { resolve(null); return; }
-        const text  = await file.text();
-        _fileHandle = null;
-        _fileName   = file.name.replace(/\.[^.]+$/, '');
-        updateTitle(false);
-        try { resolve(JSON.parse(text)); }
-        catch { resolve(null); }
-        input.value = '';
-      };
-      input.click();
-    });
+    if (!raw) {
+      raw = await new Promise(resolve => {
+        const input = document.getElementById('file-input');
+        input.onchange = async () => {
+          const file=input.files[0];
+          if (!file){resolve(null);return;}
+          _fileHandle=null; _fileName=file.name.replace(/\.[^.]+$/,'');
+          updateTitle(false);
+          resolve(await file.text());
+          input.value='';
+        };
+        input.click();
+      });
+    }
+    if (!raw) return null;
+    try {
+      const layout = JSON.parse(raw);
+      return migrateLayout(layout);
+    } catch { return null; }
   }
 
-  // ── Audio file ─────────────────────────────────────────────────────────────
-
+  // ── Audio ───────────────────────────────────────────────────────────────────
   async function openAudioFile() {
     if (supportsFilePicker) {
       try {
-        const [handle] = await window.showOpenFilePicker({
-          types: [{ description: 'Audio Files', accept: { 'audio/*': ['.wav','.mp3','.ogg','.flac','.aac'] } }],
-          multiple: false
+        const [h] = await window.showOpenFilePicker({
+          types:[{description:'Audio',accept:{'audio/*':['.wav','.mp3','.ogg','.flac','.aac']}}],
+          multiple:false
         });
-        const file   = await handle.getFile();
-        const buffer = await file.arrayBuffer();
-        return { name: file.name, buffer };
-      } catch (err) {
-        if (err.name === 'AbortError') return null;
-      }
+        const f=await h.getFile();
+        return { name:f.name, buffer:await f.arrayBuffer() };
+      } catch(err) { if (err.name==='AbortError') return null; }
     }
-
-    return new Promise(resolve => {
-      const input    = document.createElement('input');
-      input.type     = 'file';
-      input.accept   = '.wav,.mp3,.ogg,.flac,.aac,audio/*';
-      input.onchange = async () => {
-        const file = input.files[0];
-        if (!file) { resolve(null); return; }
-        const buffer = await file.arrayBuffer();
-        resolve({ name: file.name, buffer });
+    return new Promise(resolve=>{
+      const input=document.createElement('input');
+      input.type='file'; input.accept='.wav,.mp3,.ogg,.flac,.aac,audio/*';
+      input.onchange=async()=>{
+        const f=input.files[0];
+        if(!f){resolve(null);return;}
+        resolve({name:f.name,buffer:await f.arrayBuffer()});
       };
       input.click();
     });
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
-
   function downloadJson(json, filename) {
-    const blob = new Blob([json], { type: FILE_MIME });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const blob=new Blob([json],{type:FILE_MIME}), url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=filename; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
 
-  // Title format: "filename — Ryewired"
-  function updateTitle(dirty = false) {
-    const nameEl  = document.getElementById('app-file-name');
-    const dirtyEl = document.getElementById('app-dirty');
-    if (nameEl)  nameEl.textContent = _fileName || 'Untitled';
-    if (dirtyEl) dirtyEl.classList.toggle('hidden', !dirty);
-    document.title = 'Ryewired — ' + (_fileName || 'Untitled');
+  function updateTitle(dirty=false) {
+    const n=document.getElementById('app-file-name');
+    const d=document.getElementById('app-dirty');
+    if(n) n.textContent=_fileName||'Untitled';
+    if(d) d.classList.toggle('hidden',!dirty);
+    document.title='Ryewired — '+(_fileName||'Untitled');
   }
 
   function markDirty()   { updateTitle(true); }
@@ -172,8 +167,7 @@ const Storage = (() => {
   function getVersion()  { return APP_VERSION; }
 
   return {
-    loadAllComponents,
-    newLayout, saveLayout, openLayout, openAudioFile,
+    loadAllComponents, newLayout, saveLayout, openLayout, openAudioFile,
     markDirty, getFileName, getVersion, updateTitle
   };
 })();

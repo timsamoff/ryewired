@@ -37,7 +37,7 @@ const PropertiesPanel = (() => {
 
     document.getElementById('wire-color-pick')?.addEventListener('input', e => {
       wire.color = e.target.value;
-      Board.redraw(); Storage.markDirty();
+      Board.redraw(); Storage.markDirty(); History.pushDebounced();
     });
 
     document.getElementById('prop-delete-btn')?.addEventListener('click', () => {
@@ -97,7 +97,7 @@ const PropertiesPanel = (() => {
         inst.flipped = btn.dataset.flip === 'true';
         _content.querySelectorAll('.prop-flip-btn').forEach(b =>
           b.classList.toggle('active', b.dataset.flip === String(inst.flipped)));
-        Board.redraw(); Storage.markDirty();
+        Board.redraw(); Storage.markDirty(); History.push();
       });
     });
 
@@ -224,7 +224,7 @@ const PropertiesPanel = (() => {
       if (v) v.textContent=Math.round(parseFloat(rawVal)*100)+'%';
     }
 
-    Board.redraw(); Storage.markDirty();
+    Board.redraw(); Storage.markDirty(); History.pushDebounced();
   }
 
   function hide() {

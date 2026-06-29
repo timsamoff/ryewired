@@ -742,3 +742,23 @@ body.comp-selected #board-canvas {
   vertical-align: middle;
   margin-right: 4px;
 }
+
+/* ── Undo/redo disabled state ────────────────────────────────────────────── */
+
+.tb-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.dd-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Leg drag cursor ─────────────────────────────────────────────────────── */
+
+body.comp-selected #board-canvas {
+  cursor: default;
+}

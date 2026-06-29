@@ -2,18 +2,12 @@
 
 const APP_VERSION = '0.1.0';
 
-// Zoom state — constrained to 10% increments
 let _zoomLevel = 1.0;
 const ZOOM_MIN  = 0.1;
 const ZOOM_MAX  = 2.0;
 const ZOOM_STEP = 0.1;
 
-// Pan state (right-mouse drag)
-let _panning    = false;
-let _panStartX  = 0;
-let _panStartY  = 0;
-let _panScrollX = 0;
-let _panScrollY = 0;
+let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
 
 (async function initApp() {
 
@@ -28,9 +22,9 @@ let _panScrollY = 0;
     document.getElementById('spectrum-canvas')
   );
 
+  // Board callbacks
   Board.onSelect((inst, wire) => {
     PropertiesPanel.show(inst, wire);
-    // Add body class when a component is selected (for CSS cursor hints)
     document.body.classList.toggle('comp-selected', !!inst);
   });
 
@@ -39,12 +33,12 @@ let _panScrollY = 0;
     const label = ComponentRegistry.getById(inst.defId)?.label || inst.defId;
     setStatus(`Placed ${label} — select it to set properties`);
     updateComponentCount();
+    // History already pushed by board.js onDrop
   });
 
+  // Simulation callbacks
   Simulation.onFailure(({ icon, title, message }) => {
-    AudioEngine.stop();
-    Oscilloscope.stop();
-    setSimState('stopped');
+    AudioEngine.stop(); Oscilloscope.stop(); setSimState('stopped');
     document.getElementById('failure-icon').textContent    = icon;
     document.getElementById('failure-title').textContent   = title;
     document.getElementById('failure-message').textContent = message;
@@ -72,6 +66,9 @@ let _panScrollY = 0;
 
   document.addEventListener('keydown', onKeyDown);
 
+  // History — init AFTER board is ready
+  History.init();
+
   setTimeout(fitBoard, 100);
   window.addEventListener('resize', Utils.debounce(fitBoard, 200));
 
@@ -84,20 +81,23 @@ let _panScrollY = 0;
 
 function handleAction(action) {
   switch (action) {
-    case 'new':           newLayout();           break;
-    case 'open':          openLayout();          break;
-    case 'save':          saveLayout(false);     break;
-    case 'save-as':       saveLayout(true);      break;
+    case 'new':      newLayout();           break;
+    case 'open':     openLayout();          break;
+    case 'save':     saveLayout(false);     break;
+    case 'save-as':  saveLayout(true);      break;
+    case 'undo':     History.undo();        break;
+    case 'redo':     History.redo();        break;
     case 'delete':
       Board.deleteSelected();
       PropertiesPanel.hide();
       updateComponentCount();
       Storage.markDirty();
       document.body.classList.remove('comp-selected');
+      History.push();
       break;
-    case 'clear':         confirmClear();        break;
-    case 'sim-run':       runSim();              break;
-    case 'sim-stop':      stopSim();             break;
+    case 'clear':           confirmClear();    break;
+    case 'sim-run':         runSim();          break;
+    case 'sim-stop':        stopSim();         break;
     case 'sim-reset':
       Simulation.reset();
       setStatus('Failures cleared — components and wires unchanged');
@@ -107,10 +107,10 @@ function handleAction(action) {
     case 'toggle-palette':  toggleSidebar('palette');                             break;
     case 'toggle-props':    toggleSidebar('props-panel');                         break;
     case 'wire-mode':       toggleJumperMode();                                   break;
-    case 'zoom-in':         zoomIn();            break;
-    case 'zoom-out':        zoomOut();           break;
-    case 'zoom-fit':        fitBoard();          break;
-    case 'help':            openHelp();          break;
+    case 'zoom-in':         zoomIn();          break;
+    case 'zoom-out':        zoomOut();         break;
+    case 'zoom-fit':        fitBoard();        break;
+    case 'help':            openHelp();        break;
   }
 }
 
@@ -124,75 +124,60 @@ function bindActions() {
 // ── Menubar ───────────────────────────────────────────────────────────────────
 
 function initMenubar() {
-  const menuItems = document.querySelectorAll('.menu-item');
-  menuItems.forEach(item => {
+  const items = document.querySelectorAll('.menu-item');
+  items.forEach(item => {
     item.querySelector('span').addEventListener('click', e => {
       e.stopPropagation();
       const isOpen = item.classList.contains('open');
-      menuItems.forEach(m => m.classList.remove('open'));
+      items.forEach(m => m.classList.remove('open'));
       if (!isOpen) item.classList.add('open');
     });
     item.addEventListener('mouseenter', () => {
-      const anyOpen = document.querySelector('.menu-item.open');
-      if (anyOpen && anyOpen !== item) {
-        menuItems.forEach(m => m.classList.remove('open'));
-        item.classList.add('open');
-      }
+      const any = document.querySelector('.menu-item.open');
+      if (any && any !== item) { items.forEach(m=>m.classList.remove('open')); item.classList.add('open'); }
     });
   });
-  document.addEventListener('click', () => {
-    menuItems.forEach(m => m.classList.remove('open'));
-  });
+  document.addEventListener('click', () => items.forEach(m=>m.classList.remove('open')));
 }
 
 // ── Simulation ────────────────────────────────────────────────────────────────
 
 function runSim() {
   if (Simulation.isRunning()) return;
-  if (Board.getPlaced().length === 0) { setStatus('Place some components first'); return; }
-  Simulation.start();
-  AudioEngine.start();
-  Oscilloscope.start();
-  setSimState('running');
-  setStatus('Simulation running');
+  if (Board.getPlaced().length===0) { setStatus('Place some components first'); return; }
+  Simulation.start(); AudioEngine.start(); Oscilloscope.start();
+  setSimState('running'); setStatus('Simulation running');
 }
 
 function stopSim() {
   if (!Simulation.isRunning()) return;
-  Simulation.stop();
-  AudioEngine.stop();
-  Oscilloscope.stop();
-  setSimState('stopped');
-  setStatus('Simulation stopped');
+  Simulation.stop(); AudioEngine.stop(); Oscilloscope.stop();
+  setSimState('stopped'); setStatus('Simulation stopped');
 }
 
 // ── Layout I/O ────────────────────────────────────────────────────────────────
 
 async function newLayout() {
   if (Simulation.isRunning()) stopSim();
-  if (Board.getPlaced().length > 0) {
+  if (Board.getPlaced().length>0) {
     if (!confirm('Start a new layout? Unsaved changes will be lost.')) return;
   }
-  Board.clear();
-  PropertiesPanel.hide();
-  Storage.newLayout();
-  updateComponentCount();
-  setStatus('New layout — drop components to get started');
+  Board.clear(); PropertiesPanel.hide(); Storage.newLayout();
+  History.clear(); History.init();
+  updateComponentCount(); setStatus('New layout — drop components to get started');
 }
 
 async function openLayout() {
   if (Simulation.isRunning()) stopSim();
   const layout = await Storage.openLayout();
   if (!layout) return;
-  Board.loadLayout(layout);
-  PropertiesPanel.hide();
-  updateComponentCount();
-  setStatus(`Loaded — ${layout.components?.length || 0} components`);
+  Board.loadLayout(layout); PropertiesPanel.hide();
+  History.clear(); History.init();
+  updateComponentCount(); setStatus(`Loaded — ${layout.components?.length||0} components`);
 }
 
-async function saveLayout(forceDialog = false) {
-  const data   = Board.getLayoutData();
-  const result = await Storage.saveLayout(data, forceDialog);
+async function saveLayout(forceDialog=false) {
+  const data=Board.getLayoutData(), result=await Storage.saveLayout(data,forceDialog);
   if (result?.saved) setStatus(`Saved: ${result.fileName}`);
 }
 
@@ -207,7 +192,7 @@ function toggleJumperMode() {
     Wire.enter();
     btn?.classList.add('active');
     document.getElementById('status-wire-mode').textContent = '⬡ JUMPER';
-    setStatus('Jumper mode ON — click a hole to start a wire, click another hole to finish. Press W or Esc to exit.');
+    setStatus('Jumper mode ON — click a hole to start, click another to finish. W or Esc to exit.');
   } else {
     Wire.exit();
     btn?.classList.remove('active');
@@ -224,104 +209,79 @@ function exitJumperMode() {
   document.getElementById('status-wire-mode').textContent = '';
 }
 
-// ── Zoom (10% increments, 10%–200%) ──────────────────────────────────────────
+// ── Zoom ──────────────────────────────────────────────────────────────────────
 
-function initZoom() { applyZoom(1.0); }
-
-function zoomIn()  { applyZoom(Math.min(ZOOM_MAX, snapZoom(_zoomLevel + ZOOM_STEP))); }
-function zoomOut() { applyZoom(Math.max(ZOOM_MIN, snapZoom(_zoomLevel - ZOOM_STEP))); }
-
-function snapZoom(v) {
-  return Math.round(v / ZOOM_STEP) * ZOOM_STEP;
-}
+function initZoom()  { applyZoom(1.0); }
+function zoomIn()    { applyZoom(Math.min(ZOOM_MAX, snapZoom(_zoomLevel + ZOOM_STEP))); }
+function zoomOut()   { applyZoom(Math.max(ZOOM_MIN, snapZoom(_zoomLevel - ZOOM_STEP))); }
+function snapZoom(v) { return Math.round(v / ZOOM_STEP) * ZOOM_STEP; }
 
 function fitBoard() {
-  const scroll = document.getElementById('board-scroll');
-  const canvas = document.getElementById('board-canvas');
-  if (!scroll || !canvas) return;
-  const availW = scroll.clientWidth  - 56;
-  const availH = scroll.clientHeight - 56;
-  const boardW = canvas.width;
-  const boardH = canvas.height;
-  if (!boardW || !boardH) return;
-  const raw   = Math.min(availW / boardW, availH / boardH, 1.0);
-  const snapped = Math.max(ZOOM_MIN, snapZoom(raw));
-  applyZoom(snapped);
+  const scroll=document.getElementById('board-scroll');
+  const canvas=document.getElementById('board-canvas');
+  if (!scroll||!canvas) return;
+  const aW=scroll.clientWidth-56, aH=scroll.clientHeight-56;
+  if (!canvas.width||!canvas.height) return;
+  applyZoom(Math.max(ZOOM_MIN, snapZoom(Math.min(aW/canvas.width, aH/canvas.height, 1.0))));
 }
 
 function applyZoom(level) {
-  _zoomLevel = Math.round(level * 10) / 10; // ensure clean 10% values
-  _zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, _zoomLevel));
-  const t = document.getElementById('board-transform');
-  if (t) t.style.transform = `scale(${_zoomLevel})`;
-  const el = document.getElementById('zoom-level');
-  if (el) el.textContent = Math.round(_zoomLevel * 100) + '%';
-  // Notify board of current zoom so hit-testing stays correct
+  _zoomLevel = Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level)) * 10) / 10;
+  const t=document.getElementById('board-transform');
+  if (t) t.style.transform=`scale(${_zoomLevel})`;
+  const el=document.getElementById('zoom-level');
+  if (el) el.textContent=Math.round(_zoomLevel*100)+'%';
   Board.setZoom(_zoomLevel);
 }
 
-function getZoom() { return _zoomLevel; }
-
-// ── Pan (right-mouse drag) ────────────────────────────────────────────────────
+// ── Pan ───────────────────────────────────────────────────────────────────────
 
 function initPan() {
-  const scroll = document.getElementById('board-scroll');
+  const scroll=document.getElementById('board-scroll');
   if (!scroll) return;
 
   scroll.addEventListener('mousedown', e => {
-    if (e.button !== 2) return;
+    if (e.button!==2) return;
     e.preventDefault();
-    _panning    = true;
-    _panStartX  = e.clientX;
-    _panStartY  = e.clientY;
-    _panScrollX = scroll.scrollLeft;
-    _panScrollY = scroll.scrollTop;
-    scroll.style.cursor = 'grabbing';
+    _panning=true; _panStartX=e.clientX; _panStartY=e.clientY;
+    _panScrollX=scroll.scrollLeft; _panScrollY=scroll.scrollTop;
+    scroll.style.cursor='grabbing';
   });
 
   window.addEventListener('mousemove', e => {
     if (!_panning) return;
-    const dx = e.clientX - _panStartX;
-    const dy = e.clientY - _panStartY;
-    scroll.scrollLeft = _panScrollX - dx;
-    scroll.scrollTop  = _panScrollY - dy;
+    scroll.scrollLeft=_panScrollX-(e.clientX-_panStartX);
+    scroll.scrollTop =_panScrollY-(e.clientY-_panStartY);
   });
 
   window.addEventListener('mouseup', e => {
-    if (e.button !== 2 || !_panning) return;
-    _panning = false;
-    scroll.style.cursor = '';
+    if (e.button!==2||!_panning) return;
+    _panning=false; scroll.style.cursor='';
   });
 
-  // Scroll wheel: zoom toward pointer
   scroll.addEventListener('wheel', e => {
     e.preventDefault();
-    const rect   = scroll.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;  // offset within scroll container
-    const mouseY = e.clientY - rect.top;
-    const oldZ   = _zoomLevel;
-    if (e.deltaY < 0) zoomIn(); else zoomOut();
-    const newZ   = _zoomLevel;
-    if (newZ === oldZ) return;
-    // Shift scroll so the point under the pointer stays fixed
-    scroll.scrollLeft = (scroll.scrollLeft + mouseX) * (newZ / oldZ) - mouseX;
-    scroll.scrollTop  = (scroll.scrollTop  + mouseY) * (newZ / oldZ) - mouseY;
-  }, { passive: false });
+    const rect=scroll.getBoundingClientRect();
+    const mX=e.clientX-rect.left, mY=e.clientY-rect.top;
+    const oldZ=_zoomLevel;
+    if (e.deltaY<0) zoomIn(); else zoomOut();
+    const newZ=_zoomLevel;
+    if (newZ===oldZ) return;
+    scroll.scrollLeft=(scroll.scrollLeft+mX)*(newZ/oldZ)-mX;
+    scroll.scrollTop =(scroll.scrollTop +mY)*(newZ/oldZ)-mY;
+  }, { passive:false });
 }
 
 // ── Panel toggles ─────────────────────────────────────────────────────────────
 
 function togglePanel(panelId, btnId) {
-  const panel  = document.getElementById(panelId);
-  const btn    = document.getElementById(btnId);
-  const hidden = panel.classList.toggle('hidden');
-  btn?.classList.toggle('active', !hidden);
+  const p=document.getElementById(panelId), b=document.getElementById(btnId);
+  p.classList.toggle('hidden'); b?.classList.toggle('active', !p.classList.contains('hidden'));
 }
 
 function toggleSidebar(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.style.display = el.style.display === 'none' ? '' : 'none';
+  const el=document.getElementById(id);
+  if (el) el.style.display=el.style.display==='none'?'':'none';
 }
 
 // ── Help ──────────────────────────────────────────────────────────────────────
@@ -332,21 +292,21 @@ function closeHelp() { document.getElementById('help-overlay').classList.add('hi
 // ── Scope knobs ───────────────────────────────────────────────────────────────
 
 function initScopeKnobs() {
-  [['scope-vdiv','scope-vdiv-val'], ['scope-tdiv','scope-tdiv-val']].forEach(([rid, vid]) => {
-    const r = document.getElementById(rid), v = document.getElementById(vid);
-    if (r && v) r.addEventListener('input', () => { v.textContent = parseFloat(r.value).toFixed(1); });
+  [['scope-vdiv','scope-vdiv-val'],['scope-tdiv','scope-tdiv-val']].forEach(([rid,vid])=>{
+    const r=document.getElementById(rid), v=document.getElementById(vid);
+    if (r&&v) r.addEventListener('input',()=>{ v.textContent=parseFloat(r.value).toFixed(1); });
   });
 }
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 function onKeyDown(e) {
-  const typing = ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName);
+  const typing=['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName);
 
-  if (e.code === 'Escape') {
+  if (e.code==='Escape') {
     if (!document.getElementById('help-overlay').classList.contains('hidden')) { closeHelp(); return; }
     if (document.querySelector('.menu-item.open')) {
-      document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('open')); return;
+      document.querySelectorAll('.menu-item').forEach(m=>m.classList.remove('open')); return;
     }
     if (_jumperActive) { exitJumperMode(); return; }
     if (Wire.hasStart()) { Wire.cancelCurrent(); return; }
@@ -355,64 +315,64 @@ function onKeyDown(e) {
 
   if (typing) return;
 
-  if (e.code === 'Space')  { e.preventDefault(); Simulation.isRunning() ? stopSim() : runSim(); }
-  if (e.code === 'KeyW')   { toggleJumperMode(); }
-  if (e.code === 'Delete' || e.code === 'Backspace') {
-    Board.deleteSelected(); PropertiesPanel.hide(); updateComponentCount(); Storage.markDirty();
+  if (e.code==='Space') { e.preventDefault(); Simulation.isRunning()?stopSim():runSim(); }
+  if (e.code==='KeyW')  { toggleJumperMode(); }
+  if (e.code==='Delete'||e.code==='Backspace') {
+    Board.deleteSelected(); PropertiesPanel.hide();
+    updateComponentCount(); Storage.markDirty();
+    document.body.classList.remove('comp-selected');
+    History.push();
   }
+  if (e.key==='+'||e.key==='=') zoomIn();
+  if (e.key==='-'||e.key==='_') zoomOut();
 
-  // Zoom with + / -
-  if (e.key === '+' || e.key === '=') zoomIn();
-  if (e.key === '-' || e.key === '_') zoomOut();
-
-  if (e.ctrlKey || e.metaKey) {
-    if (e.key === 'n') { e.preventDefault(); newLayout(); }
-    if (e.key === 'o') { e.preventDefault(); openLayout(); }
-    if (e.key === 's') { e.preventDefault(); saveLayout(e.shiftKey); }
-    if (e.key === '0') { e.preventDefault(); fitBoard(); }
-    if (e.key === 'd') { e.preventDefault(); togglePanel('scope-panel', 'btn-toggle-scope'); }
-    if (e.key === 'D') { e.preventDefault(); togglePanel('spectrum-panel', 'btn-toggle-spectrum'); }
-    if (e.key === 'f') { e.preventDefault(); document.getElementById('palette-search')?.focus(); }
+  if (e.ctrlKey||e.metaKey) {
+    if (e.key==='z'&&!e.shiftKey) { e.preventDefault(); History.undo(); }
+    if (e.key==='z'&&e.shiftKey)  { e.preventDefault(); History.redo(); }
+    if (e.key==='y')               { e.preventDefault(); History.redo(); }
+    if (e.key==='n') { e.preventDefault(); newLayout(); }
+    if (e.key==='o') { e.preventDefault(); openLayout(); }
+    if (e.key==='s') { e.preventDefault(); saveLayout(e.shiftKey); }
+    if (e.key==='0') { e.preventDefault(); fitBoard(); }
+    if (e.key==='d') { e.preventDefault(); togglePanel('scope-panel','btn-toggle-scope'); }
+    if (e.key==='D') { e.preventDefault(); togglePanel('spectrum-panel','btn-toggle-spectrum'); }
+    if (e.key==='f') { e.preventDefault(); document.getElementById('palette-search')?.focus(); }
   }
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
 function confirmClear() {
-  if (Board.getPlaced().length === 0) return;
+  if (Board.getPlaced().length===0) return;
   if (confirm('Clear the board? This cannot be undone.')) {
     if (Simulation.isRunning()) stopSim();
     Board.clear(); PropertiesPanel.hide(); updateComponentCount();
+    History.clear(); History.init();
     setStatus('Board cleared');
   }
 }
 
 function setSimState(state) {
-  const indicator = document.getElementById('sim-indicator');
-  const label     = document.getElementById('sim-indicator-label');
-  const runBtn    = document.getElementById('btn-run');
-  const stopBtn   = document.getElementById('btn-stop');
-  if (state === 'running') {
-    indicator?.classList.add('running');
-    if (label)   label.textContent = 'Running';
-    if (runBtn)  runBtn.disabled  = true;
-    if (stopBtn) stopBtn.disabled = false;
+  const ind=document.getElementById('sim-indicator');
+  const lbl=document.getElementById('sim-indicator-label');
+  const run=document.getElementById('btn-run');
+  const stp=document.getElementById('btn-stop');
+  if (state==='running') {
+    ind?.classList.add('running'); if(lbl)lbl.textContent='Running';
+    if(run)run.disabled=true; if(stp)stp.disabled=false;
   } else {
-    indicator?.classList.remove('running');
-    if (label)   label.textContent = 'Stopped';
-    if (runBtn)  runBtn.disabled  = false;
-    if (stopBtn) stopBtn.disabled = true;
+    ind?.classList.remove('running'); if(lbl)lbl.textContent='Stopped';
+    if(run)run.disabled=false; if(stp)stp.disabled=true;
   }
 }
 
 function setStatus(msg) {
-  const el = document.getElementById('status-msg');
-  if (el) el.textContent = msg;
+  const el=document.getElementById('status-msg'); if(el) el.textContent=msg;
 }
 
 function updateComponentCount() {
-  const el    = document.getElementById('status-component-count');
+  const el = document.getElementById('status-component-count');
   if (!el) return;
-  const count = Board.getPlaced().length;
-  el.textContent = count ? `${count} component${count !== 1 ? 's' : ''}` : '';
+  const n = Board.getPlaced().length;
+  el.textContent = n ? (n + ' component' + (n !== 1 ? 's' : '')) : '';
 }

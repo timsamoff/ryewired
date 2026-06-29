@@ -6,22 +6,86 @@
   "description": "NPN bipolar junction transistor. Current-controlled amplifier or switch.",
   "legs": 3,
   "leg_span": 3,
-  "leg_labels": ["E", "B", "C"],
+  "leg_labels": [
+    "E",
+    "B",
+    "C"
+  ],
   "properties": [
-    { "key": "model", "label": "Model", "type": "select", "options": ["2N3904","BC108B","BC547","2N2222","2N5088"], "default": "2N3904" },
-    { "key": "hfe", "label": "hFE (gain)", "type": "number", "default": 100 }
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "select",
+      "options": [
+        "2N3904",
+        "BC108B",
+        "BC547",
+        "2N2222",
+        "2N5088"
+      ],
+      "default": "2N3904"
+    },
+    {
+      "key": "hfe",
+      "label": "hFE (gain)",
+      "type": "number",
+      "default": 100
+    }
   ],
   "model_params": {
-    "2N3904": { "hfe": 100, "vce_sat": 0.2, "vbe": 0.65, "max_ic_ma": 200, "max_vce": 40 },
-    "BC108B": { "hfe": 110, "vce_sat": 0.2, "vbe": 0.65, "max_ic_ma": 100, "max_vce": 20 },
-    "BC547":  { "hfe": 200, "vce_sat": 0.2, "vbe": 0.65, "max_ic_ma": 100, "max_vce": 45 },
-    "2N2222": { "hfe": 75,  "vce_sat": 0.3, "vbe": 0.65, "max_ic_ma": 600, "max_vce": 40 },
-    "2N5088": { "hfe": 350, "vce_sat": 0.2, "vbe": 0.65, "max_ic_ma": 50,  "max_vce": 30 }
+    "2N3904": {
+      "hfe": 100,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 200,
+      "max_vce": 40,
+      "type": "silicon"
+    },
+    "BC108B": {
+      "hfe": 110,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 100,
+      "max_vce": 20,
+      "type": "silicon"
+    },
+    "BC547": {
+      "hfe": 200,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 100,
+      "max_vce": 45,
+      "type": "silicon"
+    },
+    "2N2222": {
+      "hfe": 75,
+      "vce_sat": 0.3,
+      "vbe": 0.65,
+      "max_ic_ma": 600,
+      "max_vce": 40,
+      "type": "silicon"
+    },
+    "2N5088": {
+      "hfe": 350,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 50,
+      "max_vce": 30,
+      "type": "silicon"
+    }
   },
-  "behavior": { "type": "bjt_npn" },
+  "behavior": {
+    "type": "bjt_npn"
+  },
   "failure_modes": {
-    "over_current": { "result": "burn", "message": "Collector current exceeded maximum rating. The transistor is destroyed. Add a base resistor to limit current, or use a transistor with a higher current rating." },
-    "over_voltage": { "result": "burn", "message": "VCE exceeded breakdown voltage. Use a transistor rated for higher voltage." }
+    "over_current": {
+      "result": "burn",
+      "message": "Collector current exceeded maximum rating. The transistor is destroyed. Add a base resistor to limit current, or use a transistor with a higher current rating."
+    },
+    "over_voltage": {
+      "result": "burn",
+      "message": "VCE exceeded breakdown voltage. Use a transistor rated for higher voltage."
+    }
   },
   "visual": {
     "body_color": "#111111",
