@@ -5,20 +5,55 @@
   "symbol": "RV",
   "description": "Variable resistor with 3 terminals. Wiper position is adjustable.",
   "legs": 3,
-  "leg_span": 3,
+  "leg_span": 4,
   "properties": [
-    { "key": "resistance", "label": "Total Resistance (Ω)", "type": "number", "default": 100000, "unit": "Ω" },
-    { "key": "taper", "label": "Taper", "type": "select", "options": ["Linear (B)","Audio/Log (A)","Reverse Audio (C)"], "default": "Audio/Log (A)" },
-    { "key": "wiper", "label": "Wiper Position", "type": "range", "min": 0, "max": 1, "step": 0.01, "default": 0.5 }
+    {
+      "key": "resistance",
+      "label": "Total Resistance (\u03a9)",
+      "type": "number",
+      "default": 100000,
+      "unit": "\u03a9"
+    },
+    {
+      "key": "taper",
+      "label": "Taper",
+      "type": "select",
+      "options": [
+        "Linear (B)",
+        "Audio/Log (A)",
+        "Reverse Audio (C)"
+      ],
+      "default": "Audio/Log (A)"
+    },
+    {
+      "key": "wiper",
+      "label": "Wiper Position",
+      "type": "range",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "default": 0.5
+    }
   ],
-  "behavior": { "type": "potentiometer" },
+  "behavior": {
+    "type": "potentiometer"
+  },
   "failure_modes": {
-    "over_power": { "threshold_multiplier": 2.0, "result": "burn", "message": "Potentiometer power rating exceeded. Use a lower resistance value or reduce voltage." }
+    "over_power": {
+      "threshold_multiplier": 2.0,
+      "result": "burn",
+      "message": "Potentiometer power rating exceeded. Use a lower resistance value or reduce voltage."
+    }
   },
   "visual": {
     "body_color": "#555555",
     "body_width": 20,
     "body_height": 20,
     "lead_length": 8
-  }
+  },
+  "leg_labels": [
+    "CCW",
+    "Wiper",
+    "CW"
+  ]
 }

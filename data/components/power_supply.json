@@ -3,15 +3,32 @@
   "label": "DC Power Supply",
   "category": "power",
   "symbol": "V+",
-  "description": "DC voltage source. Connect + to power rail, – to ground rail.",
+  "description": "DC voltage source. Connect + to power rail, \u2013 to ground rail.",
   "legs": 2,
   "leg_span": 2,
-  "leg_labels": ["+", "–"],
-  "properties": [
-    { "key": "voltage", "label": "Voltage (V)", "type": "number", "default": 9, "min": 1, "max": 30 },
-    { "key": "current_limit_ma", "label": "Current Limit (mA)", "type": "number", "default": 500 }
+  "leg_labels": [
+    "+",
+    "\u2013"
   ],
-  "behavior": { "type": "dc_supply" },
+  "properties": [
+    {
+      "key": "voltage",
+      "label": "Voltage (V)",
+      "type": "number",
+      "default": 9,
+      "min": 1,
+      "max": 30
+    },
+    {
+      "key": "current_limit_ma",
+      "label": "Current Limit (mA)",
+      "type": "number",
+      "default": 500
+    }
+  ],
+  "behavior": {
+    "type": "dc_supply"
+  },
   "failure_modes": {},
   "visual": {
     "body_color": "#cc2200",

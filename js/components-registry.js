@@ -32,9 +32,13 @@ const ComponentRegistry = (() => {
   }
 
   /**
-   * Create a placed instance. Builds the `legs` array from the drop position.
-   * leg_span tells us how many holes apart the outer legs are.
-   * legs array: one entry per physical leg, each { row, col }.
+   * Create a placed instance.
+   * inst.legs = array of { row, col } — one per physical leg.
+   *
+   * For 2-leg components: legs span `leg_span` holes horizontally.
+   * For 3-leg components: outer legs at 0 and leg_span, center leg at midpoint.
+   *   e.g. transistor: leg_span=2 → legs at col, col+1, col+2
+   *   e.g. potentiometer: leg_span=4 → legs at col, col+2, col+4
    */
   function createInstance(defId, row, col) {
     const def = getById(defId);
@@ -43,46 +47,48 @@ const ComponentRegistry = (() => {
     const props = {};
     for (const p of (def.properties||[])) props[p.key] = p.default;
 
-    const span = (def.leg_span||2) - 1;
-    const legs = buildLegs(def, row, col, span);
+    const span     = def.leg_span || 1;
+    const legCount = def.legs     || 2;
+    const legs     = buildLegs(legCount, span, row, col);
 
     return {
-      instanceId: Utils.uid(def.symbol||'C'),
+      instanceId:  Utils.uid(def.symbol||'C'),
       defId,
       legs,
-      flipped:   false,
+      flipped:     false,
       props,
-      failed:    false,
+      failed:      false,
       failureType: null,
-      _voltage:  0, _current: 0, _audioNode: null
+      _voltage:    0, _current: 0, _audioNode: null
     };
   }
 
-  function buildLegs(def, row, col, span) {
-    const legCount = def.legs || 2;
-    if (legCount === 2) {
+  function buildLegs(count, span, row, col) {
+    if (count === 2) {
       return [
         { row, col },
-        { row, col: Math.min(62, col + span) }
+        { row, col: clampCol(col + span) }
       ];
     }
-    if (legCount === 3) {
-      // e.g. transistor: leg0=left, leg1=center, leg2=right
-      const mid = Math.min(62, col + Math.floor(span / 2));
-      const end = Math.min(62, col + span);
+    if (count === 3) {
+      // Left outer, center, right outer
+      // Center is at the midpoint of the span
+      const mid = Math.round(span / 2);
       return [
-        { row, col },
-        { row, col: mid },
-        { row, col: end }
+        { row, col: clampCol(col) },
+        { row, col: clampCol(col + mid) },
+        { row, col: clampCol(col + span) }
       ];
     }
-    // Generic: spread legs evenly across span
+    // Generic: spread evenly
     const legs = [];
-    for (let i = 0; i < legCount; i++) {
-      legs.push({ row, col: Math.min(62, col + Math.round(i * span / (legCount-1))) });
+    for (let i = 0; i < count; i++) {
+      legs.push({ row, col: clampCol(col + Math.round(i * span / (count-1))) });
     }
     return legs;
   }
+
+  function clampCol(col) { return Math.max(0, Math.min(62, col)); }
 
   return { load, getAll, getById, search, createInstance, CATEGORY_LABELS };
 })();

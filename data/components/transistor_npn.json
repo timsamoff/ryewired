@@ -5,7 +5,7 @@
   "symbol": "Q",
   "description": "NPN bipolar junction transistor. Current-controlled amplifier or switch.",
   "legs": 3,
-  "leg_span": 3,
+  "leg_span": 2,
   "leg_labels": [
     "E",
     "B",

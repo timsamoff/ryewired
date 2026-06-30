@@ -35,18 +35,15 @@ const Storage = (() => {
   function migrateLayout(layout) {
     if (!layout?.components) return layout;
     layout.components = layout.components.map(inst => {
-      if (inst.legs) return inst; // already new format
-      // Build legs from old row/col + def span
-      const defId   = inst.defId;
-      const row     = inst.row ?? 3;
-      const col     = inst.col ?? 10;
-      const legSpan = 1; // default 2-leg span of 1
+      if (inst.legs && inst.legs.length > 0) return inst; // already new format
+      const row  = inst.row ?? 3;
+      const col  = inst.col ?? 10;
+      // Use a conservative 2-leg layout; user can reposition legs after load
       inst.legs = [
         { row, col },
-        { row, col: Math.min(62, col + legSpan) }
+        { row, col: Math.min(62, col + 1) }
       ];
-      // Remove legacy fields
-      delete inst.row; delete inst.col; delete inst.orientation;
+      delete inst.row; delete inst.col; delete inst.orientation; delete inst.rotation;
       return inst;
     });
     return layout;
