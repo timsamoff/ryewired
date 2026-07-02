@@ -39,7 +39,8 @@
       "vbe": 0.65,
       "max_ic_ma": 200,
       "max_vce": 40,
-      "type": "silicon"
+      "type": "silicon",
+      "icbo_na": 50
     },
     "BC108B": {
       "hfe": 110,
@@ -47,7 +48,8 @@
       "vbe": 0.65,
       "max_ic_ma": 100,
       "max_vce": 20,
-      "type": "silicon"
+      "type": "silicon",
+      "icbo_na": 15
     },
     "BC547": {
       "hfe": 200,
@@ -55,7 +57,8 @@
       "vbe": 0.65,
       "max_ic_ma": 100,
       "max_vce": 45,
-      "type": "silicon"
+      "type": "silicon",
+      "icbo_na": 15
     },
     "2N2222": {
       "hfe": 75,
@@ -63,7 +66,8 @@
       "vbe": 0.65,
       "max_ic_ma": 600,
       "max_vce": 40,
-      "type": "silicon"
+      "type": "silicon",
+      "icbo_na": 10
     },
     "2N5088": {
       "hfe": 350,
@@ -71,7 +75,8 @@
       "vbe": 0.65,
       "max_ic_ma": 50,
       "max_vce": 30,
-      "type": "silicon"
+      "type": "silicon",
+      "icbo_na": 50
     }
   },
   "behavior": {
@@ -89,8 +94,8 @@
   },
   "visual": {
     "body_color": "#111111",
-    "body_width": 14,
-    "body_height": 18,
+    "body_width": 28,
+    "body_height": 36,
     "lead_length": 12
   }
 }

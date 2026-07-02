@@ -27,6 +27,13 @@ const Board = (() => {
   const LEAD_COLOR = '#555555';
   const LEAD_WIDTH = 2.0;
   const LEAD_CAP_R = 3.0;
+  const STAND_GAP  = 14; // visible lead length between a standing 3-leg body and the hole row
+
+  // 3-leg parts (transistor, potentiometer) stand above the hole row with
+  // parallel legs; 2-leg parts lie flat directly on the hole row.
+  function bodyOffsetY(inst,bh){
+    return inst.legs.length===3 ? -(bh/2+STAND_GAP) : 0;
+  }
 
   const cv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const C  = () => ({
@@ -130,10 +137,12 @@ const Board = (() => {
       const inst=_placed[i], def=ComponentRegistry.getById(inst.defId);
       if(!def) continue;
       const geo=instGeometry(inst);
-      const bw=(def.visual?.body_width||32)/2+12, bh=(def.visual?.body_height||16)/2+12;
+      const bh0=def.visual?.body_height||16;
+      const bw=(def.visual?.body_width||32)/2+12, bh=bh0/2+12;
+      const offY=bodyOffsetY(inst,bh0);
       const dx=x-geo.cx, dy=y-geo.cy;
       const lx=dx*Math.cos(-geo.ang)-dy*Math.sin(-geo.ang);
-      const ly=dx*Math.sin(-geo.ang)+dy*Math.cos(-geo.ang);
+      const ly=dx*Math.sin(-geo.ang)+dy*Math.cos(-geo.ang)-offY;
       if(Math.abs(lx)<bw&&Math.abs(ly)<bh) return inst;
     }
     return null;
@@ -321,11 +330,11 @@ const Board = (() => {
     const halfLen=len/2;
     const bw=def.visual?.body_width||28, bh=def.visual?.body_height||14;
 
-    if(isSel&&alpha>=1){ctx.beginPath();ctx.ellipse(0,0,bw/2+9,bh/2+9,0,0,Math.PI*2);ctx.strokeStyle=c.warning;ctx.lineWidth=2;ctx.stroke();}
-
     // ── Draw stretchy leads ───────────────────────────────────────────────────
     ctx.strokeStyle=LEAD_COLOR;ctx.lineWidth=LEAD_WIDTH;ctx.lineCap='round';
     ctx.fillStyle=LEAD_COLOR;
+
+    const offY=bodyOffsetY(inst,bh);
 
     if(inst.legs.length===2){
       // Left lead: body edge (-bw/2) → left hole pixel (-halfLen)
@@ -347,29 +356,25 @@ const Board = (() => {
       }
 
     } else if(inst.legs.length===3&&pts.length===3){
-      // Outer leads
-      const leftEdge=-bw/2, rightEdge=bw/2;
-      if(halfLen>bw/2){
-        ctx.beginPath();ctx.moveTo(leftEdge,0);ctx.lineTo(-halfLen,0);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(rightEdge,0);ctx.lineTo(halfLen,0);ctx.stroke();
-      }
-      ctx.beginPath();ctx.arc(-halfLen,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
-      ctx.beginPath();ctx.arc(halfLen,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
-
-      // Center leg: project world pixel pts[1] into local space
+      // Three legs, all on the same physical row (transistor, potentiometer).
+      // Render the body standing "above" the hole row with three parallel
+      // leads running straight down into their actual holes — like a real
+      // TO-92 part on a breadboard — instead of lying flat across the row.
       const wPt=pts[1];
       const dx=wPt.x-cx, dy=wPt.y-cy;
       const cosA=Math.cos(-ang), sinA=Math.sin(-ang);
-      const lx2= dx*cosA - dy*sinA;  // along component axis
-      const ly2= dx*sinA + dy*cosA;  // perpendicular (should be nonzero for center leg)
+      const xMid = dx*cosA - dy*sinA; // local x of the center leg's actual hole
 
-      // The center lead goes from body edge (perpendicular) to the center leg hole
-      // Determine which edge to start from based on which side ly2 is on
-      const bodyEdge = ly2>=0 ? bh/2 : -bh/2;
-      ctx.beginPath();ctx.moveTo(lx2,bodyEdge);ctx.lineTo(lx2,ly2);ctx.stroke();
-      ctx.beginPath();ctx.arc(lx2,ly2,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
+      const bodyBottom = offY + bh/2;
+
+      for(const lx of [-halfLen, xMid, halfLen]){
+        ctx.beginPath();ctx.moveTo(lx,bodyBottom);ctx.lineTo(lx,0);ctx.stroke();
+        ctx.beginPath();ctx.arc(lx,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
+      }
     }
 
+    ctx.translate(0,offY);
+    if(isSel&&alpha>=1){ctx.beginPath();ctx.ellipse(0,0,bw/2+9,bh/2+9,0,0,Math.PI*2);ctx.strokeStyle=c.warning;ctx.lineWidth=2;ctx.stroke();}
     if(inst.flipped) ctx.scale(-1,1);
     drawBody(def,inst,c,halfLen);
 
@@ -545,15 +550,36 @@ const Board = (() => {
     const def=ComponentRegistry.getById(_paletteGhost.defId);
     if(!def) return;
     const bw=def.visual?.body_width||28,bh=def.visual?.body_height||14;
+    const legCount=def.legs||2;
     const span=(def.leg_span||2)-1;
     const halfLen=Math.max(bw/2+4, span*HOLE_PITCH/2);
-    const fakeInst={defId:def.id,legs:[{row:3,col:5},{row:3,col:5+span}],flipped:false,props:{},failed:false,_brightness:0,_state:false};
+    const mid=Math.round(span/2);
+    const legs = legCount===3
+      ? [{row:3,col:5},{row:3,col:5+mid},{row:3,col:5+span}]
+      : [{row:3,col:5},{row:3,col:5+span}];
+    const fakeInst={defId:def.id,legs,flipped:false,props:{},failed:false,_brightness:0,_state:false};
     for(const p of(def.properties||[])) fakeInst.props[p.key]=p.default;
     ctx.save();ctx.translate(mx,my);ctx.globalAlpha=0.72;
     ctx.strokeStyle=LEAD_COLOR;ctx.lineWidth=LEAD_WIDTH;ctx.lineCap='round';ctx.fillStyle=LEAD_COLOR;
-    if(halfLen>bw/2){ctx.beginPath();ctx.moveTo(-bw/2,0);ctx.lineTo(-halfLen,0);ctx.stroke();ctx.beginPath();ctx.moveTo(bw/2,0);ctx.lineTo(halfLen,0);ctx.stroke();}
-    ctx.beginPath();ctx.arc(-halfLen,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.arc(halfLen,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
+
+    const offY=bodyOffsetY(fakeInst,bh);
+
+    if(legCount===3){
+      // Same standing style as the real placed instance: body above the hole
+      // row, three parallel legs straight down into their actual x positions.
+      const xMid=Utils.mapRange(mid,0,span,-halfLen,halfLen);
+      const bodyBottom=offY+bh/2;
+      for(const lx of [-halfLen, xMid, halfLen]){
+        ctx.beginPath();ctx.moveTo(lx,bodyBottom);ctx.lineTo(lx,0);ctx.stroke();
+        ctx.beginPath();ctx.arc(lx,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
+      }
+    } else {
+      if(halfLen>bw/2){ctx.beginPath();ctx.moveTo(-bw/2,0);ctx.lineTo(-halfLen,0);ctx.stroke();ctx.beginPath();ctx.moveTo(bw/2,0);ctx.lineTo(halfLen,0);ctx.stroke();}
+      ctx.beginPath();ctx.arc(-halfLen,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(halfLen,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
+    }
+
+    ctx.translate(0,offY);
     drawBody(def,fakeInst,c,halfLen);
     ctx.restore();
   }

@@ -47,8 +47,8 @@
   },
   "visual": {
     "body_color": "#555555",
-    "body_width": 20,
-    "body_height": 20,
+    "body_width": 40,
+    "body_height": 40,
     "lead_length": 8
   },
   "leg_labels": [
