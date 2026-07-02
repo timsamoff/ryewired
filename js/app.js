@@ -69,6 +69,9 @@ let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
   // History — init AFTER board is ready
   History.init();
 
+  // Restore autosave if no file is being opened fresh
+  AutoSave.restore();
+
   setTimeout(fitBoard, 100);
   window.addEventListener('resize', Utils.debounce(fitBoard, 200));
 
@@ -163,7 +166,7 @@ async function newLayout() {
     if (!confirm('Start a new layout? Unsaved changes will be lost.')) return;
   }
   Board.clear(); PropertiesPanel.hide(); Storage.newLayout();
-  History.clear(); History.init();
+  History.clear(); History.init(); AutoSave.clear();
   updateComponentCount(); setStatus('New layout — drop components to get started');
 }
 
@@ -172,7 +175,7 @@ async function openLayout() {
   const layout = await Storage.openLayout();
   if (!layout) return;
   Board.loadLayout(layout); PropertiesPanel.hide();
-  History.clear(); History.init();
+  History.clear(); History.init(); AutoSave.clear();
   updateComponentCount(); setStatus(`Loaded — ${layout.components?.length||0} components`);
 }
 
@@ -217,12 +220,17 @@ function zoomOut()   { applyZoom(Math.max(ZOOM_MIN, snapZoom(_zoomLevel - ZOOM_S
 function snapZoom(v) { return Math.round(v / ZOOM_STEP) * ZOOM_STEP; }
 
 function fitBoard() {
-  const scroll=document.getElementById('board-scroll');
-  const canvas=document.getElementById('board-canvas');
-  if (!scroll||!canvas) return;
-  const aW=scroll.clientWidth-56, aH=scroll.clientHeight-56;
-  if (!canvas.width||!canvas.height) return;
-  applyZoom(Math.max(ZOOM_MIN, snapZoom(Math.min(aW/canvas.width, aH/canvas.height, 1.0))));
+  const scroll = document.getElementById('board-scroll');
+  const canvas = document.getElementById('board-canvas');
+  if (!scroll || !canvas) return;
+  const aW = scroll.clientWidth  - 56;
+  const aH = scroll.clientHeight - 56;
+  // Use CSS (logical) size, not canvas.width which is DPR-inflated
+  const bW = parseFloat(canvas.style.width)  || canvas.clientWidth;
+  const bH = parseFloat(canvas.style.height) || canvas.clientHeight;
+  if (!bW || !bH) return;
+  const raw = Math.min(aW / bW, aH / bH, 1.0);
+  applyZoom(Math.max(ZOOM_MIN, snapZoom(raw)));
 }
 
 function applyZoom(level) {
@@ -347,7 +355,7 @@ function confirmClear() {
   if (confirm('Clear the board? This cannot be undone.')) {
     if (Simulation.isRunning()) stopSim();
     Board.clear(); PropertiesPanel.hide(); updateComponentCount();
-    History.clear(); History.init();
+    History.clear(); History.init(); AutoSave.clear();
     setStatus('Board cleared');
   }
 }

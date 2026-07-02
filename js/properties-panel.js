@@ -7,21 +7,20 @@ const PropertiesPanel = (() => {
 
   function init() { _content = document.getElementById('props-content'); }
 
-  // Called by Board.onSelect(inst, wire)
   function show(inst, wire) {
     _currentInst = inst;
     _currentWire = wire;
-
     if (wire && !inst) { showWire(wire); return; }
     if (!inst)         { hide();         return; }
     showComponent(inst);
   }
 
-  // ── Wire selected ───────────────────────────────────────────────────────────
+  // ── Wire ────────────────────────────────────────────────────────────────────
   function showWire(wire) {
     _content.innerHTML = `
       <div class="prop-component-header">
-        <div class="prop-component-symbol" style="background:${wire.color||'#ff9900'};border-color:${wire.color||'#ff9900'}">⌇</div>
+        <div class="prop-component-symbol"
+          style="background:${wire.color||'#ff9900'};border-color:${wire.color||'#ff9900'}">⌇</div>
         <div class="prop-component-info">
           <div class="prop-component-label">Jumper Wire</div>
           <div class="prop-component-id">${wire.id}</div>
@@ -39,13 +38,12 @@ const PropertiesPanel = (() => {
       wire.color = e.target.value;
       Board.redraw(); Storage.markDirty(); History.pushDebounced();
     });
-
     document.getElementById('prop-delete-btn')?.addEventListener('click', () => {
-      Board.deleteSelected(); hide(); Storage.markDirty();
+      Board.deleteSelected(); hide(); Storage.markDirty(); History.push();
     });
   }
 
-  // ── Component selected ──────────────────────────────────────────────────────
+  // ── Component ───────────────────────────────────────────────────────────────
   function showComponent(inst) {
     const def = ComponentRegistry.getById(inst.defId);
     if (!def) return;
@@ -63,22 +61,44 @@ const PropertiesPanel = (() => {
       html += buildPropField(prop, inst.props[prop.key]);
     }
 
-    // Flip button — shown for 2-leg polarized/asymmetric components
-    const showFlip = !['ic','potentiometer'].includes(def.category) &&
-                     def.id !== 'potentiometer' &&
-                     (def.polarized || def.id==='diode' || def.id==='transistor_npn' || def.id==='transistor_pnp');
-    if (showFlip) {
+    // ── Orientation controls ─────────────────────────────────────────────────
+    // Flip: for polarized / asymmetric 2-leg components
+    const canFlip = def.polarized ||
+      ['diode','led','capacitor_electrolytic','transistor_npn','transistor_pnp'].includes(def.id);
+
+    // Rotate: for 3-leg components (pot, transistor) and anything else rotatable
+    const canRotate = def.legs >= 2 && def.category !== 'ic';
+
+    if (canFlip || canRotate) {
+      html += `<div class="prop-section-div"></div>`;
+    }
+
+    if (canFlip) {
       const flipped = !!inst.flipped;
       html += `
-        <div class="prop-section-div"></div>
         <div class="prop-group">
           <label class="prop-label">Orientation</label>
           <div class="prop-flip-wrap">
-            <button class="prop-flip-btn ${!flipped?'active':''}" data-flip="false" title="Normal orientation">
+            <button class="prop-flip-btn ${!flipped?'active':''}" data-flip="false">
               <i class="fa-solid fa-arrow-right-long"></i> Normal
             </button>
-            <button class="prop-flip-btn ${flipped?'active':''}" data-flip="true" title="Flipped orientation">
+            <button class="prop-flip-btn ${flipped?'active':''}" data-flip="true">
               <i class="fa-solid fa-arrow-left-long"></i> Flipped
+            </button>
+          </div>
+        </div>`;
+    }
+
+    if (canRotate) {
+      html += `
+        <div class="prop-group">
+          <label class="prop-label">Rotate</label>
+          <div class="prop-rotate-wrap">
+            <button class="prop-rotate-btn" id="prop-rotate-ccw" title="Rotate 90° counter-clockwise">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+            <button class="prop-rotate-btn" id="prop-rotate-cw" title="Rotate 90° clockwise">
+              <i class="fa-solid fa-rotate-right"></i>
             </button>
           </div>
         </div>`;
@@ -101,7 +121,15 @@ const PropertiesPanel = (() => {
       });
     });
 
-    // Property field listeners
+    // Rotate CW/CCW — moves outer leg positions by 90° around the body center
+    document.getElementById('prop-rotate-cw')?.addEventListener('click', () => {
+      rotateLeg90(inst, 1); // clockwise = +90°
+    });
+    document.getElementById('prop-rotate-ccw')?.addEventListener('click', () => {
+      rotateLeg90(inst, -1); // counter-clockwise = -90°
+    });
+
+    // Property change listeners
     _content.querySelectorAll('.prop-input, input[type="range"]').forEach(el => {
       el.addEventListener('input',  onPropChange);
       el.addEventListener('change', onPropChange);
@@ -119,26 +147,65 @@ const PropertiesPanel = (() => {
         const nameEl = _content.querySelector('.prop-audio-name');
         if (nameEl) nameEl.textContent = name;
         audioBtn.innerHTML = '<i class="fa-solid fa-music"></i> Change Audio File';
-        Storage.markDirty();
+        Storage.markDirty(); History.pushDebounced();
       });
     }
 
     document.getElementById('prop-delete-btn')?.addEventListener('click', () => {
-      Board.deleteSelected(); hide(); Storage.markDirty();
+      Board.deleteSelected(); hide(); Storage.markDirty(); History.push();
     });
   }
 
-  // ── Capacitance unit display ────────────────────────────────────────────────
+  // ── Rotate legs 90° around component center ──────────────────────────────────
+  // dir: +1 = CW, -1 = CCW
+  function rotateLeg90(inst, dir) {
+    if (!inst.legs || inst.legs.length < 2) return;
+
+    // Get current outer leg pixels
+    const L   = inst.legs;
+    const a   = Board.holeToXY(L[0].row, L[0].col);
+    const b   = Board.holeToXY(L[L.length-1].row, L[L.length-1].col);
+    const cx  = (a.x + b.x) / 2;
+    const cy  = (a.y + b.y) / 2;
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    const newAng = ang + dir * (Math.PI / 2);
+    const halfLen = Math.hypot(b.x - a.x, b.y - a.y) / 2;
+
+    // Compute new outer leg world positions
+    const newAx = cx - Math.cos(newAng) * halfLen;
+    const newAy = cy - Math.sin(newAng) * halfLen;
+    const newBx = cx + Math.cos(newAng) * halfLen;
+    const newBy = cy + Math.sin(newAng) * halfLen;
+
+    // Snap to nearest holes
+    const holeA = Board.xyToHole(newAx, newAy, 30);
+    const holeB = Board.xyToHole(newBx, newBy, 30);
+    if (!holeA || !holeB) return;
+
+    inst.legs[0] = holeA;
+    inst.legs[L.length-1] = holeB;
+
+    // For 3-leg: recompute center
+    if (L.length === 3) {
+      const pa = Board.holeToXY(holeA.row, holeA.col);
+      const pb = Board.holeToXY(holeB.row, holeB.col);
+      const mid = Board.xyToHole((pa.x+pb.x)/2, (pa.y+pb.y)/2, 20);
+      if (mid) inst.legs[1] = mid;
+    }
+
+    Board.redraw(); Storage.markDirty(); History.push();
+  }
+
+  // ── Field builders ───────────────────────────────────────────────────────────
   function formatCapacitance(v) {
-    if (!v && v!==0) return '';
+    if (!v && v !== 0) return '';
     v = parseFloat(v);
-    if (v >= 0.001)       return (v*1000).toPrecision(3).replace(/\.?0+$/,'') + ' mF';
-    if (v >= 0.000001)    return (v*1e6).toPrecision(3).replace(/\.?0+$/,'') + ' µF';
-    if (v >= 0.000000001) return (v*1e9).toPrecision(3).replace(/\.?0+$/,'') + ' nF';
+    if (v >= 0.001)        return (v*1000).toPrecision(3).replace(/\.?0+$/,'') + ' mF';
+    if (v >= 0.000001)     return (v*1e6).toPrecision(3).replace(/\.?0+$/,'') + ' µF';
+    if (v >= 0.000000001)  return (v*1e9).toPrecision(3).replace(/\.?0+$/,'') + ' nF';
     return (v*1e12).toPrecision(3).replace(/\.?0+$/,'') + ' pF';
   }
 
-  // ── Field builders ──────────────────────────────────────────────────────────
   function buildPropField(prop, value) {
     const isCap = prop.key === 'capacitance';
     switch (prop.type) {
@@ -203,10 +270,10 @@ const PropertiesPanel = (() => {
     const key = e.target.dataset.key;
     if (!key) return;
     const rawVal = e.target.value;
-    const def  = ComponentRegistry.getById(_currentInst.defId);
-    const prop = def?.properties?.find(p=>p.key===key);
+    const def    = ComponentRegistry.getById(_currentInst.defId);
+    const prop   = def?.properties?.find(p=>p.key===key);
 
-    if (prop?.type==='number'||e.target.type==='range') {
+    if (prop?.type==='number' || e.target.type==='range') {
       _currentInst.props[key] = parseFloat(rawVal);
     } else if (prop?.type==='boolean') {
       _currentInst.props[key] = rawVal==='true';
@@ -215,21 +282,21 @@ const PropertiesPanel = (() => {
     }
 
     if (key==='capacitance') {
-      const u=document.getElementById('cap-unit-display');
-      if (u) u.textContent=formatCapacitance(parseFloat(rawVal));
+      const u = document.getElementById('cap-unit-display');
+      if (u) u.textContent = formatCapacitance(parseFloat(rawVal));
     }
-    if (key==='wiper'&&AudioEngine.isRunning()) {
+    if (key==='wiper' && AudioEngine.isRunning()) {
       AudioEngine.updatePotWiper(_currentInst);
-      const v=document.getElementById(`rval-${key}`);
-      if (v) v.textContent=Math.round(parseFloat(rawVal)*100)+'%';
+      const v = document.getElementById(`rval-${key}`);
+      if (v) v.textContent = Math.round(parseFloat(rawVal)*100)+'%';
     }
 
     Board.redraw(); Storage.markDirty(); History.pushDebounced();
   }
 
   function hide() {
-    _currentInst=null; _currentWire=null;
-    _content.innerHTML=`
+    _currentInst = null; _currentWire = null;
+    _content.innerHTML = `
       <div class="props-empty">
         <i class="fa-solid fa-arrow-pointer"></i>
         <p>Select a component or jumper wire to edit its properties</p>

@@ -17,6 +17,8 @@ const History = (() => {
     if (_past.length > MAX) _past.shift();
     _future = [];   // any new action clears redo stack
     updateButtons();
+    // Persist to localStorage after every meaningful change
+    if (typeof AutoSave !== 'undefined') AutoSave.save();
   }
 
   // Debounced push — for rapid changes like property sliders
