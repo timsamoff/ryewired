@@ -1,7 +1,7 @@
 - Transistors and potentiometers still don't have three legs.
-- Tranistor image needs to be 3x larger
-- Potentiometer image needs to be 3x larger
-- Electrolytic capacitor image needs t be 3x larger
+- Transistor image needs to be 2x larger
+- Potentiometer image needs to be 2x larger
+- Electrolytic capacitor image needs t be 2x larger
 - Need to add germanium transistor (silver circle with tab on one side and three legs)
 - All transistors need Leakage value
 - Need to add germanium diode (clear glass diode with black line on one side)
