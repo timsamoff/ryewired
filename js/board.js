@@ -154,8 +154,8 @@ const Board = (() => {
     if(!inst) return null;
     const def=ComponentRegistry.getById(inst.defId);
     if(def?.category==='ic') return null;
+    if(inst.legs.length===3) return null; // 3-leg parts: fixed layout, reposition via Rotate only
     for(let i=0;i<inst.legs.length;i++) {
-      if(inst.legs.length===3&&i===1) continue;
       const {x:lx,y:ly}=holeToXY(inst.legs[i].row,inst.legs[i].col);
       if(Math.hypot(x-lx,y-ly)<LEG_HIT_R) return {inst,legIdx:i};
     }
@@ -299,8 +299,8 @@ const Board = (() => {
   function drawLegTargets(inst,c){
     const def=ComponentRegistry.getById(inst.defId);
     if(def?.category==='ic') return;
+    if(inst.legs.length===3) return; // fixed layout, no drag handles — use Rotate instead
     for(let i=0;i<inst.legs.length;i++){
-      if(inst.legs.length===3&&i===1) continue;
       const {x,y}=holeToXY(inst.legs[i].row,inst.legs[i].col);
       ctx.beginPath();ctx.arc(x,y,LEG_DOT_R+4,0,Math.PI*2);ctx.fillStyle='rgba(43,87,154,0.2)';ctx.fill();
       ctx.beginPath();ctx.arc(x,y,LEG_DOT_R,0,Math.PI*2);ctx.fillStyle=c.accent;ctx.fill();
@@ -347,12 +347,13 @@ const Board = (() => {
       ctx.beginPath();ctx.arc(-halfLen,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
       ctx.beginPath();ctx.arc(halfLen,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
 
-      // Power supply polarity labels
+      // Power supply polarity labels — fixed to leg index (leg 0 = –, leg 1 = +).
+      // Orientation is now changed via Rotate only, which swaps which
+      // world-space hole each leg index lands in.
       if(def.id==='power_supply'){
-        const fl=inst.flipped;
         ctx.font='bold 8px IBM Plex Mono,monospace';ctx.textAlign='center';
-        ctx.fillStyle=c.railRed;   ctx.fillText(fl?'–':'+', fl?-halfLen:halfLen, -8);
-        ctx.fillStyle=c.railBlue;  ctx.fillText(fl?'+':'–', fl?halfLen:-halfLen, -8);
+        ctx.fillStyle=c.railRed;   ctx.fillText('+', halfLen, -8);
+        ctx.fillStyle=c.railBlue;  ctx.fillText('–', -halfLen, -8);
       }
 
     } else if(inst.legs.length===3&&pts.length===3){
@@ -375,7 +376,6 @@ const Board = (() => {
 
     ctx.translate(0,offY);
     if(isSel&&alpha>=1){ctx.beginPath();ctx.ellipse(0,0,bw/2+9,bh/2+9,0,0,Math.PI*2);ctx.strokeStyle=c.warning;ctx.lineWidth=2;ctx.stroke();}
-    if(inst.flipped) ctx.scale(-1,1);
     drawBody(def,inst,c,halfLen);
 
     if(isFail&&alpha>=1){ctx.globalAlpha=1;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillStyle=c.alert;ctx.fillText('✕',0,-20);}
@@ -390,7 +390,7 @@ const Board = (() => {
       case 'capacitor':             drawFilmCap(bw,bh); break;
       case 'capacitor_electrolytic':drawElectroCap(col,bw); break;
       case 'led':{const cm=def.color_map?.[inst.props.color]||{};drawLED(cm.hex||'#ff2200',bw,bh,inst._brightness||0);break;}
-      case 'potentiometer':  drawPot(col,bw,bh,inst.props.wiper||0.5); break;
+      case 'potentiometer':  drawPot(col,bw,bh,inst.props.wiper||0.5,halfLen); break;
       case 'diode':          drawDiode(def,inst,bw,bh); break;
       case 'transistor_npn':
       case 'transistor_pnp': drawTransistor(def,inst,col,bw,bh); break;
@@ -448,14 +448,20 @@ const Board = (() => {
   }
 
   // Potentiometer: filled circle body, three legs emerge from the bottom
-  function drawPot(color,bw,bh,wiper){
+  function drawPot(color,bw,bh,wiper,halfLen){
     const r=bw/2;
-    // Circle body
+    // Base bracket: connects the round knob down to the full leg width,
+    // so the part visually reaches all three legs regardless of knob size.
+    const legW=(halfLen?halfLen*2:bw)+6;
+    ctx.fillStyle='#3a3a3a';
+    ctx.fillRect(-legW/2,0,legW,bh/2);
+    ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=0.8;ctx.strokeRect(-legW/2,0,legW,bh/2);
+    // Circle body (knob)
     ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();
     ctx.strokeStyle='rgba(255,255,255,0.2)';ctx.lineWidth=0.8;ctx.stroke();
     // Wiper knob
     ctx.beginPath();ctx.arc(0,0,r*0.3,0,Math.PI*2);ctx.fillStyle='#555';ctx.fill();
-    const a=Utils.mapRange(wiper,0,1,-135,135)*(Math.PI/180);
+    const a=Utils.mapRange(wiper,0,1,180,360)*(Math.PI/180);
     ctx.strokeStyle='#fff';ctx.lineWidth=2;
     ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*r*0.25,Math.sin(a)*r*0.25);ctx.stroke();
   }
@@ -473,40 +479,35 @@ const Board = (() => {
     }
   }
 
-  // Transistor: D-shape half circle (flat face left), three legs off flat face
+  // Transistor: D-shape, flat edge at the bottom (touching the legs),
+  // dome curving up. Sized independently by bw (flat-edge width, matches
+  // leg span) and bh (dome height) so it always meets the legs exactly —
+  // no more assuming a single circular radius for both dimensions.
   function drawTransistor(def,inst,color,bw,bh){
     const model=inst.props?.model||'';
     const isGerm=(def.model_params?.[model]?.type)==='germanium';
-    const r=bw/2,type=def.id==='transistor_pnp'?'PNP':'NPN';
+    const hw=bw/2, hh=bh/2, type=def.id==='transistor_pnp'?'PNP':'NPN';
+
     if(isGerm){
-      const grd=ctx.createRadialGradient(-r*0.3,-r*0.3,0,0,0,r);
+      // Round metal-can package — full ellipse filling the body box.
+      const grd=ctx.createRadialGradient(-hw*0.3,-hh*0.3,0,0,0,Math.max(hw,hh));
       grd.addColorStop(0,'#e0e0e0');grd.addColorStop(0.6,'#a0a0a0');grd.addColorStop(1,'#606060');
-      ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=grd;ctx.fill();
+      ctx.beginPath();ctx.ellipse(0,0,hw,hh,0,0,Math.PI*2);ctx.fillStyle=grd;ctx.fill();
       ctx.strokeStyle='#888';ctx.lineWidth=0.8;ctx.stroke();
     }else{
-      // D-shape: curved side on right, flat face on left
+      // Flat edge at y=+hh (touches the legs), dome tip at y=-hh.
       ctx.fillStyle='#111';ctx.beginPath();
-      ctx.arc(0,0,r,-Math.PI/2,Math.PI/2);ctx.lineTo(0,r);ctx.lineTo(0,-r);ctx.closePath();ctx.fill();
+      ctx.ellipse(0,hh,hw,bh,0,Math.PI,Math.PI*2);
+      ctx.lineTo(-hw,hh);ctx.closePath();ctx.fill();
       ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=0.8;ctx.stroke();
       // Flat face line
       ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(0,-r);ctx.lineTo(0,r);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(-hw,hh);ctx.lineTo(hw,hh);ctx.stroke();
     }
-    // Internal schematic lines: B (horizontal from left), C (upper right), E (lower right)
-    ctx.strokeStyle='rgba(255,255,255,0.55)';ctx.lineWidth=1.3;
-    ctx.beginPath();ctx.moveTo(-r*0.6,0);ctx.lineTo(0,0);ctx.stroke();     // Base
-    ctx.beginPath();ctx.moveTo(0,-r*0.4);ctx.lineTo(r*0.6,-r*0.72);ctx.stroke(); // Collector
-    ctx.beginPath();ctx.moveTo(0, r*0.4);ctx.lineTo(r*0.6, r*0.72);ctx.stroke(); // Emitter
-    // Arrow
-    const ax=r*0.6,ay=r*0.72;
-    ctx.fillStyle='rgba(255,255,255,0.55)';ctx.beginPath();
-    if(type==='NPN'){ctx.moveTo(ax,ay);ctx.lineTo(ax-5,ay-3);ctx.lineTo(ax-5,ay+3);}
-    else{ctx.moveTo(ax-5,ay);ctx.lineTo(ax,ay-3);ctx.lineTo(ax,ay+3);}
-    ctx.closePath();ctx.fill();
     // Label
     ctx.fillStyle='rgba(255,255,255,0.6)';
-    ctx.font=`bold ${Math.max(5,r*0.38)}px IBM Plex Mono,monospace`;ctx.textAlign='center';
-    ctx.fillText(model||type,r*0.22,3);
+    ctx.font=`bold ${Math.max(5,hw*0.28)}px IBM Plex Mono,monospace`;ctx.textAlign='center';
+    ctx.fillText(model||type,0,hh*0.55);
   }
 
   function drawSwitch(bw,bh,c,closed){
@@ -551,13 +552,15 @@ const Board = (() => {
     if(!def) return;
     const bw=def.visual?.body_width||28,bh=def.visual?.body_height||14;
     const legCount=def.legs||2;
-    const span=(def.leg_span||2)-1;
-    const halfLen=Math.max(bw/2+4, span*HOLE_PITCH/2);
+    // Match buildLegs() in components-registry.js exactly: leg_span IS the
+    // hole-column distance between the two outer legs, no -1.
+    const span=def.leg_span||2;
+    const halfLen=span*HOLE_PITCH/2;
     const mid=Math.round(span/2);
     const legs = legCount===3
       ? [{row:3,col:5},{row:3,col:5+mid},{row:3,col:5+span}]
       : [{row:3,col:5},{row:3,col:5+span}];
-    const fakeInst={defId:def.id,legs,flipped:false,props:{},failed:false,_brightness:0,_state:false};
+    const fakeInst={defId:def.id,legs,props:{},failed:false,_brightness:0,_state:false};
     for(const p of(def.properties||[])) fakeInst.props[p.key]=p.default;
     ctx.save();ctx.translate(mx,my);ctx.globalAlpha=0.72;
     ctx.strokeStyle=LEAD_COLOR;ctx.lineWidth=LEAD_WIDTH;ctx.lineCap='round';ctx.fillStyle=LEAD_COLOR;

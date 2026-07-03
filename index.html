@@ -261,12 +261,30 @@
     </div>
   </div>
 
+  <!-- ── Confirm modal (replaces native confirm/alert popups) ── -->
+  <div id="confirm-overlay" class="hidden">
+    <div id="confirm-backdrop"></div>
+    <div id="confirm-box">
+      <div id="confirm-header">
+        <h2 id="confirm-title">Confirm</h2>
+      </div>
+      <div id="confirm-body">
+        <p id="confirm-message"></p>
+      </div>
+      <div id="confirm-footer">
+        <button id="confirm-cancel-btn" class="confirm-btn confirm-btn-cancel">Cancel</button>
+        <button id="confirm-ok-btn" class="confirm-btn confirm-btn-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Hidden file input fallback -->
   <input type="file" id="file-input" accept=".rw" style="display:none">
 
 </div><!-- #app -->
 
 <script src="js/utils.js"></script>
+<script src="js/modal.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/components-registry.js"></script>
 <script src="js/board.js"></script>

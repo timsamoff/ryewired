@@ -30,6 +30,13 @@
       "label": "hFE (gain)",
       "type": "number",
       "default": 100
+    },
+    {
+      "key": "pinout",
+      "label": "Pinout (left to right)",
+      "type": "select",
+      "options": ["EBC", "CBE"],
+      "default": "EBC"
     }
   ],
   "model_params": {
@@ -94,8 +101,8 @@
   },
   "visual": {
     "body_color": "#111111",
-    "body_width": 28,
-    "body_height": 36,
+    "body_width": 48,
+    "body_height": 30,
     "lead_length": 12
   }
 }

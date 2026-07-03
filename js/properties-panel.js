@@ -62,31 +62,12 @@ const PropertiesPanel = (() => {
     }
 
     // ── Orientation controls ─────────────────────────────────────────────────
-    // Flip: for polarized / asymmetric 2-leg components
-    const canFlip = def.polarized ||
-      ['diode','led','capacitor_electrolytic','transistor_npn','transistor_pnp'].includes(def.id);
-
-    // Rotate: for 3-leg components (pot, transistor) and anything else rotatable
+    // Rotate: for any 2+ leg component (not IC). This is now the only
+    // reorientation control — Flip has been removed in favor of Rotate 90°.
     const canRotate = def.legs >= 2 && def.category !== 'ic';
 
-    if (canFlip || canRotate) {
+    if (canRotate) {
       html += `<div class="prop-section-div"></div>`;
-    }
-
-    if (canFlip) {
-      const flipped = !!inst.flipped;
-      html += `
-        <div class="prop-group">
-          <label class="prop-label">Orientation</label>
-          <div class="prop-flip-wrap">
-            <button class="prop-flip-btn ${!flipped?'active':''}" data-flip="false">
-              <i class="fa-solid fa-arrow-right-long"></i> Normal
-            </button>
-            <button class="prop-flip-btn ${flipped?'active':''}" data-flip="true">
-              <i class="fa-solid fa-arrow-left-long"></i> Flipped
-            </button>
-          </div>
-        </div>`;
     }
 
     if (canRotate) {
@@ -110,16 +91,6 @@ const PropertiesPanel = (() => {
       </button>`;
 
     _content.innerHTML = html;
-
-    // Flip buttons
-    _content.querySelectorAll('.prop-flip-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        inst.flipped = btn.dataset.flip === 'true';
-        _content.querySelectorAll('.prop-flip-btn').forEach(b =>
-          b.classList.toggle('active', b.dataset.flip === String(inst.flipped)));
-        Board.redraw(); Storage.markDirty(); History.push();
-      });
-    });
 
     // Rotate CW/CCW — moves outer leg positions by 90° around the body center
     document.getElementById('prop-rotate-cw')?.addEventListener('click', () => {
@@ -285,10 +256,10 @@ const PropertiesPanel = (() => {
       const u = document.getElementById('cap-unit-display');
       if (u) u.textContent = formatCapacitance(parseFloat(rawVal));
     }
-    if (key==='wiper' && AudioEngine.isRunning()) {
-      AudioEngine.updatePotWiper(_currentInst);
+    if (key==='wiper') {
       const v = document.getElementById(`rval-${key}`);
       if (v) v.textContent = Math.round(parseFloat(rawVal)*100)+'%';
+      if (AudioEngine.isRunning()) AudioEngine.updatePotWiper(_currentInst);
     }
 
     Board.redraw(); Storage.markDirty(); History.pushDebounced();

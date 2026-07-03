@@ -5,7 +5,7 @@
   "symbol": "RV",
   "description": "Variable resistor with 3 terminals. Wiper position is adjustable.",
   "legs": 3,
-  "leg_span": 4,
+  "leg_span": 2,
   "properties": [
     {
       "key": "resistance",

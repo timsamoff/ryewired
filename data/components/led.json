@@ -27,8 +27,8 @@
     "UV":     { "hex": "#8800ff", "vf": 3.4 }
   },
   "visual": {
-    "body_width": 10,
-    "body_height": 16,
+    "body_width": 20,
+    "body_height": 32,
     "lead_length": 10
   }
 }

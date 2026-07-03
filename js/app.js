@@ -17,6 +17,7 @@ let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
   Palette.init();
   Palette.populate(ComponentRegistry.getAll());
   PropertiesPanel.init();
+  Modal.init();
   Oscilloscope.init(
     document.getElementById('scope-canvas'),
     document.getElementById('spectrum-canvas')
@@ -163,7 +164,8 @@ function stopSim() {
 async function newLayout() {
   if (Simulation.isRunning()) stopSim();
   if (Board.getPlaced().length>0) {
-    if (!confirm('Start a new layout? Unsaved changes will be lost.')) return;
+    const ok = await Modal.confirm('Start a new layout? Unsaved changes will be lost.', {title:'New Layout', okLabel:'New Layout', danger:true});
+    if (!ok) return;
   }
   Board.clear(); PropertiesPanel.hide(); Storage.newLayout();
   History.clear(); History.init(); AutoSave.clear();
@@ -312,6 +314,7 @@ function onKeyDown(e) {
   const typing=['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName);
 
   if (e.code==='Escape') {
+    if (Modal.handleEscape()) return;
     if (!document.getElementById('help-overlay').classList.contains('hidden')) { closeHelp(); return; }
     if (document.querySelector('.menu-item.open')) {
       document.querySelectorAll('.menu-item').forEach(m=>m.classList.remove('open')); return;
@@ -350,9 +353,10 @@ function onKeyDown(e) {
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
-function confirmClear() {
+async function confirmClear() {
   if (Board.getPlaced().length===0) return;
-  if (confirm('Clear the board? This cannot be undone.')) {
+  const ok = await Modal.confirm('Clear the board? This cannot be undone.', {title:'Clear Board', okLabel:'Clear', danger:true});
+  if (ok) {
     if (Simulation.isRunning()) stopSim();
     Board.clear(); PropertiesPanel.hide(); updateComponentCount();
     History.clear(); History.init(); AutoSave.clear();

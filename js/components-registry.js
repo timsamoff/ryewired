@@ -55,7 +55,6 @@ const ComponentRegistry = (() => {
       instanceId:  Utils.uid(def.symbol||'C'),
       defId,
       legs,
-      flipped:     false,
       props,
       failed:      false,
       failureType: null,

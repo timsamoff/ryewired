@@ -83,8 +83,12 @@ const Palette = (() => {
   // The browser will display it at 1:1; sharpness here doesn't matter much.
   function buildDragImage(def) {
     try {
-      const bw   = (def.visual?.body_width  || 28) + 40;
-      const bh   = (def.visual?.body_height || 14) + 28;
+      const bw0  = def.visual?.body_width  || 28;
+      const bh0  = def.visual?.body_height || 14;
+      const legCount = def.legs || 2;
+      const STAND_GAP = 14;
+      const bw   = bw0 + 40;
+      const bh   = bh0 + 28 + (legCount===3 ? STAND_GAP+10 : 0);
       const W    = Math.max(bw, 80);
       const H    = Math.max(bh, 40);
 
@@ -97,19 +101,39 @@ const Palette = (() => {
       ctx.translate(W/2, H/2);
       ctx.globalAlpha = 0.88;
 
-      const halfLen = (bw - 40) / 2;
+      const halfLen = bw0/2;
       const ll      = def.visual?.lead_length || 8;
       const color   = def.visual?.body_color  || '#888';
 
-      // Leads
-      ctx.strokeStyle = '#555555'; ctx.lineWidth = 2; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(-halfLen,0); ctx.lineTo(-halfLen+ll,0); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo( halfLen,0); ctx.lineTo( halfLen-ll,0); ctx.stroke();
-      ctx.fillStyle = '#555555';
-      ctx.beginPath(); ctx.arc(-halfLen,0,3,0,Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc( halfLen,0,3,0,Math.PI*2); ctx.fill();
+      if (legCount===3) {
+        // Standing style: body above, three parallel legs straight down —
+        // matches board.js's drawInst() for transistor/potentiometer.
+        const span = def.leg_span || 2;
+        const mid  = Math.round(span/2);
+        const xMid = Utils.mapRange(mid,0,span,-halfLen,halfLen);
+        const bodyOffY   = -(bh0/2 + STAND_GAP);
+        const bodyBottom = bodyOffY + bh0/2;
 
-      drawDragBody(ctx, def, color, halfLen, ll);
+        ctx.strokeStyle='#555555'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.fillStyle='#555555';
+        for (const lx of [-halfLen, xMid, halfLen]) {
+          ctx.beginPath(); ctx.moveTo(lx,bodyBottom); ctx.lineTo(lx,0); ctx.stroke();
+          ctx.beginPath(); ctx.arc(lx,0,3,0,Math.PI*2); ctx.fill();
+        }
+        ctx.save();
+        ctx.translate(0,bodyOffY);
+        drawDragBody(ctx, def, color, halfLen, ll);
+        ctx.restore();
+      } else {
+        // Leads (flat 2-leg style)
+        ctx.strokeStyle = '#555555'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-halfLen,0); ctx.lineTo(-halfLen+ll,0); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo( halfLen,0); ctx.lineTo( halfLen-ll,0); ctx.stroke();
+        ctx.fillStyle = '#555555';
+        ctx.beginPath(); ctx.arc(-halfLen,0,3,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc( halfLen,0,3,0,Math.PI*2); ctx.fill();
+
+        drawDragBody(ctx, def, color, halfLen, ll);
+      }
 
       // Temporarily attach to DOM for setDragImage (browser requirement)
       cvs.style.cssText = 'position:absolute;left:-9999px;top:-9999px;pointer-events:none';
@@ -179,26 +203,20 @@ const Palette = (() => {
       }
       case 'transistor_npn':
       case 'transistor_pnp': {
-        const r=bw/2;
+        const hw=bw/2, hh=bh/2;
         ctx.fillStyle='#111'; ctx.beginPath();
-        ctx.arc(0,0,r,-Math.PI/2,Math.PI/2); ctx.lineTo(0,r); ctx.lineTo(0,-r); ctx.closePath(); ctx.fill();
+        ctx.ellipse(0,hh,hw,bh,0,Math.PI,Math.PI*2); ctx.lineTo(-hw,hh); ctx.closePath(); ctx.fill();
         ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1;
-        ctx.beginPath(); ctx.moveTo(0,-r); ctx.lineTo(0,r); ctx.stroke();
-        // Center lead hint
-        ctx.strokeStyle='#555555'; ctx.lineWidth=2;
-        ctx.beginPath(); ctx.moveTo(0,r+2); ctx.lineTo(0,r+ll); ctx.stroke();
-        ctx.fillStyle='#555555';
-        ctx.beginPath(); ctx.arc(0,r+ll,3,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-hw,hh); ctx.lineTo(hw,hh); ctx.stroke();
         break;
       }
       case 'potentiometer': {
-        ctx.fillStyle=color; rr(-bw/2,-bh/2,bw,bh,3); ctx.fill();
-        ctx.beginPath(); ctx.arc(0,0,bw*0.28,0,Math.PI*2); ctx.fillStyle='#777'; ctx.fill();
-        // Center lead hint
-        ctx.strokeStyle='#555555'; ctx.lineWidth=2;
-        ctx.beginPath(); ctx.moveTo(0,bh/2+2); ctx.lineTo(0,bh/2+ll); ctx.stroke();
-        ctx.fillStyle='#555555';
-        ctx.beginPath(); ctx.arc(0,bh/2+ll,3,0,Math.PI*2); ctx.fill();
+        const r=bw/2, legW=halfLen*2+6;
+        ctx.fillStyle='#3a3a3a'; ctx.fillRect(-legW/2,0,legW,bh/2);
+        ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=0.8; ctx.strokeRect(-legW/2,0,legW,bh/2);
+        ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.lineWidth=0.8; ctx.stroke();
+        ctx.beginPath(); ctx.arc(0,0,r*0.3,0,Math.PI*2); ctx.fillStyle='#777'; ctx.fill();
         break;
       }
       case 'diode':

@@ -426,6 +426,72 @@ select.prop-input { cursor: pointer; }
 .prop-delete-btn i { font-size: 11px; }
 .prop-delete-btn:hover { background: var(--alert); color: var(--text-on-alert); border-color: var(--alert); }
 
+/* ── Confirm modal ────────────────────────────────────────────────────────── */
+
+#confirm-overlay {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1100;
+}
+#confirm-overlay.hidden { display: none; }
+
+#confirm-backdrop {
+  position: absolute; inset: 0;
+  background: var(--bg-overlay); backdrop-filter: blur(4px);
+}
+
+#confirm-box {
+  position: relative; background: var(--bg-elevated);
+  border: 1px solid var(--border-light); border-radius: var(--radius-lg);
+  max-width: 360px; width: 90%; overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.7);
+  animation: dropdown-in 0.15s ease;
+}
+
+#confirm-header {
+  padding: 18px 20px 10px;
+  background: var(--bg-raised); border-bottom: 1px solid var(--border);
+}
+
+#confirm-title {
+  font-family: var(--font-mono); font-size: 14px; font-weight: 700;
+  color: var(--text-primary); letter-spacing: 0.04em;
+}
+
+#confirm-body { padding: 18px 20px; }
+
+#confirm-message {
+  font-size: 12px; color: var(--text-secondary); line-height: 1.7;
+}
+
+#confirm-footer {
+  padding: 12px 20px 18px;
+  display: flex; justify-content: flex-end; gap: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.confirm-btn {
+  font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+  padding: 8px 16px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light); cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.confirm-btn-cancel {
+  background: var(--bg-raised); color: var(--text-secondary);
+}
+.confirm-btn-cancel:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+.confirm-btn-ok {
+  background: var(--accent); color: var(--text-on-accent); border-color: var(--accent);
+}
+.confirm-btn-ok:hover { background: var(--accent-hover); }
+
+.confirm-btn-ok.confirm-btn-danger {
+  background: var(--alert); color: var(--text-on-alert); border-color: var(--alert);
+}
+.confirm-btn-ok.confirm-btn-danger:hover { background: var(--alert-hover); }
+
 /* ── Help modal ───────────────────────────────────────────────────────────── */
 
 #help-overlay {

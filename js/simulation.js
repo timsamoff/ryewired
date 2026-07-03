@@ -95,11 +95,11 @@ const Simulation = (() => {
         const vAnode   = vA ?? 0;
         const vCathode = vB ?? 0;
 
-        if (inst.flipped) {
-          // flipped = cathode is leg 0
-          if (vCathode - vAnode > Vf * 0.5) {
-            fail(inst, def, 'reverse_voltage'); return;
-          }
+        // leg 0 = anode, leg 1 = cathode (fixed by definition). Orientation
+        // is changed via Rotate, which swaps which world-space hole each
+        // leg index lands in — so this check needs no flip flag.
+        if (vCathode - vAnode > Vf * 0.5) {
+          fail(inst, def, 'reverse_voltage'); return;
         }
 
         const vAcross = vAnode - vCathode;
@@ -145,9 +145,12 @@ const Simulation = (() => {
         const pm  = def.model_params?.[mk] || {};
         const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
         const vbe = pm.vbe || 0.65;
-        // Legs: 0=E, 1=B, 2=C (standard BJT ordering)
+        // Base is always the physical center leg (leg 1). Which outer leg
+        // is Emitter vs Collector depends on the pinout setting — B is
+        // fixed either way, only E/C swap ends.
+        const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
         const vB  = legVoltage(inst, 1, nets, netVoltage);
-        const vE  = legVoltage(inst, 0, nets, netVoltage);
+        const vE  = legVoltage(inst, eIdx, nets, netVoltage);
         const Vbe = (vB ?? 0) - (vE ?? 0);
         if (Vbe < vbe) { inst._current=0; break; }
         const Ib  = (Vbe - vbe) / 10000;
