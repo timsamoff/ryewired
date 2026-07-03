@@ -1,11 +1,12 @@
-- Transistors and potentiometers still don't have three legs.
-- Transistor image needs to be 2x larger
-- Potentiometer image needs to be 2x larger
-- Electrolytic capacitor image needs t be 2x larger
+- Transistors legs get wonky if dragged around a lot
+- Electrolytic capacitor stripe need to be straight
+- Need DPST, DPDT, and 3PDT switches
 - Need to add germanium transistor (silver circle with tab on one side and three legs)
 - All transistors need Leakage value
 - Need to add germanium diode (clear glass diode with black line on one side)
 - All diodes need Leakage value (IR)
+- Pot and trans ghost drag images are correct now, but the tops are getting cut off.
+- Trans bodies should have pinout on them, not the name of the trans
 
 Future:
 - Board needs to be setup much more like a proto-board
