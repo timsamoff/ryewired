@@ -161,6 +161,27 @@ const Simulation = (() => {
         break;
       }
 
+      case 'bjt_pnp': {
+        const mk  = inst.props.model || '2N3906';
+        const pm  = def.model_params?.[mk] || {};
+        const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
+        const vbe = pm.vbe || 0.65; // magnitude of the Veb turn-on threshold
+        // Same physical leg layout as bjt_npn (B is always leg 1), but PNP
+        // conducts the opposite way: emitter must sit ABOVE base by vbe,
+        // not base above emitter.
+        const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
+        const vB  = legVoltage(inst, 1, nets, netVoltage);
+        const vE  = legVoltage(inst, eIdx, nets, netVoltage);
+        const Veb = (vE ?? 0) - (vB ?? 0);
+        if (Veb < vbe) { inst._current=0; break; }
+        const Ib  = (Veb - vbe) / 10000;
+        const Ic  = hfe * Ib;
+        const IcMax = (pm.max_ic_ma || 200) / 1000;
+        inst._current = Ic;
+        if (Ic > IcMax) fail(inst, def, 'over_current');
+        break;
+      }
+
       case 'switch_spst':
         inst._closed = inst._state || inst.props.state === 'Closed';
         break;

@@ -1,0 +1,128 @@
+{
+  "id": "transistor_pnp",
+  "label": "PNP Transistor",
+  "category": "semiconductor",
+  "symbol": "Q",
+  "description": "PNP bipolar junction transistor. Current-controlled amplifier or switch — conducts when the base is pulled below the emitter.",
+  "legs": 3,
+  "leg_span": 2,
+  "leg_labels": [
+    "E",
+    "B",
+    "C"
+  ],
+  "properties": [
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "select",
+      "options": [
+        "2N3906",
+        "BC178",
+        "BC557",
+        "2N2907",
+        "AC128",
+        "OC75",
+        "NKT275"
+      ],
+      "default": "2N3906"
+    },
+    {
+      "key": "hfe",
+      "label": "hFE (gain)",
+      "type": "number",
+      "default": 100
+    },
+    {
+      "key": "pinout",
+      "label": "Pinout (left to right)",
+      "type": "select",
+      "options": ["EBC", "CBE"],
+      "default": "EBC"
+    }
+  ],
+  "model_params": {
+    "2N3906": {
+      "hfe": 150,
+      "vce_sat": 0.25,
+      "vbe": 0.65,
+      "max_ic_ma": 200,
+      "max_vce": 40,
+      "type": "silicon",
+      "icbo_na": 50
+    },
+    "BC178": {
+      "hfe": 180,
+      "vce_sat": 0.25,
+      "vbe": 0.65,
+      "max_ic_ma": 100,
+      "max_vce": 25,
+      "type": "silicon",
+      "icbo_na": 15
+    },
+    "BC557": {
+      "hfe": 200,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 100,
+      "max_vce": 45,
+      "type": "silicon",
+      "icbo_na": 15
+    },
+    "2N2907": {
+      "hfe": 100,
+      "vce_sat": 0.4,
+      "vbe": 0.65,
+      "max_ic_ma": 600,
+      "max_vce": 40,
+      "type": "silicon",
+      "icbo_na": 10
+    },
+    "AC128": {
+      "hfe": 85,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 200,
+      "max_vce": 20,
+      "type": "germanium",
+      "icbo_na": 8000
+    },
+    "OC75": {
+      "hfe": 60,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 50,
+      "max_vce": 15,
+      "type": "germanium",
+      "icbo_na": 9000
+    },
+    "NKT275": {
+      "hfe": 90,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 50,
+      "max_vce": 20,
+      "type": "germanium",
+      "icbo_na": 2000
+    }
+  },
+  "behavior": {
+    "type": "bjt_pnp"
+  },
+  "failure_modes": {
+    "over_current": {
+      "result": "burn",
+      "message": "Collector current exceeded maximum rating. The transistor is destroyed. Add a base resistor to limit current, or use a transistor with a higher current rating."
+    },
+    "over_voltage": {
+      "result": "burn",
+      "message": "VCE exceeded breakdown voltage. Use a transistor rated for higher voltage."
+    }
+  },
+  "visual": {
+    "body_color": "#111111",
+    "body_width": 48,
+    "body_height": 30,
+    "lead_length": 12
+  }
+}

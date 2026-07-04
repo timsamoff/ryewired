@@ -422,7 +422,10 @@ const Board = (() => {
     const r=bw/2;
     ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();
     ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=0.8;ctx.stroke();
-    ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,r,Math.PI*0.6,Math.PI*1.4);ctx.closePath();
+    // Polarity stripe: a circular segment (straight chord + arc), NOT a
+    // wedge through center — real caps have a straight-edged band, not a
+    // pie slice.
+    ctx.beginPath();ctx.arc(0,0,r,Math.PI*0.6,Math.PI*1.4);ctx.closePath();
     ctx.fillStyle='rgba(255,255,255,0.55)';ctx.fill();
     ctx.fillStyle='rgba(20,20,40,0.9)';
     ctx.font=`bold ${Math.max(8,r*0.65)}px monospace`;ctx.textAlign='center';
@@ -486,7 +489,7 @@ const Board = (() => {
   function drawTransistor(def,inst,color,bw,bh){
     const model=inst.props?.model||'';
     const isGerm=(def.model_params?.[model]?.type)==='germanium';
-    const hw=bw/2, hh=bh/2, type=def.id==='transistor_pnp'?'PNP':'NPN';
+    const hw=bw/2, hh=bh/2;
 
     if(isGerm){
       // Round metal-can package — full ellipse filling the body box.
@@ -504,10 +507,14 @@ const Board = (() => {
       ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(-hw,hh);ctx.lineTo(hw,hh);ctx.stroke();
     }
-    // Label
-    ctx.fillStyle='rgba(255,255,255,0.6)';
-    ctx.font=`bold ${Math.max(5,hw*0.28)}px IBM Plex Mono,monospace`;ctx.textAlign='center';
-    ctx.fillText(model||type,0,hh*0.55);
+    // Pinout labels — one letter per leg, reflecting the actual EBC/CBE
+    // setting, instead of the model name (which isn't useful at a glance).
+    const pinout=(inst.props?.pinout==='CBE')?['C','B','E']:['E','B','C'];
+    ctx.fillStyle='rgba(255,255,255,0.65)';
+    ctx.font=`bold ${Math.max(6,hw*0.24)}px IBM Plex Mono,monospace`;ctx.textAlign='center';
+    ctx.fillText(pinout[0],-hw*0.55,hh*0.55);
+    ctx.fillText(pinout[1],0,hh*0.55);
+    ctx.fillText(pinout[2],hw*0.55,hh*0.55);
   }
 
   function drawSwitch(bw,bh,c,closed){
@@ -659,10 +666,20 @@ const Board = (() => {
     if(_dragMode==='leg-dragging'){_dragMode='idle';_dragInst=null;_dragAnchorLeg=null;_dragLegIdx=-1;Storage.markDirty();History.push();render();return;}
     if(_dragMode==='comp-dragging'){
       if(_dragInst&&_savedLegs){
-        _dragInst.legs=_savedLegs.map(l=>{
-          const {x:lx,y:ly}=holeToXY(l.row,l.col);
-          return xyToHole(lx+_dragOffsetX,ly+_dragOffsetY,DROP_SNAP_RADIUS)||l;
-        });
+        // Snap as a rigid body: find where the reference leg (leg 0) lands,
+        // then shift every leg by that same hole-grid delta. Snapping each
+        // leg independently let multi-leg parts (esp. 3-leg transistors/pots)
+        // drift out of their correct relative spacing over repeated drags.
+        const ref=_savedLegs[0];
+        const {x:rx,y:ry}=holeToXY(ref.row,ref.col);
+        const snapped=xyToHole(rx+_dragOffsetX, ry+_dragOffsetY, DROP_SNAP_RADIUS);
+        if(snapped&&typeof snapped.row==='number'){
+          const dRow=snapped.row-ref.row, dCol=snapped.col-ref.col;
+          _dragInst.legs=_savedLegs.map(l=>({
+            row: Math.max(0,Math.min(9,l.row+dRow)),
+            col: Math.max(0,Math.min(62,l.col+dCol))
+          }));
+        } // no hole nearby the reference leg: leave the part at its original position
       }
       _dragMode='idle';_dragOffsetX=0;_dragOffsetY=0;
       document.body.classList.remove('dragging');

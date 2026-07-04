@@ -8,5 +8,6 @@
   "resistor.json",
   "signal_generator.json",
   "switch.json",
-  "transistor_npn.json"
+  "transistor_npn.json",
+  "transistor_pnp.json"
 ]
