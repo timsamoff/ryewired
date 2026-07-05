@@ -1,12 +1,10 @@
-- Transistors legs get wonky if dragged around a lot
-- Electrolytic capacitor stripe need to be straight
-- Need DPST, DPDT, and 3PDT switches
-- Need to add germanium transistor (silver circle with tab on one side and three legs)
-- All transistors need Leakage value
-- Need to add germanium diode (clear glass diode with black line on one side)
-- All diodes need Leakage value (IR)
-- Pot and trans ghost drag images are correct now, but the tops are getting cut off.
-- Trans bodies should have pinout on them, not the name of the trans
+- Make the germanium transistor body 2x bigger with flat shading.
+- The spacing between all of the sections in the Properties panel is too great. I appreciate white space, but this could really be tightened up - especially with the rotate buttons. Also, the Remove Component button is weirdly formatted right now, where the trashcan icon isn't aligned with the text.
+- Make the default pot Taper to be Linear.
+- The capacitor math isn't quite right. Both 0.1 and 0.001 come out as 1mf, when 0.001 should be 1nf. 0.01 comes out as 10mf. Actually, I wonder if there's a better way to do this by allowing users to use a pull-down to select uf, nf, pf, etc...?
+- Same with resistors (ohm, kilo, and mega pull-down)?
+- The default power supply should be rotated 90 deg CW with the label reading l-to-r, since power on the board is up/down rather than side/side.
+- Style the up/down arrows in the numerical entry fields?
 
 Future:
 - Board needs to be setup much more like a proto-board
