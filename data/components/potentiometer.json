@@ -9,10 +9,15 @@
   "properties": [
     {
       "key": "resistance",
-      "label": "Total Resistance (\u03a9)",
-      "type": "number",
+      "label": "Total Resistance",
+      "type": "value_unit",
       "default": 100000,
-      "unit": "\u03a9"
+      "default_unit": "kΩ",
+      "units": [
+        {"label":"Ω","factor":1},
+        {"label":"kΩ","factor":1e3},
+        {"label":"MΩ","factor":1e6}
+      ]
     },
     {
       "key": "taper",
@@ -23,7 +28,7 @@
         "Audio/Log (A)",
         "Reverse Audio (C)"
       ],
-      "default": "Audio/Log (A)"
+      "default": "Linear (B)"
     },
     {
       "key": "wiper",

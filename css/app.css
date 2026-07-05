@@ -356,7 +356,7 @@ input, select, textarea { font-family: var(--font-ui); }
 
 .prop-component-header {
   display: flex; align-items: center; gap: 8px;
-  padding: 6px 0 10px; margin-bottom: 10px; border-bottom: 1px solid var(--border);
+  padding: 4px 0 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border);
 }
 
 .prop-component-symbol {
@@ -370,11 +370,11 @@ input, select, textarea { font-family: var(--font-ui); }
 .prop-component-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .prop-component-id { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); }
 
-.prop-group { margin-bottom: 12px; }
+.prop-group { margin-bottom: 8px; }
 
 .prop-label {
   display: block; font-family: var(--font-mono); font-size: 9px; font-weight: 700;
-  letter-spacing: 0.1em; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 5px;
+  letter-spacing: 0.1em; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;
 }
 
 .prop-input {
@@ -386,6 +386,31 @@ input, select, textarea { font-family: var(--font-ui); }
 
 .prop-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(43,87,154,0.15); }
 select.prop-input { cursor: pointer; }
+
+/* Number input spinner arrows — tinted to match the theme instead of
+   default browser gray, and only shown clearly on hover/focus so they
+   don't clutter every field at rest. */
+input.prop-input[type="number"] {
+  -webkit-appearance: textfield;
+}
+input.prop-input[type="number"]::-webkit-inner-spin-button,
+input.prop-input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  width: 16px;
+  height: 100%;
+  cursor: pointer;
+  opacity: 0.45;
+  filter: invert(1) brightness(0.7) sepia(1) saturate(4) hue-rotate(175deg);
+  transition: opacity var(--t-fast);
+}
+input.prop-input[type="number"]:hover::-webkit-inner-spin-button,
+input.prop-input[type="number"]:hover::-webkit-outer-spin-button,
+input.prop-input[type="number"]:focus::-webkit-inner-spin-button,
+input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
+  opacity: 0.9;
+}
 
 .prop-range-wrap { display: flex; align-items: center; gap: 8px; }
 .prop-range-wrap input[type="range"] { flex: 1; accent-color: var(--accent); }
@@ -403,7 +428,7 @@ select.prop-input { cursor: pointer; }
 
 .prop-audio-name { font-family: var(--font-mono); font-size: 10px; color: var(--accent); margin-top: 4px; word-break: break-all; padding: 0 2px; }
 
-.prop-section-div { height: 1px; background: var(--border); margin: 14px 0 10px; }
+.prop-section-div { height: 1px; background: var(--border); margin: 10px 0 8px; }
 
 .prop-orientation-wrap { display: flex; gap: 4px; }
 
@@ -416,14 +441,14 @@ select.prop-input { cursor: pointer; }
 .prop-orient-btn.active, .prop-orient-btn:hover { background: var(--accent-subtle); border-color: var(--accent-dim); color: var(--accent); }
 
 .prop-delete-btn {
-  width: 100%; margin-top: 14px; padding: 8px; background: transparent;
+  width: 100%; margin-top: 10px; padding: 8px; background: transparent;
   border: 1px solid var(--alert-dim); border-radius: var(--radius-sm);
   color: var(--alert); font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-  letter-spacing: 0.06em; cursor: pointer;
+  letter-spacing: 0.06em; line-height: 1; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 7px;
   transition: all var(--t-fast);
 }
-.prop-delete-btn i { font-size: 11px; }
+.prop-delete-btn i { font-size: 11px; line-height: 1; }
 .prop-delete-btn:hover { background: var(--alert); color: var(--text-on-alert); border-color: var(--alert); }
 
 /* ── Confirm modal ────────────────────────────────────────────────────────── */
@@ -677,20 +702,21 @@ body.dragging  #board-canvas { cursor: grabbing; }
 .prop-rotate-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .prop-rotate-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1;
   cursor: pointer;
   transition: all var(--t-fast);
 }
@@ -709,21 +735,11 @@ body.dragging  #board-canvas { cursor: grabbing; }
   text-align: center;
 }
 
-/* ── Capacitance unit display ─────────────────────────────────────────────── */
+/* ── Value + unit picker (capacitance, resistance) ────────────────────────── */
 
-.prop-cap-unit {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 400;
-  color: var(--accent);
-  letter-spacing: 0;
-  text-transform: none;
-  margin-left: 6px;
-  padding: 1px 5px;
-  background: var(--accent-subtle);
-  border: 1px solid var(--accent-dim);
-  border-radius: 3px;
-}
+.prop-value-unit-wrap { display: flex; gap: 6px; }
+.prop-vu-value { flex: 1; min-width: 0; }
+.prop-vu-unit  { flex: 0 0 62px; text-align: center; }
 
 /* ── Help modal support/copyright footer ─────────────────────────────────── */
 

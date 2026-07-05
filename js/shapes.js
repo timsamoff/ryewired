@@ -98,6 +98,14 @@ const Shapes = (() => {
     }
   }
 
+  // Germanium transistor bodies render at 2x the diameter of a standard
+  // flat-bottomed part, flat-shaded. Shared so board.js's leg-attachment
+  // math and the body drawing here can never drift apart.
+  function germCircleGeom(bh){
+    const hh=bh/2, r=bh;
+    return { r, cy: hh-r }; // cy keeps the circle's bottom point anchored at y=+hh (touches the legs)
+  }
+
   // Transistor: D-shape, flat edge at the bottom (touching the legs), dome
   // curving up — sized independently by bw/bh so it always meets the legs
   // exactly. Germanium models get a true circle with a locating tab on the
@@ -109,15 +117,20 @@ const Shapes = (() => {
     const pinout=(inst.props?.pinout==='CBE')?['C','B','E']:['E','B','C'];
 
     if(isGerm){
-      const r=hh;
-      const grd=ctx.createRadialGradient(-r*0.3,-r*0.3,0,0,0,r);
-      grd.addColorStop(0,'#e0e0e0');grd.addColorStop(0.6,'#a0a0a0');grd.addColorStop(1,'#606060');
-      ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=grd;ctx.fill();
-      ctx.strokeStyle='#888';ctx.lineWidth=0.8;ctx.stroke();
+      // Round metal-can package (TO-1/TO-18 style) — 2x diameter of a
+      // standard flat-bottomed part, flat-shaded (no gradient) to read as
+      // a plain metal case rather than a glossy render.
+      const {r,cy}=germCircleGeom(bh);
+      ctx.beginPath();ctx.arc(0,cy,r,0,Math.PI*2);ctx.fillStyle='#a8a8a8';ctx.fill();
+      ctx.strokeStyle='#787878';ctx.lineWidth=0.8;ctx.stroke();
+      // Locating tab on the emitter side — real metal cans have a small
+      // rim tab marking pin orientation.
       const eSide = pinout[0]==='E' ? -1 : 1;
-      ctx.beginPath();ctx.arc(eSide*r,0,r*0.16,0,Math.PI*2);
-      ctx.fillStyle='#707070';ctx.fill();
-      ctx.strokeStyle='#888';ctx.lineWidth=0.6;ctx.stroke();
+      const tabSize = r*0.26;
+      ctx.fillStyle='#707070';
+      ctx.fillRect(eSide*r-tabSize/2, cy-tabSize/2, tabSize, tabSize);
+      ctx.strokeStyle='#888';ctx.lineWidth=0.6;
+      ctx.strokeRect(eSide*r-tabSize/2, cy-tabSize/2, tabSize, tabSize);
     }else{
       ctx.fillStyle='#111';ctx.beginPath();
       ctx.ellipse(0,hh,hw,bh,0,Math.PI,Math.PI*2);
@@ -141,18 +154,24 @@ const Shapes = (() => {
     ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';ctx.fillText(closed?'ON':'OFF',0,bh/2-2);
   }
 
-  function drawPower(ctx,color,bw,bh,v,reversed){
+  function drawPower(ctx,color,bw,bh,v,reversed,ang){
     const hw=bw/2,hh=bh/2;
     const blue='rgba(43,87,154,0.85)', red='rgba(176,32,46,0.85)';
     ctx.fillStyle=reversed?red:blue; ctx.fillRect(-hw,-hh,bw/2,bh);
     ctx.fillStyle=reversed?blue:red; ctx.fillRect(0,-hh,bw/2,bh);
     ctx.strokeStyle='rgba(255,255,255,0.2)';ctx.lineWidth=0.8;roundRect(ctx,-hw,-hh,bw,bh,3);ctx.stroke();
+
+    // Text always reads upright/left-to-right on screen, regardless of how
+    // the component itself is rotated — cancel the ambient rotation just
+    // for the glyphs, at each label's own anchor point.
+    const upright=(x,y,draw)=>{ctx.save();ctx.translate(x,y);ctx.rotate(-(ang||0));draw();ctx.restore();};
+
     ctx.fillStyle='#fff';ctx.font=`bold ${Math.max(7,bh*0.45)}px IBM Plex Mono,monospace`;ctx.textAlign='center';
-    ctx.fillText(`${v}V`,0,3);
+    upright(0,3,()=>ctx.fillText(`${v}V`,0,0));
+
     ctx.font='bold 8px monospace';
-    ctx.fillStyle='rgba(255,255,255,0.8)';
-    ctx.fillText(reversed?'–':'+',hw*0.6,-hh+9);
-    ctx.fillText(reversed?'+':'–',-hw*0.6,-hh+9);
+    upright(hw*0.6,-hh+9,()=>{ctx.fillStyle='rgba(255,255,255,0.8)';ctx.fillText(reversed?'–':'+',0,0);});
+    upright(-hw*0.6,-hh+9,()=>{ctx.fillStyle='rgba(255,255,255,0.8)';ctx.fillText(reversed?'+':'–',0,0);});
   }
 
   function miniWave(ctx,type,x,y,w,h){
@@ -183,7 +202,7 @@ const Shapes = (() => {
   // is a small color object: { success, alert, scopeTrace }. Board.js passes
   // its real CSS-variable-driven theme; palette.js passes a plain fallback
   // (the drag-cursor icon doesn't need to track live theme changes).
-  function drawBody(ctx,def,inst,theme,halfLen){
+  function drawBody(ctx,def,inst,theme,halfLen,ang){
     const bw=def.visual?.body_width||28, bh=def.visual?.body_height||14, col=def.visual?.body_color||'#888';
     switch(def.id){
       case 'resistor':              drawResistor(ctx,inst.props.resistance,bw,bh); break;
@@ -195,7 +214,7 @@ const Shapes = (() => {
       case 'transistor_npn':
       case 'transistor_pnp': drawTransistor(ctx,def,inst,col,bw,bh); break;
       case 'switch_spst':    drawSwitch(ctx,bw,bh,theme?.success||'#33cc66',theme?.alert||'#e6394a',inst._state||inst.props.state==='Closed'); break;
-      case 'power_supply':   drawPower(ctx,col,bw,bh,inst.props.voltage,!!inst.props.reverse_polarity); break;
+      case 'power_supply':   drawPower(ctx,col,bw,bh,inst.props.voltage,!!inst.props.reverse_polarity,ang); break;
       case 'signal_generator':drawSigGen(ctx,col,bw,bh,inst.props.waveform,theme?.scopeTrace); break;
       default: drawDefault(ctx,def,bw,bh,col);
     }
@@ -205,6 +224,6 @@ const Shapes = (() => {
     roundRect, resBands,
     drawResistor, drawFilmCap, drawElectroCap, drawLED, drawPot,
     drawDiode, drawTransistor, drawSwitch, drawPower, drawSigGen, miniWave,
-    drawDefault, drawBody
+    drawDefault, drawBody, germCircleGeom
   };
 })();

@@ -138,8 +138,16 @@ const Board = (() => {
       if(!def) continue;
       const geo=instGeometry(inst);
       const bh0=def.visual?.body_height||16;
-      const bw=(def.visual?.body_width||32)/2+12, bh=bh0/2+12;
-      const offY=bodyOffsetY(inst,bh0);
+      const isGerm=(def.id==='transistor_npn'||def.id==='transistor_pnp')
+        && def.model_params?.[inst.props?.model]?.type==='germanium';
+      let bw,bh,offY;
+      if(isGerm){
+        const {r,cy}=Shapes.germCircleGeom(bh0);
+        bw=r+12; bh=r+12; offY=bodyOffsetY(inst,bh0)+cy; // circle's true center, relative to the leg row
+      }else{
+        bw=(def.visual?.body_width||32)/2+12; bh=bh0/2+12;
+        offY=bodyOffsetY(inst,bh0);
+      }
       const dx=x-geo.cx, dy=y-geo.cy;
       const lx=dx*Math.cos(-geo.ang)-dy*Math.sin(-geo.ang);
       const ly=dx*Math.sin(-geo.ang)+dy*Math.cos(-geo.ang)-offY;
@@ -329,6 +337,8 @@ const Board = (() => {
 
     const halfLen=len/2;
     const bw=def.visual?.body_width||28, bh=def.visual?.body_height||14;
+    const isGermTransistor = (def.id==='transistor_npn'||def.id==='transistor_pnp')
+      && def.model_params?.[inst.props?.model]?.type==='germanium';
 
     // ── Draw stretchy leads ───────────────────────────────────────────────────
     ctx.strokeStyle=LEAD_COLOR;ctx.lineWidth=LEAD_WIDTH;ctx.lineCap='round';
@@ -350,13 +360,17 @@ const Board = (() => {
       // Power supply polarity labels — leg 0/1 by default show '–'/'+',
       // swapped if reverse_polarity is checked. Orientation can additionally
       // be changed via Rotate, which swaps which world-space hole each leg
-      // index lands in.
+      // index lands in. Text is counter-rotated to always read upright.
       if(def.id==='power_supply'){
         const rev=!!inst.props?.reverse_polarity;
         const rightSym = rev ? '–' : '+', leftSym = rev ? '+' : '–';
         ctx.font='bold 8px IBM Plex Mono,monospace';ctx.textAlign='center';
-        ctx.fillStyle = rightSym==='+' ? c.railRed : c.railBlue; ctx.fillText(rightSym, halfLen, -8);
-        ctx.fillStyle = leftSym==='+'  ? c.railRed : c.railBlue; ctx.fillText(leftSym, -halfLen, -8);
+        ctx.save();ctx.translate(halfLen,-8);ctx.rotate(-ang);
+        ctx.fillStyle = rightSym==='+' ? c.railRed : c.railBlue; ctx.fillText(rightSym,0,0);
+        ctx.restore();
+        ctx.save();ctx.translate(-halfLen,-8);ctx.rotate(-ang);
+        ctx.fillStyle = leftSym==='+'  ? c.railRed : c.railBlue; ctx.fillText(leftSym,0,0);
+        ctx.restore();
       }
 
     } else if(inst.legs.length===3&&pts.length===3){
@@ -367,8 +381,6 @@ const Board = (() => {
       const xMid = dx*cosA - dy*sinA; // local x of the center leg's actual hole
 
       const bodyBottom = offY + bh/2;
-      const isGermTransistor = (def.id==='transistor_npn'||def.id==='transistor_pnp')
-        && def.model_params?.[inst.props?.model]?.type==='germanium';
 
       // Center (base) leg — always straight, lands at the bottom-most point
       // of the body regardless of body shape.
@@ -376,12 +388,13 @@ const Board = (() => {
       ctx.beginPath();ctx.arc(xMid,0,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
 
       if(isGermTransistor){
-        // Round metal-can body is narrower than the leg span (a true circle
-        // sized from bh, not the full bw), so the two outer legs travel
-        // diagonally inward to meet the circle's edge instead of running
-        // straight up like a flat-bodied part.
-        const r=bh/2;
-        const ax=r*0.574, ay=offY+r*0.819;
+        // Round metal-can body is narrower than the leg span, so the two
+        // outer legs travel diagonally inward to meet the circle's edge
+        // instead of running straight up like a flat-bodied part. Uses the
+        // same geometry Shapes.drawTransistor uses for the body itself, so
+        // the two can never drift out of sync.
+        const {r,cy}=Shapes.germCircleGeom(bh);
+        const ax=r*0.574, ay=offY+cy+r*0.819;
         for(const side of [-1,1]){
           const hx=side*halfLen;
           ctx.beginPath();ctx.moveTo(hx,0);ctx.lineTo(side*ax,ay);ctx.stroke();
@@ -398,10 +411,24 @@ const Board = (() => {
     }
 
     ctx.translate(0,offY);
-    if(isSel&&alpha>=1){ctx.beginPath();ctx.ellipse(0,0,bw/2+9,bh/2+9,0,0,Math.PI*2);ctx.strokeStyle=c.warning;ctx.lineWidth=2;ctx.stroke();}
-    Shapes.drawBody(ctx,def,inst,c,halfLen);
+    if(isSel&&alpha>=1){
+      ctx.beginPath();
+      if(isGermTransistor){
+        const {r,cy:germCy}=Shapes.germCircleGeom(bh);
+        ctx.ellipse(0,germCy,r+9,r+9,0,0,Math.PI*2);
+      }else{
+        ctx.ellipse(0,0,bw/2+9,bh/2+9,0,0,Math.PI*2);
+      }
+      ctx.strokeStyle=c.warning;ctx.lineWidth=2;ctx.stroke();
+    }
+    Shapes.drawBody(ctx,def,inst,c,halfLen,ang);
 
-    if(isFail&&alpha>=1){ctx.globalAlpha=1;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillStyle=c.alert;ctx.fillText('✕',0,-20);}
+    if(isFail&&alpha>=1){
+      ctx.globalAlpha=1;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillStyle=c.alert;
+      let failY=-20;
+      if(isGermTransistor){const g=Shapes.germCircleGeom(bh);failY=g.cy-g.r-10;}
+      ctx.fillText('✕',0,failY);
+    }
     ctx.restore();
   }
 

@@ -8,7 +8,8 @@
   "leg_span": 2,
   "polarized": false,
   "properties": [
-    { "key": "capacitance", "label": "Capacitance (F)", "type": "number", "default": 0.000001, "min": 0.000000000001, "step": "any" },
+    { "key": "capacitance", "label": "Capacitance", "type": "value_unit", "default": 0.000001, "default_unit": "µF",
+      "units": [ {"label":"pF","factor":1e-12}, {"label":"nF","factor":1e-9}, {"label":"µF","factor":1e-6}, {"label":"mF","factor":1e-3} ] },
     { "key": "voltage_rating", "label": "Voltage Rating", "type": "select", "options": ["16V","25V","50V","100V","250V","630V"], "default": "50V" },
     { "key": "type", "label": "Type", "type": "select", "options": ["Film","Ceramic","Monolithic"], "default": "Film" }
   ],
