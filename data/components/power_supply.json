@@ -24,6 +24,12 @@
       "label": "Current Limit (mA)",
       "type": "number",
       "default": 500
+    },
+    {
+      "key": "reverse_polarity",
+      "label": "Reverse Polarity",
+      "type": "boolean",
+      "default": false
     }
   ],
   "behavior": {

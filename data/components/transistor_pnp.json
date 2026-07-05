@@ -39,6 +39,12 @@
       "type": "select",
       "options": ["EBC", "CBE"],
       "default": "EBC"
+    },
+    {
+      "key": "leakage",
+      "label": "Leakage (ICBO, nA) — optional",
+      "type": "number",
+      "default": ""
     }
   ],
   "model_params": {

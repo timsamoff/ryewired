@@ -21,7 +21,9 @@
         "BC108B",
         "BC547",
         "2N2222",
-        "2N5088"
+        "2N5088",
+        "2N1302",
+        "2N1304"
       ],
       "default": "2N3904"
     },
@@ -37,6 +39,12 @@
       "type": "select",
       "options": ["EBC", "CBE"],
       "default": "EBC"
+    },
+    {
+      "key": "leakage",
+      "label": "Leakage (ICBO, nA) — optional",
+      "type": "number",
+      "default": ""
     }
   ],
   "model_params": {
@@ -84,6 +92,24 @@
       "max_vce": 30,
       "type": "silicon",
       "icbo_na": 50
+    },
+    "2N1302": {
+      "hfe": 45,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 300,
+      "max_vce": 25,
+      "type": "germanium",
+      "icbo_na": 8000
+    },
+    "2N1304": {
+      "hfe": 60,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 300,
+      "max_vce": 25,
+      "type": "germanium",
+      "icbo_na": 8500
     }
   },
   "behavior": {

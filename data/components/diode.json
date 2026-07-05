@@ -10,7 +10,8 @@
   "leg_labels": ["A", "K"],
   "properties": [
     { "key": "model", "label": "Model", "type": "select", "options": ["1N4148","1N4001","1N34A (Germanium)","BAT41 (Schottky)","1N5817 (Schottky)"], "default": "1N4148" },
-    { "key": "forward_voltage", "label": "Forward Voltage (V)", "type": "number", "default": 0.7 }
+    { "key": "forward_voltage", "label": "Forward Voltage (V)", "type": "number", "default": 0.7 },
+    { "key": "leakage", "label": "Leakage (IR, µA) — optional", "type": "number", "default": "" }
   ],
   "model_params": {
     "1N4148":         { "vf": 0.7,  "max_current_ma": 200,  "type": "silicon",   "leakage_ua": 0.025 },
