@@ -49,17 +49,11 @@ const ComponentRegistry = (() => {
 
     const span     = def.leg_span || 1;
     const legCount = def.legs     || 2;
-    let legs       = buildLegs(legCount, span, row, col);
-
-    if (defId === 'power_supply' && legs.length === 2) {
-      // Power flows up/down the board (rails are top/bottom strips), so the
-      // supply defaults to standing vertically instead of lying sideways.
-      const clampRow = r => Math.max(0, Math.min(9, r));
-      legs = [
-        { row: clampRow(legs[0].row),        col: legs[0].col },
-        { row: clampRow(legs[0].row + span), col: legs[0].col }
-      ];
-    }
+    const legs     = buildLegs(legCount, span, row, col);
+    // Note: power_supply's default vertical orientation is applied in
+    // board.js's onDrop, not here — that needs real pixel/hole math
+    // (to correctly handle drops directly onto a rail) that this module,
+    // which only deals in row/col numbers, doesn't have access to.
 
     return {
       instanceId:  Utils.uid(def.symbol||'C'),

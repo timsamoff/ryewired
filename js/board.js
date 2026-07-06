@@ -469,7 +469,10 @@ const Board = (() => {
       if(my+bodyTop<minMargin) gy=minMargin-bodyTop;
     }
 
-    ctx.save();ctx.translate(mx,gy);ctx.globalAlpha=0.72;
+    ctx.save();ctx.translate(mx,gy);
+    const ang = def.id==='power_supply' ? -Math.PI/2 : 0;
+    ctx.rotate(ang);
+    ctx.globalAlpha=0.72;
     ctx.strokeStyle=LEAD_COLOR;ctx.lineWidth=LEAD_WIDTH;ctx.lineCap='round';ctx.fillStyle=LEAD_COLOR;
 
     if(legCount===3){
@@ -488,7 +491,7 @@ const Board = (() => {
     }
 
     ctx.translate(0,offY);
-    Shapes.drawBody(ctx,def,fakeInst,c,halfLen);
+    Shapes.drawBody(ctx,def,fakeInst,c,halfLen,ang);
     ctx.restore();
   }
 
@@ -565,18 +568,35 @@ const Board = (() => {
     if(_dragMode==='comp-dragging'){
       if(_dragInst&&_savedLegs){
         // Snap as a rigid body: find where the reference leg (leg 0) lands,
-        // then shift every leg by that same hole-grid delta. Snapping each
-        // leg independently let multi-leg parts (esp. 3-leg transistors/pots)
-        // drift out of their correct relative spacing over repeated drags.
+        // then shift every other leg by that same PIXEL delta (not a row
+        // index delta) and re-resolve each to its own nearest hole. Pixel
+        // math is what lets this bridge numeric rows and rail rows
+        // correctly — e.g. a power supply's top leg landing on a rail
+        // while its bottom leg lands in the regular grid a couple of rows
+        // down. Snapping each leg independently (the old approach) let
+        // multi-leg parts drift out of their correct relative spacing over
+        // repeated drags; snapping only by numeric-row delta (an earlier
+        // fix) broke dropping onto rails entirely, since rail rows aren't
+        // numbers. This is the general fix for both.
         const ref=_savedLegs[0];
         const {x:rx,y:ry}=holeToXY(ref.row,ref.col);
         const snapped=xyToHole(rx+_dragOffsetX, ry+_dragOffsetY, DROP_SNAP_RADIUS);
-        if(snapped&&typeof snapped.row==='number'){
-          const dRow=snapped.row-ref.row, dCol=snapped.col-ref.col;
-          _dragInst.legs=_savedLegs.map(l=>({
-            row: Math.max(0,Math.min(9,l.row+dRow)),
-            col: Math.max(0,Math.min(62,l.col+dCol))
-          }));
+        if(snapped){
+          const refNew=holeToXY(snapped.row,snapped.col);
+          const pdx=refNew.x-rx, pdy=refNew.y-ry;
+          const newLegs=[snapped];
+          let ok=true;
+          for(let i=1;i<_savedLegs.length;i++){
+            const l=_savedLegs[i];
+            const {x:lx,y:ly}=holeToXY(l.row,l.col);
+            const h=xyToHole(lx+pdx,ly+pdy,DROP_SNAP_RADIUS);
+            if(!h){ok=false;break;}
+            newLegs.push(h);
+          }
+          if(ok) _dragInst.legs=newLegs;
+          // else: couldn't resolve every leg to a real hole at the shifted
+          // position — leave the part at its original position rather than
+          // risk a partially-invalid layout.
         } // no hole nearby the reference leg: leave the part at its original position
       }
       _dragMode='idle';_dragOffsetX=0;_dragOffsetY=0;
@@ -619,6 +639,31 @@ const Board = (() => {
     const {x,y}=eventToCanvas(e);
     const hole=xyToHole(x,y,DROP_SNAP_RADIUS);if(!hole) return;
     const inst=ComponentRegistry.createInstance(defId,hole.row,hole.col);
+
+    if (defId==='power_supply' && inst.legs.length===2) {
+      // Power flows up/down the board, so the supply defaults to standing
+      // vertically — leg 1 (+, red) toward the top rail, leg 0 (–, blue)
+      // toward the bottom rail — instead of lying flat sideways. Done here
+      // in real pixels (not row arithmetic) so it works correctly whether
+      // the drop landed on a rail (a string row key) or a normal numeric
+      // row.
+      const def  = ComponentRegistry.getById(defId);
+      const span = def.leg_span || 2;
+      const orig = inst.legs[0];
+      const {x:x0,y:y0} = holeToXY(orig.row, orig.col);
+      const other = xyToHole(x0, y0 - span*HOLE_PITCH, DROP_SNAP_RADIUS)
+                 || xyToHole(x0, y0 + span*HOLE_PITCH, DROP_SNAP_RADIUS);
+      if (other) {
+        // Whichever of the two actual holes is higher on screen (smaller
+        // y) gets leg 1 (+, red) — the original cursor position isn't
+        // necessarily the topmost one, so this can't just assume orig=leg0.
+        const {y:oy} = holeToXY(other.row, other.col);
+        inst.legs = (oy < y0) ? [orig, other] : [other, orig];
+      }
+      // else: leave the default horizontal 2-hole layout — better than an
+      // invalid placement.
+    }
+
     _placed.push(inst);setSelected(inst.instanceId,null);
     if(_onPlace) _onPlace(inst);
     History.push();render();

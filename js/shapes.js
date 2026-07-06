@@ -102,7 +102,7 @@ const Shapes = (() => {
   // flat-bottomed part, flat-shaded. Shared so board.js's leg-attachment
   // math and the body drawing here can never drift apart.
   function germCircleGeom(bh){
-    const hh=bh/2, r=bh;
+    const hh=bh/2, r=bh*0.75; // 75% of the previous 2x-diameter size
     return { r, cy: hh-r }; // cy keeps the circle's bottom point anchored at y=+hh (touches the legs)
   }
 
@@ -121,16 +121,20 @@ const Shapes = (() => {
       // standard flat-bottomed part, flat-shaded (no gradient) to read as
       // a plain metal case rather than a glossy render.
       const {r,cy}=germCircleGeom(bh);
-      ctx.beginPath();ctx.arc(0,cy,r,0,Math.PI*2);ctx.fillStyle='#a8a8a8';ctx.fill();
+      const germColor='#a8a8a8';
+      ctx.beginPath();ctx.arc(0,cy,r,0,Math.PI*2);ctx.fillStyle=germColor;ctx.fill();
       ctx.strokeStyle='#787878';ctx.lineWidth=0.8;ctx.stroke();
       // Locating tab on the emitter side — real metal cans have a small
-      // rim tab marking pin orientation.
+      // rim tab marking pin orientation. Same color as the body, pushed
+      // outward past the circle's edge rather than straddling it.
       const eSide = pinout[0]==='E' ? -1 : 1;
       const tabSize = r*0.26;
-      ctx.fillStyle='#707070';
-      ctx.fillRect(eSide*r-tabSize/2, cy-tabSize/2, tabSize, tabSize);
-      ctx.strokeStyle='#888';ctx.lineWidth=0.6;
-      ctx.strokeRect(eSide*r-tabSize/2, cy-tabSize/2, tabSize, tabSize);
+      const tabPush = 3.5;
+      const tabX = eSide*(r+tabPush);
+      ctx.fillStyle=germColor;
+      ctx.fillRect(tabX-tabSize/2, cy-tabSize/2, tabSize, tabSize);
+      ctx.strokeStyle='#787878';ctx.lineWidth=0.6;
+      ctx.strokeRect(tabX-tabSize/2, cy-tabSize/2, tabSize, tabSize);
     }else{
       ctx.fillStyle='#111';ctx.beginPath();
       ctx.ellipse(0,hh,hw,bh,0,Math.PI,Math.PI*2);
@@ -139,7 +143,9 @@ const Shapes = (() => {
       ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(-hw,hh);ctx.lineTo(hw,hh);ctx.stroke();
     }
-    ctx.fillStyle='rgba(255,255,255,0.65)';
+    // Pinout labels: dark text reads better on germanium's light metal
+    // body; light text reads better on silicon's black body.
+    ctx.fillStyle=isGerm?'rgba(30,30,30,0.75)':'rgba(255,255,255,0.65)';
     ctx.font=`bold ${Math.max(6,hw*0.24)}px IBM Plex Mono,monospace`;ctx.textAlign='center';
     ctx.fillText(pinout[0],-hw*0.55,hh*0.55);
     ctx.fillText(pinout[1],0,hh*0.55);

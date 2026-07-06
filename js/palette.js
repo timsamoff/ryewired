@@ -83,17 +83,20 @@ const Palette = (() => {
   // The browser will display it at 1:1; sharpness here doesn't matter much.
   function buildDragImage(def) {
     try {
+      const HOLE_PITCH = 20; // must match board.js's board geometry
       const bw0  = def.visual?.body_width  || 28;
       const bh0  = def.visual?.body_height || 14;
       const legCount = def.legs || 2;
+      const span = def.leg_span || 2;
       const STAND_GAP = 14;
-      const bw   = bw0 + 40;
+      const halfLen = span*HOLE_PITCH/2; // real hole spacing, not body_width — matches board.js
+      const isPowerSupply = def.id === 'power_supply';
 
       // For standing 3-leg parts, compute the true top-most extent instead
       // of guessing with a fixed padding constant — the round pot knob uses
       // bw0 as its radius (not bh0), so a bh0-only estimate under-sized the
       // canvas and clipped the top of the part.
-      let H, vOffset;
+      let W, H, vOffset;
       if (legCount===3) {
         const bodyHalf   = Math.max(bh0/2, bw0/2);
         const topExtent  = -(bh0/2+STAND_GAP) - bodyHalf; // highest point drawn
@@ -101,11 +104,19 @@ const Palette = (() => {
         const PAD = 10;
         H = (bottomExtent-topExtent) + PAD*2;
         vOffset = -((topExtent+bottomExtent)/2);
+        W = Math.max(bw0+40, 80);
+      } else if (isPowerSupply) {
+        // Rotated 90° to match the new default vertical orientation — the
+        // canvas needs to swap which dimension is "along the leads" vs
+        // "across the body" accordingly, or the rotated content clips.
+        H = Math.max(halfLen*2 + 20, 40);
+        W = Math.max(bh0 + 24, 80);
+        vOffset = 0;
       } else {
         H = Math.max(bh0 + 28, 40);
         vOffset = 0;
+        W = Math.max(bw0+40, 80);
       }
-      const W = Math.max(bw, 80);
 
       const cvs  = document.createElement('canvas');
       // Use plain 1:1 pixel ratio — no retina scaling on drag images
@@ -114,10 +125,11 @@ const Palette = (() => {
       const ctx  = cvs.getContext('2d');
 
       ctx.translate(W/2, H/2 + vOffset);
+      const ang = isPowerSupply ? -Math.PI/2 : 0;
+      ctx.rotate(ang);
       ctx.globalAlpha = 0.88;
 
-      const halfLen = bw0/2;
-      const ll      = def.visual?.lead_length || 8;
+      const ll = def.visual?.lead_length || 8;
 
       // Build a stand-in instance with default prop values so Shapes.drawBody
       // (the same dispatcher board.js uses for real components) can render
@@ -129,7 +141,6 @@ const Palette = (() => {
       if (legCount===3) {
         // Standing style: body above, three parallel legs straight down —
         // matches board.js's drawInst() for transistor/potentiometer.
-        const span = def.leg_span || 2;
         const mid  = Math.round(span/2);
         const xMid = Utils.mapRange(mid,0,span,-halfLen,halfLen);
         const bodyOffY   = -(bh0/2 + STAND_GAP);
@@ -142,7 +153,7 @@ const Palette = (() => {
         }
         ctx.save();
         ctx.translate(0,bodyOffY);
-        Shapes.drawBody(ctx, def, fakeInst, null, halfLen);
+        Shapes.drawBody(ctx, def, fakeInst, null, halfLen, ang);
         ctx.restore();
       } else {
         // Leads (flat 2-leg style)
@@ -153,7 +164,7 @@ const Palette = (() => {
         ctx.beginPath(); ctx.arc(-halfLen,0,3,0,Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.arc( halfLen,0,3,0,Math.PI*2); ctx.fill();
 
-        Shapes.drawBody(ctx, def, fakeInst, null, halfLen);
+        Shapes.drawBody(ctx, def, fakeInst, null, halfLen, ang);
       }
 
       // Temporarily attach to DOM for setDragImage (browser requirement)
