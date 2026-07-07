@@ -125,7 +125,7 @@ const Palette = (() => {
       const ctx  = cvs.getContext('2d');
 
       ctx.translate(W/2, H/2 + vOffset);
-      const ang = isPowerSupply ? -Math.PI/2 : 0;
+      const ang = isPowerSupply ? Math.PI/2 : 0;
       ctx.rotate(ang);
       ctx.globalAlpha = 0.88;
 

@@ -470,7 +470,7 @@ const Board = (() => {
     }
 
     ctx.save();ctx.translate(mx,gy);
-    const ang = def.id==='power_supply' ? -Math.PI/2 : 0;
+    const ang = def.id==='power_supply' ? Math.PI/2 : 0;
     ctx.rotate(ang);
     ctx.globalAlpha=0.72;
     ctx.strokeStyle=LEAD_COLOR;ctx.lineWidth=LEAD_WIDTH;ctx.lineCap='round';ctx.fillStyle=LEAD_COLOR;
@@ -642,11 +642,9 @@ const Board = (() => {
 
     if (defId==='power_supply' && inst.legs.length===2) {
       // Power flows up/down the board, so the supply defaults to standing
-      // vertically — leg 1 (+, red) toward the top rail, leg 0 (–, blue)
-      // toward the bottom rail — instead of lying flat sideways. Done here
-      // in real pixels (not row arithmetic) so it works correctly whether
-      // the drop landed on a rail (a string row key) or a normal numeric
-      // row.
+      // vertically instead of lying sideways. Done here in real pixels
+      // (not row arithmetic) so it works correctly whether the drop landed
+      // on a rail (a string row key) or a normal numeric row.
       const def  = ComponentRegistry.getById(defId);
       const span = def.leg_span || 2;
       const orig = inst.legs[0];
@@ -654,11 +652,25 @@ const Board = (() => {
       const other = xyToHole(x0, y0 - span*HOLE_PITCH, DROP_SNAP_RADIUS)
                  || xyToHole(x0, y0 + span*HOLE_PITCH, DROP_SNAP_RADIUS);
       if (other) {
-        // Whichever of the two actual holes is higher on screen (smaller
-        // y) gets leg 1 (+, red) — the original cursor position isn't
-        // necessarily the topmost one, so this can't just assume orig=leg0.
-        const {y:oy} = holeToXY(other.row, other.col);
-        inst.legs = (oy < y0) ? [orig, other] : [other, orig];
+        // A rail hole's row key directly encodes its real polarity —
+        // 'rtp'/'rbp' are + (red), 'rtm'/'rbm' are – (blue) — regardless
+        // of screen position. That's the ground truth when either leg
+        // actually lands on a rail: comparing absolute Y instead would get
+        // it backwards, since the – row sits physically ABOVE the + row
+        // within BOTH the top and bottom rail strips.
+        const railPol = row => (row==='rtp'||row==='rbp') ? '+' : (row==='rtm'||row==='rbm') ? '-' : null;
+        const origPol = railPol(orig.row), otherPol = railPol(other.row);
+        if (origPol==='+' || otherPol==='-') {
+          inst.legs = [other, orig]; // orig is the + one -> leg 1
+        } else if (origPol==='-' || otherPol==='+') {
+          inst.legs = [orig, other]; // orig is the – one -> leg 0
+        } else {
+          // Neither landed on a rail (open main grid) — default to the
+          // board's regular-polarity look: topmost becomes leg 0 (–, blue),
+          // bottommost becomes leg 1 (+, red).
+          const {y:oy} = holeToXY(other.row, other.col);
+          inst.legs = (oy < y0) ? [other, orig] : [orig, other];
+        }
       }
       // else: leave the default horizontal 2-hole layout — better than an
       // invalid placement.
