@@ -5,9 +5,24 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev":   "electron . --dev"
+    "dev": "electron . --dev"
   },
   "devDependencies": {
-    "electron": "^28.0.0"
+    "electron": "^43.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/timsamoff/ryewired.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/timsamoff/ryewired/issues"
+  },
+  "homepage": "https://github.com/timsamoff/ryewired#readme",
+  "dependencies": {
+    "archiver": "^8.0.0"
   }
 }

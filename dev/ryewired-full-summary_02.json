@@ -1,0 +1,96 @@
+{
+  "project": {
+    "name": "Ryewired",
+    "version": "rw9"
+  },
+
+  "purpose": {
+    "summary": "Ryewired is a virtual solderless breadboard for building, experimenting with, and learning analog audio circuits, particularly guitar effects. The goal is to replicate the workflow of prototyping a real pedal on a breadboard rather than drawing schematics."
+  },
+
+  "source_of_truth": {
+    "implementation": "The accompanying project ZIP.",
+    "design": "This document."
+  },
+
+  "design_principles": [
+    "The application should behave like a real electronics workbench.",
+    "Behavior should favor realism and usability over exhaustive SPICE accuracy.",
+    "Avoid unnecessary architectural rewrites.",
+    "Extend existing systems whenever possible."
+  ],
+
+  "current_direction": {
+    "next_major_milestone": "Convert the board from a collection of draggable utility components into a complete pedal prototyping workstation."
+  },
+
+  "roadmap": {
+    "workbench_model": {
+      "description": "The board should contain permanent infrastructure rather than requiring utility components to be placed manually.",
+
+      "permanent_devices": [
+        {
+          "id": "power_supply",
+          "description": "Permanent adjustable DC supply attached to the power rails.",
+          "editable": [
+            "voltage",
+            "reverse polarity"
+          ]
+        },
+        {
+          "id": "signal_input",
+          "description": "Permanent audio input / signal generator."
+        },
+        {
+          "id": "audio_output",
+          "description": "Permanent audio output."
+        },
+        {
+          "id": "true_bypass",
+          "description": "Permanent true-bypass footswitch."
+        },
+        {
+          "id": "status_led",
+          "description": "Permanent LED driven by the bypass switch."
+        }
+      ]
+    },
+
+    "expected_behavior": {
+      "default": [
+        "Input can be connected directly to Output.",
+        "Running the simulation should immediately produce audible output.",
+        "Oscilloscope and FFT should display the signal."
+      ],
+
+      "bypass_mode": [
+        "Switch OFF routes Input directly to Output.",
+        "Audio bypasses the circuit completely.",
+        "Status LED is OFF."
+      ],
+
+      "effect_mode": [
+        "Switch ON routes Input through the user-built circuit.",
+        "Status LED turns ON.",
+        "Output contains the processed signal."
+      ]
+    },
+
+    "workflow": [
+      "Open a new board.",
+      "Power, Input, Output, LED, and Bypass switch already exist.",
+      "Initially jumper Input directly to Output.",
+      "Run the simulation.",
+      "Hear the clean signal.",
+      "Construct an effect between Input and Output.",
+      "Toggle the bypass switch to compare clean and processed audio instantly."
+    ]
+  },
+
+  "assistant_guidelines": [
+    "Preserve existing architecture whenever practical.",
+    "Prefer incremental improvements over rewrites.",
+    "Read the source before proposing architectural changes.",
+    "When implementing roadmap items, preserve the realism of a physical breadboard."
+  ]
+}

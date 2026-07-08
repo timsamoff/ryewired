@@ -57,15 +57,23 @@ const Shapes = (() => {
       ctx.beginPath();ctx.arc(0,0,bw*(1+brightness*1.5),0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
     }
     const r=bw/2,h=bh/2;
+    // Body mirrored horizontally from a plain left-flat/right-dome LED:
+    // dome (anode, '+') on the LEFT, flat face (cathode, '–') on the
+    // RIGHT — default orientation reads '+' on the left. Mirrored via
+    // transform so the geometry can't drift out of sync with itself; text
+    // is drawn afterward, outside the mirror, so glyphs stay upright.
+    ctx.save();
+    ctx.scale(-1,1);
     ctx.beginPath();ctx.moveTo(-r,-h);ctx.lineTo(-r,h);ctx.lineTo(r*0.3,h);
     ctx.arc(0,0,r,Math.PI*0.5,-Math.PI*0.5,true);ctx.lineTo(r*0.3,-h);ctx.closePath();
     ctx.fillStyle=brightness>0.05?hex:hex+'88';ctx.fill();
     ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=0.8;ctx.stroke();
     ctx.strokeStyle='rgba(255,255,255,0.6)';ctx.lineWidth=1.5;
     ctx.beginPath();ctx.moveTo(-r,-h);ctx.lineTo(-r,h);ctx.stroke();
+    ctx.restore();
     ctx.font='bold 7px monospace';ctx.textAlign='center';
-    ctx.fillStyle='rgba(255,255,255,0.7)';ctx.fillText('+',r*0.35,3);
-    ctx.fillStyle='rgba(255,255,255,0.5)';ctx.fillText('–',-r*0.5,3);
+    ctx.fillStyle='rgba(255,255,255,0.7)';ctx.fillText('+',-r*0.35,3);
+    ctx.fillStyle='rgba(255,255,255,0.5)';ctx.fillText('–',r*0.5,3);
   }
 
   // Potentiometer: filled circle body + a bottom bracket that always spans
