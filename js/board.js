@@ -58,6 +58,7 @@ const Board = (() => {
   let _dragMode='idle';
   let _dragInst=null, _dragLegIdx=-1, _dragAnchorLeg=null;
   let _pressedSwitchInst=null; // momentary switch currently held down, if any
+  let _dragWire=null, _dragWireEnd=-1, _savedWireEnds=null; // wire endpoint currently being dragged, if any
   let _dragStartX=0, _dragStartY=0, _dragOffsetX=0, _dragOffsetY=0;
   let _savedLegs=null;
 
@@ -167,6 +168,15 @@ const Board = (() => {
     for(let i=0;i<inst.legs.length;i++) {
       const {x:lx,y:ly}=holeToXY(inst.legs[i].row,inst.legs[i].col);
       if(Math.hypot(x-lx,y-ly)<LEG_HIT_R) return {inst,legIdx:i};
+    }
+    return null;
+  }
+
+  function hitTestWireEnd(x,y) {
+    for(const w of _wires) {
+      const a=holeToXY(w.r1,w.c1), b=holeToXY(w.r2,w.c2);
+      if(Math.hypot(x-a.x,y-a.y)<LEG_HIT_R) return {wire:w,end:1};
+      if(Math.hypot(x-b.x,y-b.y)<LEG_HIT_R) return {wire:w,end:2};
     }
     return null;
   }
@@ -520,6 +530,7 @@ const Board = (() => {
     if(_dragMode==='comp-pending'){if(Math.hypot(x-_dragStartX,y-_dragStartY)>DRAG_THRESHOLD){_dragMode='comp-dragging';document.body.classList.add('dragging');}}
     if(_dragMode==='comp-dragging'){_dragOffsetX=x-_dragStartX;_dragOffsetY=y-_dragStartY;}
     if(_dragMode==='leg-dragging'&&_dragInst&&_hoverHole) updateLegDrag();
+    if(_dragMode==='wire-dragging'&&_dragWire&&_hoverHole) updateWireDrag();
     const coordEl=document.getElementById('status-coords');
     if(coordEl) coordEl.textContent=_hoverHole?(typeof _hoverHole.row==='number'?ROW_LABELS[_hoverHole.row]:_hoverHole.row)+(_hoverHole.col+1):'';
     render(x,y);
@@ -540,6 +551,14 @@ const Board = (() => {
     }
   }
 
+  function updateWireDrag(){
+    if(!_dragWire||_dragWireEnd<0||!_hoverHole) return;
+    const other = _dragWireEnd===1 ? {row:_dragWire.r2,col:_dragWire.c2} : {row:_dragWire.r1,col:_dragWire.c1};
+    if(_hoverHole.row===other.row&&_hoverHole.col===other.col) return; // don't collapse to zero length
+    if(_dragWireEnd===1){_dragWire.r1=_hoverHole.row;_dragWire.c1=_hoverHole.col;}
+    else{_dragWire.r2=_hoverHole.row;_dragWire.c2=_hoverHole.col;}
+  }
+
   function onMouseDown(e){
     if(e.button!==0) return;
     const {x,y}=eventToCanvas(e);
@@ -550,6 +569,12 @@ const Board = (() => {
       _savedLegs=legHit.inst.legs.map(l=>({...l}));
       _dragAnchorLeg=legHit.inst.legs.length===2?legHit.inst.legs[legHit.legIdx===0?1:0]:legHit.inst.legs[legHit.legIdx===0?2:0];
       return;
+    }
+    const wireEndHit=hitTestWireEnd(x,y);
+    if(wireEndHit){
+      _dragMode='wire-dragging';_dragWire=wireEndHit.wire;_dragWireEnd=wireEndHit.end;
+      _savedWireEnds={r1:wireEndHit.wire.r1,c1:wireEndHit.wire.c1,r2:wireEndHit.wire.r2,c2:wireEndHit.wire.c2};
+      setSelected(null,wireEndHit.wire.id);return;
     }
     const inst=hitTestComp(x,y);
     if(inst){
@@ -571,6 +596,7 @@ const Board = (() => {
     if(e.button!==0) return;
     if(_pressedSwitchInst){_pressedSwitchInst._pressed=false;Simulation.notifyStateChange(_pressedSwitchInst);render();_pressedSwitchInst=null;}
     if(_dragMode==='leg-dragging'){_dragMode='idle';_dragInst=null;_dragAnchorLeg=null;_dragLegIdx=-1;Storage.markDirty();History.push();render();return;}
+    if(_dragMode==='wire-dragging'){_dragMode='idle';_dragWire=null;_dragWireEnd=-1;_savedWireEnds=null;Storage.markDirty();History.push();render();return;}
     if(_dragMode==='comp-dragging'){
       if(_dragInst&&_savedLegs){
         // Snap as a rigid body: find where the reference leg (leg 0) lands,
@@ -620,6 +646,10 @@ const Board = (() => {
       document.body.classList.remove('dragging');
       _dragInst=null;_dragAnchorLeg=null;_dragLegIdx=-1;render();
     }
+    if(_dragMode==='wire-dragging'){
+      if(_dragWire&&_savedWireEnds) Object.assign(_dragWire,_savedWireEnds);
+      _dragMode='idle';_dragWire=null;_dragWireEnd=-1;_savedWireEnds=null;render();
+    }
     if(_dragMode==='comp-pending'){_dragMode='idle';_dragInst=null;}
   }
 
@@ -629,6 +659,10 @@ const Board = (() => {
       _dragMode='idle';_dragOffsetX=0;_dragOffsetY=0;
       document.body.classList.remove('dragging');
       _dragInst=null;_dragAnchorLeg=null;_dragLegIdx=-1;render();
+    }
+    if(e.code==='Escape'&&_dragMode==='wire-dragging'){
+      if(_dragWire&&_savedWireEnds) Object.assign(_dragWire,_savedWireEnds);
+      _dragMode='idle';_dragWire=null;_dragWireEnd=-1;_savedWireEnds=null;render();
     }
   }
 
