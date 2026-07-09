@@ -227,7 +227,7 @@ const Shapes = (() => {
       case 'diode':          drawDiode(ctx,def,inst,bw,bh); break;
       case 'transistor_npn':
       case 'transistor_pnp': drawTransistor(ctx,def,inst,col,bw,bh); break;
-      case 'switch_spst':    drawSwitch(ctx,bw,bh,theme?.success||'#33cc66',theme?.alert||'#e6394a',inst._state||inst.props.state==='Closed'); break;
+      case 'switch_spst':    drawSwitch(ctx,bw,bh,theme?.success||'#33cc66',theme?.alert||'#e6394a',Utils.isSwitchClosed(inst)); break;
       case 'power_supply':   drawPower(ctx,col,bw,bh,inst.props.voltage,!!inst.props.reverse_polarity,ang); break;
       case 'signal_generator':drawSigGen(ctx,col,bw,bh,inst.props.waveform,theme?.scopeTrace); break;
       default: drawDefault(ctx,def,bw,bh,col);

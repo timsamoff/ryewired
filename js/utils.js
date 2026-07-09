@@ -28,6 +28,19 @@ const Utils = {
     return `${ohms}Ω`;
   },
 
+  /** Whether an SPST switch instance is currently closed. Latching switches
+   *  toggle via inst._state (set on click); Momentary switches only close
+   *  while physically held down (inst._pressed, set on mousedown/mouseup) —
+   *  NO (normally open) closes while pressed, NC (normally closed) opens
+   *  while pressed. Centralized here so rendering (shapes.js), interaction
+   *  (board.js), and the simulation engine all agree on the same state. */
+  isSwitchClosed(inst) {
+    const type = inst.props?.type || 'Latching';
+    if (type === 'Momentary (NO)') return !!inst._pressed;
+    if (type === 'Momentary (NC)') return !inst._pressed;
+    return !!inst._state || inst.props?.state === 'Closed';
+  },
+
   /** Format a capacitance value nicely */
   formatCapacitance(farads) {
     if (farads >= 1)          return `${farads.toFixed(2)}F`;

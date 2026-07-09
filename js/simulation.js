@@ -198,7 +198,7 @@ const Simulation = (() => {
       }
 
       case 'switch_spst':
-        inst._closed = inst._state || inst.props.state === 'Closed';
+        inst._closed = Utils.isSwitchClosed(inst);
         break;
 
       default:
@@ -425,7 +425,7 @@ const Simulation = (() => {
     for (const inst of placed) {
       const def = ComponentRegistry.getById(inst.defId);
       if (def?.behavior?.type !== 'switch_spst') continue;
-      const closed = inst._state || inst.props.state === 'Closed';
+      const closed = Utils.isSwitchClosed(inst);
       if (!closed || inst.legs.length < 2) continue;
       const k1=key(inst.legs[0].row, inst.legs[0].col);
       const k2=key(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col);

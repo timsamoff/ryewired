@@ -57,6 +57,7 @@ const Board = (() => {
 
   let _dragMode='idle';
   let _dragInst=null, _dragLegIdx=-1, _dragAnchorLeg=null;
+  let _pressedSwitchInst=null; // momentary switch currently held down, if any
   let _dragStartX=0, _dragStartY=0, _dragOffsetX=0, _dragOffsetY=0;
   let _savedLegs=null;
 
@@ -552,6 +553,10 @@ const Board = (() => {
     }
     const inst=hitTestComp(x,y);
     if(inst){
+      const def=ComponentRegistry.getById(inst.defId);
+      if(def?.behavior?.type==='switch_spst' && (inst.props.type==='Momentary (NO)'||inst.props.type==='Momentary (NC)')){
+        _pressedSwitchInst=inst;inst._pressed=true;Simulation.notifyStateChange(inst);render();
+      }
       _dragMode='comp-pending';_dragInst=inst;
       _dragStartX=x;_dragStartY=y;_dragOffsetX=0;_dragOffsetY=0;
       _savedLegs=inst.legs.map(l=>({...l}));
@@ -564,6 +569,7 @@ const Board = (() => {
 
   function onMouseUp(e){
     if(e.button!==0) return;
+    if(_pressedSwitchInst){_pressedSwitchInst._pressed=false;Simulation.notifyStateChange(_pressedSwitchInst);render();_pressedSwitchInst=null;}
     if(_dragMode==='leg-dragging'){_dragMode='idle';_dragInst=null;_dragAnchorLeg=null;_dragLegIdx=-1;Storage.markDirty();History.push();render();return;}
     if(_dragMode==='comp-dragging'){
       if(_dragInst&&_savedLegs){
@@ -607,6 +613,7 @@ const Board = (() => {
   }
 
   function onWindowMouseUp(){
+    if(_pressedSwitchInst){_pressedSwitchInst._pressed=false;Simulation.notifyStateChange(_pressedSwitchInst);render();_pressedSwitchInst=null;}
     if(_dragMode==='comp-dragging'||_dragMode==='leg-dragging'){
       if(_dragInst&&_savedLegs) _dragInst.legs=_savedLegs.map(l=>({...l}));
       _dragMode='idle';_dragOffsetX=0;_dragOffsetY=0;
@@ -630,7 +637,12 @@ const Board = (() => {
     const {x,y}=eventToCanvas(e);
     const inst=hitTestComp(x,y);if(!inst) return;
     const def=ComponentRegistry.getById(inst.defId);
-    if(def?.behavior?.type==='switch_spst'){inst._state=!inst._state;Simulation.notifyStateChange(inst);Storage.markDirty();History.push();render();}
+    if(def?.behavior?.type==='switch_spst'){
+      const t=inst.props.type;
+      if(t!=='Momentary (NO)' && t!=='Momentary (NC)'){
+        inst._state=!inst._state;Simulation.notifyStateChange(inst);Storage.markDirty();History.push();render();
+      }
+    }
   }
 
   function onDrop(e){
@@ -715,7 +727,7 @@ const Board = (() => {
   function clear(){_placed=[];_wires=[];setSelected(null,null);}
   function loadLayout(layout){_placed=layout.components||[];_wires=layout.wires||[];setSelected(null,null);render();}
   function getLayoutData(){
-    return{components:_placed.map(inst=>{const c=Utils.clone(inst);delete c._voltage;delete c._current;delete c._audioNode;delete c._brightness;delete c._state;return c;}),wires:_wires};
+    return{components:_placed.map(inst=>{const c=Utils.clone(inst);delete c._voltage;delete c._current;delete c._audioNode;delete c._brightness;delete c._state;delete c._pressed;return c;}),wires:_wires};
   }
 
   return{init,render,clear,loadLayout,getLayoutData,getPlaced,getWires,addWire,nextWireColor,

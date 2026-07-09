@@ -15,7 +15,7 @@
   "behavior": { "type": "led" },
   "failure_modes": {
     "over_current": { "threshold_multiplier": 1.5, "result": "burn", "message": "LED burned out from too much current. Always use a current-limiting resistor in series. R = (Vsupply - Vforward) / Imax" },
-    "reverse_voltage": { "threshold_v": -5, "result": "silent_fail", "message": "LED is connected backwards. The flat side (cathode / shorter leg) goes toward ground." }
+    "reverse_voltage": { "threshold_v": -5, "result": "silent_fail", "message": "Either the LED is installed backwards or the power supply polarity is reversed. The LED's anode (+) should be connected to the positive rail, and the cathode (–) to the negative rail. If the LED is oriented correctly, check that the + and – connections from the power supply haven't been swapped." }
   },
   "color_map": {
     "Red":    { "hex": "#ff2200", "vf": 2.0 },
