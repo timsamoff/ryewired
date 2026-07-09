@@ -70,9 +70,13 @@ const PropertiesPanel = (() => {
     }
 
     // ── Orientation controls ─────────────────────────────────────────────────
-    // Rotate: for any 2+ leg component (not IC). This is now the only
-    // reorientation control — Flip has been removed in favor of Rotate 90°.
-    const canRotate = def.legs >= 2 && def.category !== 'ic';
+    // Rotate: for any 2+ leg component (not IC, not the power supply). This is
+    // now the only reorientation control — Flip has been removed in favor of
+    // Rotate 90°. The power supply is excluded: it's meant to bridge the rails
+    // in one fixed orientation, and reverse_polarity already covers swapping
+    // + and – electrically, so rotating it has no legitimate use and only
+    // risks landing it off the rails.
+    const canRotate = def.legs >= 2 && def.category !== 'ic' && def.id !== 'power_supply';
 
     if (canRotate) {
       html += `<div class="prop-section-div"></div>`;

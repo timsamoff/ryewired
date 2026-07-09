@@ -48,17 +48,22 @@ const Simulation = (() => {
       gndNet = nets.find(nets.key('rbm', 0));
     }
 
-    // 3. Assign net voltages: VCC net = Vsupply, GND net = 0
-    const netVoltage = new Map();
-    if (vccNet) netVoltage.set(vccNet, Vsupply);
-    if (gndNet) netVoltage.set(gndNet, 0);
+    // 3. Solve the resistive network for EVERY net, not just VCC/GND.
+    // (Previously only vccNet/gndNet ever got a voltage; every other node —
+    // e.g. the node between a series resistor and an LED — fell through to
+    // `?? 0`, which silently mimicked "grounded" even when it wasn't. That
+    // made series circuits behave inconsistently depending on which side of
+    // a component happened to touch a rail directly. solveNetVoltages()
+    // does a real nodal solve, including diode/LED behavior, so every net
+    // gets a physically-derived voltage.)
+    const { netVoltage, diodeCurrents } = solveNetVoltages(placed, nets, vccNet, gndNet, Vsupply);
 
     // 4. Solve each component
     for (const inst of placed) {
       if (inst.failed) continue;
       const def = ComponentRegistry.getById(inst.defId);
       if (!def) continue;
-      try { solveComponent(inst, def, Vsupply, nets, netVoltage, placed); }
+      try { solveComponent(inst, def, Vsupply, nets, netVoltage, placed, diodeCurrents); }
       catch(e) { console.warn('[Sim]', e.message); }
     }
 
@@ -67,7 +72,7 @@ const Simulation = (() => {
   }
 
   // ── Component solver ─────────────────────────────────────────────────────────
-  function solveComponent(inst, def, Vsupply, nets, netVoltage, placed) {
+  function solveComponent(inst, def, Vsupply, nets, netVoltage, placed, diodeCurrents) {
     const btype = def.behavior?.type;
 
     switch(btype) {
@@ -98,28 +103,32 @@ const Simulation = (() => {
         const [vA, vB] = legVoltages(inst, nets, netVoltage);
         const vAnode   = vA ?? 0;
         const vCathode = vB ?? 0;
+        const vAcross  = vAnode - vCathode;
 
         // leg 0 = anode, leg 1 = cathode. Matches the LED's default visual
         // (drawLED in shapes.js): dome/anode on the left ('+'), flat
         // face/cathode on the right ('–'). Orientation changes via Rotate,
         // which swaps which world-space hole each leg index lands in — so
         // this needs no flip flag.
-        if (vCathode - vAnode > Vf * 0.5) {
+
+        // Current now comes straight from the nodal solve (solveNetVoltages),
+        // which already modeled this exact LED as a diode edge and settled
+        // on a consistent on/off state and current for the whole network.
+        // This replaces the old approach of independently re-deriving vAcross
+        // and current here with a resistor-hunting helper (findSeriesResistance),
+        // which only ever found a single directly-touching resistor and broke
+        // for any less-trivial series/parallel arrangement.
+        const I = diodeCurrents?.get(inst) ?? 0;
+
+        if (I <= 0 && vCathode - vAnode > Vf * 0.5) {
           fail(inst, def, 'reverse_voltage'); return;
         }
 
-        const vAcross = vAnode - vCathode;
-        if (vAcross < Vf * 0.7) {
+        if (I <= 0) {
           inst._brightness = 0; inst._current = 0; break;
         }
 
-        // Find series resistance in the same path
-        const R = findSeriesResistance(inst, nets, netVoltage, placed);
-        const I = R > 0
-          ? (vAcross - Vf) / R
-          : ImA * 3; // no resistor = overcurrent
-
-        inst._current    = Math.max(0, I);
+        inst._current    = I;
         inst._brightness = Utils.clamp(I / ImA, 0, 1);
 
         const threshold = ImA * (def.failure_modes?.over_current?.threshold_multiplier || 1.5);
@@ -214,27 +223,160 @@ const Simulation = (() => {
     return [vA, vB];
   }
 
-  // Find total series resistance in the path containing this component
-  // Simple approach: sum all resistors whose both legs are on nets between VCC and GND
-  function findSeriesResistance(inst, nets, netVoltage, placed) {
-    const ledNet0 = nets.find(nets.key(inst.legs[0].row, inst.legs[0].col));
-    const ledNet1 = nets.find(nets.key(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col));
+  // ── Resistive network solver ──────────────────────────────────────────────────
+  // Solves for the voltage at every net in the circuit (not just the two nets
+  // touching the power supply), plus the current through every diode/LED.
+  //
+  // Method: nodal analysis (conductance matrix) over resistors and
+  // potentiometer segments, with diodes/LEDs modeled as a small "on"
+  // resistance plus a compensating current source once forward-biased past
+  // Vf (a standard piecewise-linear diode companion model), or a very large
+  // "off" resistance otherwise. Diode on/off states are guessed, solved,
+  // checked against the result, and re-solved until stable (a handful of
+  // iterations is always enough for the size of circuits this board can
+  // hold). Transistors and capacitors are intentionally not added as edges
+  // here — transistor legs still just read the voltages this solve produces
+  // for them, same as before, and capacitors correctly stay isolated from
+  // each other in this DC-only model (a cap really does block DC).
+  const RON  = 1;     // ohms — small "on" resistance for a conducting diode/LED
+  const ROFF = 1e9;   // ohms — effectively open for a non-conducting diode/LED
+  const EPS  = 1e-12; // tiny leak-to-ground on every net so isolated islands don't produce a singular matrix
 
-    let totalR = 0;
-    for (const other of placed) {
-      if (other === inst || other.failed) continue;
-      const def = ComponentRegistry.getById(other.defId);
-      if (def?.behavior?.type !== 'resistor') continue;
+  function solveNetVoltages(placed, nets, vccNet, gndNet, Vsupply) {
+    const fixed = new Map();
+    if (vccNet) fixed.set(vccNet, Vsupply);
+    if (gndNet) fixed.set(gndNet, 0);
 
-      const rNet0 = nets.find(nets.key(other.legs[0].row, other.legs[0].col));
-      const rNet1 = nets.find(nets.key(other.legs[other.legs.length-1].row, other.legs[other.legs.length-1].col));
+    function netOf(row, col) { return nets.find(nets.key(row, col)); }
 
-      // Resistor is in series if it shares a net with the LED path
-      if (rNet0===ledNet0||rNet1===ledNet0||rNet0===ledNet1||rNet1===ledNet1) {
-        totalR += parseFloat(other.props.resistance) || 1000;
+    const resistorEdges = []; // {a,b,R}
+    const diodeEdges    = []; // {a,b,Vf,inst}  a=anode net, b=cathode net
+
+    for (const inst of placed) {
+      if (inst.failed) continue;
+      const def = ComponentRegistry.getById(inst.defId);
+      const btype = def?.behavior?.type;
+
+      if (btype === 'resistor') {
+        const R = parseFloat(inst.props.resistance) || 1000;
+        const a = netOf(inst.legs[0].row, inst.legs[0].col);
+        const b = netOf(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col);
+        resistorEdges.push({ a, b, R });
+
+      } else if (btype === 'potentiometer' && inst.legs.length >= 3) {
+        const Rt  = parseFloat(inst.props.resistance) || 100000;
+        const w   = parseFloat(inst.props.wiper) ?? 0.5;
+        const pos = (inst.props.taper||'').includes('Audio') ? Math.pow(w,2) : w;
+        const ccw = netOf(inst.legs[0].row, inst.legs[0].col);
+        const wpr = netOf(inst.legs[1].row, inst.legs[1].col);
+        const cw  = netOf(inst.legs[2].row, inst.legs[2].col);
+        resistorEdges.push({ a: ccw, b: wpr, R: Math.max(Rt*pos, 1) });
+        resistorEdges.push({ a: wpr, b: cw,  R: Math.max(Rt*(1-pos), 1) });
+
+      } else if (btype === 'led' || btype === 'diode') {
+        const cm = def.color_map?.[inst.props.color];
+        const Vf = parseFloat(inst.props.forward_voltage) || cm?.vf || 0.7;
+        const a  = netOf(inst.legs[0].row, inst.legs[0].col);              // anode
+        const b  = netOf(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col); // cathode
+        diodeEdges.push({ a, b, Vf, inst });
       }
     }
-    return totalR;
+
+    const netIndex = new Map();
+    const register = net => { if (net!=null && !fixed.has(net) && !netIndex.has(net)) netIndex.set(net, netIndex.size); };
+    resistorEdges.forEach(e => { register(e.a); register(e.b); });
+    diodeEdges.forEach(e => { register(e.a); register(e.b); });
+
+    const N = netIndex.size;
+    const netVoltage = new Map(fixed);
+    const diodeCurrents = new Map();
+    if (N === 0) return { netVoltage, diodeCurrents };
+
+    function stampConductance(G, I, a, b, g) {
+      const ai = netIndex.has(a) ? netIndex.get(a) : -1;
+      const bi = netIndex.has(b) ? netIndex.get(b) : -1;
+      if (ai>=0) G[ai][ai]+=g;
+      if (bi>=0) G[bi][bi]+=g;
+      if (ai>=0 && bi>=0) { G[ai][bi]-=g; G[bi][ai]-=g; }
+      else if (ai>=0 && fixed.has(b)) I[ai] += g*fixed.get(b);
+      else if (bi>=0 && fixed.has(a)) I[bi] += g*fixed.get(a);
+    }
+    function stampCurrentSource(I, a, b, amount) {
+      const ai = netIndex.has(a) ? netIndex.get(a) : -1;
+      const bi = netIndex.has(b) ? netIndex.get(b) : -1;
+      if (ai>=0) I[ai]+=amount;
+      if (bi>=0) I[bi]-=amount;
+    }
+
+    let states = diodeEdges.map(() => false);
+    let V = new Array(N).fill(0);
+
+    for (let iter=0; iter<8; iter++) {
+      const G = Array.from({length:N}, () => new Array(N).fill(0));
+      const I = new Array(N).fill(0);
+      for (let i=0;i<N;i++) G[i][i]+=EPS;
+
+      for (const e of resistorEdges) {
+        if (e.a==null || e.b==null || e.a===e.b) continue;
+        stampConductance(G, I, e.a, e.b, 1/(e.R||1e-6));
+      }
+      diodeEdges.forEach((e, idx) => {
+        if (e.a==null || e.b==null || e.a===e.b) return;
+        const on = states[idx];
+        const g = 1/(on ? RON : ROFF);
+        stampConductance(G, I, e.a, e.b, g);
+        if (on) stampCurrentSource(I, e.a, e.b, g*e.Vf);
+      });
+
+      V = gaussianSolve(G, I);
+
+      let changed = false;
+      diodeEdges.forEach((e, idx) => {
+        if (e.a==null || e.b==null) return;
+        const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
+        const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
+        const shouldBeOn = (va - vb) > e.Vf * 0.5;
+        if (shouldBeOn !== states[idx]) { states[idx] = shouldBeOn; changed = true; }
+      });
+      if (!changed) break;
+    }
+
+    for (const [net, idx] of netIndex) netVoltage.set(net, V[idx]);
+    diodeEdges.forEach((e, idx) => {
+      if (e.a==null || e.b==null) { diodeCurrents.set(e.inst, 0); return; }
+      const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
+      const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
+      const on = states[idx];
+      const g = 1/(on ? RON : ROFF);
+      diodeCurrents.set(e.inst, on ? Math.max(0, g*((va-vb) - e.Vf)) : 0);
+    });
+
+    return { netVoltage, diodeCurrents };
+  }
+
+  // Small Gaussian-elimination solver for G·V = I (dense, fine at breadboard scale)
+  function gaussianSolve(G, I) {
+    const n = I.length;
+    if (n === 0) return [];
+    const A = G.map(row => row.slice());
+    const b = I.slice();
+    for (let col=0; col<n; col++) {
+      let piv = col;
+      for (let r=col+1; r<n; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+      if (Math.abs(A[piv][col]) < 1e-15) continue;
+      [A[col], A[piv]] = [A[piv], A[col]];
+      [b[col], b[piv]] = [b[piv], b[col]];
+      for (let r=0; r<n; r++) {
+        if (r===col) continue;
+        const f = A[r][col] / A[col][col];
+        if (f===0) continue;
+        for (let c=col; c<n; c++) A[r][c] -= f*A[col][c];
+        b[r] -= f*b[col];
+      }
+    }
+    const x = new Array(n).fill(0);
+    for (let i=0;i<n;i++) x[i] = Math.abs(A[i][i]) > 1e-15 ? b[i]/A[i][i] : 0;
+    return x;
   }
 
   // ── Net map (union-find) ──────────────────────────────────────────────────────
@@ -271,6 +413,22 @@ const Simulation = (() => {
     // Wire connections
     for (const w of wires) {
       const k1=key(w.r1,w.c1), k2=key(w.r2,w.c2);
+      if (!parent[k1]) parent[k1]=k1;
+      if (!parent[k2]) parent[k2]=k2;
+      union(k1, k2);
+    }
+
+    // Closed switches behave like a wire between their two legs. (Previously
+    // a switch's open/closed state only set inst._closed for display —
+    // nothing ever unioned its legs, so no current could pass through a
+    // switch in ANY state.)
+    for (const inst of placed) {
+      const def = ComponentRegistry.getById(inst.defId);
+      if (def?.behavior?.type !== 'switch_spst') continue;
+      const closed = inst._state || inst.props.state === 'Closed';
+      if (!closed || inst.legs.length < 2) continue;
+      const k1=key(inst.legs[0].row, inst.legs[0].col);
+      const k2=key(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col);
       if (!parent[k1]) parent[k1]=k1;
       if (!parent[k2]) parent[k2]=k2;
       union(k1, k2);

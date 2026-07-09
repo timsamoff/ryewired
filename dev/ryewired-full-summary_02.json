@@ -1,96 +1,218 @@
 {
   "project": {
     "name": "Ryewired",
-    "version": "rw9"
-  },
-
-  "purpose": {
-    "summary": "Ryewired is a virtual solderless breadboard for building, experimenting with, and learning analog audio circuits, particularly guitar effects. The goal is to replicate the workflow of prototyping a real pedal on a breadboard rather than drawing schematics."
+    "version": "rw9",
+    "status": {
+      "phase": "Core Platform Stabilization",
+      "summary": "Ryewired is fully architected but still under active development. The immediate priority is resolving existing bugs and refining the current systems before implementing the next major evolution of the application.",
+      "priorities": [
+        "Resolve known bugs.",
+        "Improve simulation reliability.",
+        "Polish the user experience.",
+        "Expand behavioral simulation.",
+        "Transition toward the integrated workbench model."
+      ]
+    },
+    "description": "Ryewired is a browser-based virtual breadboard for designing, prototyping, experimenting with, and learning analog audio circuits, particularly guitar effects pedals. It is intended to replicate the experience of building pedals on a physical solderless breadboard while taking advantage of capabilities unique to software."
   },
 
   "source_of_truth": {
-    "implementation": "The accompanying project ZIP.",
-    "design": "This document."
+    "implementation": "The accompanying project ZIP is authoritative.",
+    "purpose": "This document exists to provide architectural intent, product philosophy, design goals, and future direction that cannot be inferred directly from the source code.",
+    "rule": "If this document contradicts the implementation, assume the implementation is correct unless the user explicitly states otherwise."
   },
 
-  "design_principles": [
-    "The application should behave like a real electronics workbench.",
-    "Behavior should favor realism and usability over exhaustive SPICE accuracy.",
-    "Avoid unnecessary architectural rewrites.",
-    "Extend existing systems whenever possible."
-  ],
-
-  "current_direction": {
-    "next_major_milestone": "Convert the board from a collection of draggable utility components into a complete pedal prototyping workstation."
-  },
-
-  "roadmap": {
-    "workbench_model": {
-      "description": "The board should contain permanent infrastructure rather than requiring utility components to be placed manually.",
-
-      "permanent_devices": [
-        {
-          "id": "power_supply",
-          "description": "Permanent adjustable DC supply attached to the power rails.",
-          "editable": [
-            "voltage",
-            "reverse polarity"
-          ]
-        },
-        {
-          "id": "signal_input",
-          "description": "Permanent audio input / signal generator."
-        },
-        {
-          "id": "audio_output",
-          "description": "Permanent audio output."
-        },
-        {
-          "id": "true_bypass",
-          "description": "Permanent true-bypass footswitch."
-        },
-        {
-          "id": "status_led",
-          "description": "Permanent LED driven by the bypass switch."
-        }
-      ]
-    },
-
-    "expected_behavior": {
-      "default": [
-        "Input can be connected directly to Output.",
-        "Running the simulation should immediately produce audible output.",
-        "Oscilloscope and FFT should display the signal."
-      ],
-
-      "bypass_mode": [
-        "Switch OFF routes Input directly to Output.",
-        "Audio bypasses the circuit completely.",
-        "Status LED is OFF."
-      ],
-
-      "effect_mode": [
-        "Switch ON routes Input through the user-built circuit.",
-        "Status LED turns ON.",
-        "Output contains the processed signal."
-      ]
-    },
-
-    "workflow": [
-      "Open a new board.",
-      "Power, Input, Output, LED, and Bypass switch already exist.",
-      "Initially jumper Input directly to Output.",
-      "Run the simulation.",
-      "Hear the clean signal.",
-      "Construct an effect between Input and Output.",
-      "Toggle the bypass switch to compare clean and processed audio instantly."
+  "product_identity": {
+    "is": [
+      "Virtual pedal prototyping workstation",
+      "Virtual solderless breadboard",
+      "Behavioral circuit simulator",
+      "Educational electronics tool",
+      "Interactive audio experimentation environment"
+    ],
+    "is_not": [
+      "SPICE simulator",
+      "Schematic editor",
+      "PCB design package",
+      "General-purpose electronics CAD application"
     ]
   },
 
+  "project_philosophy": {
+    "primary_goal": "Create the software equivalent of sitting at a real guitar pedal prototyping bench.",
+    "secondary_goal": "Allow users to move from an idea to hearing that idea as quickly and naturally as possible.",
+    "principles": [
+      "The software should behave like a real electronics workbench.",
+      "The user should build circuits, not infrastructure.",
+      "Visual realism is preferred over abstract symbolism.",
+      "Behavioral realism is preferred over mathematically exhaustive simulation.",
+      "Learning and experimentation are equally important.",
+      "Avoid unnecessary complexity.",
+      "Favor elegant, maintainable architecture over clever implementations."
+    ]
+  },
+
+  "design_principles": [
+    "Components should resemble their physical through-hole counterparts.",
+    "The breadboard should remain the visual center of the application.",
+    "The interface should stay approachable for beginners while remaining useful to experienced builders.",
+    "Animations should be subtle and purposeful.",
+    "New features should integrate naturally into existing workflows.",
+    "Shared functionality should exist in one authoritative implementation.",
+    "Avoid duplicate rendering or business logic."
+  ],
+
+  "engineering_principles": [
+    "Read and understand the existing architecture before introducing new systems.",
+    "Extend existing systems whenever practical.",
+    "Avoid unnecessary rewrites.",
+    "Prefer incremental improvements over sweeping refactors.",
+    "Maintain backwards compatibility with saved layouts whenever possible.",
+    "Keep modules focused on a single responsibility.",
+    "Minimize external dependencies."
+  ],
+
+  "simulation_philosophy": {
+    "approach": "Behavioral rather than SPICE.",
+    "goal": "Produce intuitive, educational, and musically useful results rather than mathematically perfect electrical analysis.",
+    "priority": [
+      "Correct user experience",
+      "Predictable behavior",
+      "Realistic pedal prototyping",
+      "Simulation performance"
+    ]
+  },
+
+  "current_state": {
+    "summary": "The current architecture is considered solid. Existing work should focus primarily on correctness, stability, and polish before major feature expansion.",
+    "avoid": [
+      "Large architectural rewrites.",
+      "Replacing working systems.",
+      "Adding unnecessary abstractions."
+    ]
+  },
+
+  "future_direction": {
+    "vision": "Transform Ryewired from a virtual breadboard into a complete virtual pedal development workstation."
+  },
+
+  "future_workbench": {
+    "description": "The workbench should provide the permanent infrastructure required for prototyping. Users should only build the pedal circuit itself.",
+
+    "permanent_devices": [
+      {
+        "id": "power_supply",
+        "name": "Power Supply",
+        "description": "Permanent adjustable DC power source connected directly to the breadboard power rails.",
+        "properties": [
+          "Voltage",
+          "Reverse polarity"
+        ]
+      },
+      {
+        "id": "signal_input",
+        "name": "Input",
+        "description": "Permanent audio input / signal generator."
+      },
+      {
+        "id": "audio_output",
+        "name": "Output",
+        "description": "Permanent audio output."
+      },
+      {
+        "id": "true_bypass",
+        "name": "True Bypass Footswitch",
+        "description": "Permanent bypass switch controlling whether audio travels through the circuit or bypasses it."
+      },
+      {
+        "id": "status_led",
+        "name": "Status LED",
+        "description": "Permanent LED indicating effect mode."
+      }
+    ]
+  },
+
+  "expected_workflow": [
+    "Create a new project.",
+    "Power supply, Input, Output, True Bypass switch, and Status LED already exist.",
+    "Connect Input directly to Output.",
+    "Run Simulation.",
+    "Hear the clean input signal immediately.",
+    "Observe the Oscilloscope and FFT displaying the signal.",
+    "Remove the bypass jumper.",
+    "Construct a pedal circuit between Input and Output.",
+    "Toggle the bypass switch to compare clean and processed audio instantly."
+  ],
+
+  "routing_model": {
+    "bypass_mode": {
+      "switch": "OFF",
+      "audio_path": "Input → Output",
+      "led": "Off",
+      "circuit": "Ignored"
+    },
+    "effect_mode": {
+      "switch": "ON",
+      "audio_path": "Input → User Circuit → Output",
+      "led": "On",
+      "circuit": "Active"
+    }
+  },
+
+  "future_audio_features": {
+    "input_sources": [
+      "Signal Generator",
+      "Loaded Audio File",
+      "Live Audio Input"
+    ],
+    "analysis_tools": [
+      "Oscilloscope",
+      "FFT Spectrum",
+      "Signal Level",
+      "Clipping Visualization"
+    ]
+  },
+
+  "ux_goals": [
+    "A new project should produce audible output within seconds.",
+    "Users should spend their time designing circuits instead of configuring infrastructure.",
+    "Bypass comparisons should be instantaneous.",
+    "The workbench should feel immediately familiar to anyone who has prototyped a pedal on a real breadboard.",
+    "Every interaction should reinforce understanding rather than introduce unnecessary complexity."
+  ],
+
   "assistant_guidelines": [
-    "Preserve existing architecture whenever practical.",
-    "Prefer incremental improvements over rewrites.",
-    "Read the source before proposing architectural changes.",
-    "When implementing roadmap items, preserve the realism of a physical breadboard."
-  ]
+    "Read the source code before proposing architectural changes.",
+    "Assume existing design decisions were intentional.",
+    "Prefer extending existing systems over replacing them.",
+    "Do not rewrite working systems without compelling justification.",
+    "Maintain consistency with the established code style.",
+    "Preserve the project's visual language.",
+    "Favor maintainability over cleverness.",
+    "When uncertain, ask before making significant architectural decisions."
+  ],
+
+  "north_star": {
+    "vision": "Ryewired should become the software equivalent of a guitarist's physical prototyping bench.",
+
+    "mission": "Reduce the friction between an idea and hearing that idea through a virtual circuit.",
+
+    "core_principles": [
+      "The workbench provides the infrastructure. The user builds only the circuit.",
+      "Real-world workflows take precedence over abstract electronic concepts.",
+      "Visual authenticity should reinforce understanding rather than decorate the interface.",
+      "Behavior should be predictable, educational, and musically useful.",
+      "Every feature should shorten the path from experimentation to audible results."
+    ],
+
+    "success_metrics": [
+      "A new project produces audio immediately.",
+      "Users focus on designing circuits instead of configuring the environment.",
+      "Switching between bypass and effect is instantaneous.",
+      "The software feels like using a real pedal prototyping bench.",
+      "The application remains approachable for beginners while deep enough for experienced builders."
+    ],
+
+    "long_term_goal": "Ryewired should feel less like a circuit simulator and more like a dedicated pedal development workstation with integrated power, signal routing, bypass switching, analysis tools, and an intuitive breadboard workspace."
+  }
 }
