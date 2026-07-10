@@ -225,13 +225,12 @@ function snapZoom(v) { return Math.round(v / ZOOM_STEP) * ZOOM_STEP; }
 function fitBoard() {
   const scroll = document.getElementById('board-scroll');
   const canvas = document.getElementById('board-canvas');
-  const strip  = document.getElementById('workbench-strip-canvas');
   if (!scroll || !canvas) return;
   const aW = scroll.clientWidth  - 56;
   const aH = scroll.clientHeight - 56;
   // Use CSS (logical) size, not canvas.width which is DPR-inflated
   const bW = parseFloat(canvas.style.width)  || canvas.clientWidth;
-  const stripH = strip ? (parseFloat(strip.style.height) || strip.clientHeight || 0) : 0;
+  const stripH = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getVisualHeight) ? WorkbenchStrip.getVisualHeight() : 0;
   const bH = (parseFloat(canvas.style.height) || canvas.clientHeight) + stripH;
   if (!bW || !bH) return;
   const raw = Math.min(aW / bW, aH / bH, 1.0);

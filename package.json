@@ -1,7 +1,7 @@
 {
   "name": "ryewired",
   "version": "0.1.0",
-  "description": "Ryewired — Audio circuit breadboard simulator",
+  "description": "RYEWIRED — Audio circuit breadboard simulator",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

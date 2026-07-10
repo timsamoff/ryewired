@@ -121,7 +121,7 @@ ipcMain.handle('layout:open', async () => {
   if (result.canceled || !result.filePaths.length) return null;
   currentFilePath = result.filePaths[0];
   const fname = path.basename(currentFilePath);
-  mainWindow.setTitle(`${fname.replace(/\.[^.]+$/, '')} — Ryewired`);
+  mainWindow.setTitle(`${fname.replace(/\.[^.]+$/, '')} — RYEWIRED`);
   return JSON.parse(fs.readFileSync(currentFilePath, 'utf8'));
 });
 
@@ -139,7 +139,7 @@ ipcMain.handle('audio:open', async () => {
 
 ipcMain.handle('layout:new', () => {
   currentFilePath = null;
-  mainWindow.setTitle('Untitled — Ryewired');
+  mainWindow.setTitle('RYEWIRED — Untitled');
   return true;
 });
 

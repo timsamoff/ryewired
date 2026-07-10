@@ -295,6 +295,7 @@ input, select, textarea { font-family: var(--font-ui); }
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 0 1px var(--border);
   cursor: default;
+  margin-bottom: -16px; /* cancels the strip canvas's extra OVERLAP height (js/workbench-strip.js) */
 }
 
 #board-canvas {

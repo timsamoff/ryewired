@@ -16,9 +16,19 @@ const WorkbenchStrip = (() => {
   // full layout math — it only borrows the handful of constants relevant here.
   const HOLE_PITCH = 20;
   const STRIP_H = 96;
+  // The board canvas below is completely unmodified, so its top corners are
+  // still rounded. Rather than leaving a visible gap there, the strip's own
+  // background is drawn OVERLAP px taller than its visible content, and pulled
+  // back up by the same amount via a negative CSS margin (see app.css) — so
+  // the board (painted after, in DOM order) covers that extra strip content
+  // everywhere except inside its own rounded corner notches, where the strip's
+  // background shows through instead of the page background. Net layout
+  // height is unchanged; only the corner seam looks different.
+  const OVERLAP = 16;
   const BYPASS_ON_DEFAULT = false;
 
   let bypassOn = BYPASS_ON_DEFAULT;
+  let logoImg = null, logoReady = false;
 
   function cv(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
@@ -26,6 +36,9 @@ const WorkbenchStrip = (() => {
     canvas = canvasEl;
     ctx = canvas.getContext('2d');
     canvas.addEventListener('click', onClick);
+    logoImg = new Image();
+    logoImg.onload = () => { logoReady = true; render(); };
+    logoImg.src = './icon.png';
     render();
   }
 
@@ -33,14 +46,19 @@ const WorkbenchStrip = (() => {
     return (typeof Board !== 'undefined' && Board.getBoardWidth) ? Board.getBoardWidth() : 800;
   }
 
+  // Layout-flow height this strip actually occupies (excludes the hidden
+  // overlap, which is cancelled out by the negative margin) — used by
+  // app.js's fitBoard() so "fit to screen" still accounts for this correctly.
+  function getVisualHeight() { return STRIP_H; }
+
   function render() {
     _dpr = window.devicePixelRatio || 1;
-    const W = boardWidth(), H = STRIP_H;
+    const W = boardWidth(), H = STRIP_H + OVERLAP;
     canvas.width = Math.round(W*_dpr); canvas.height = Math.round(H*_dpr);
     canvas.style.width = W+'px'; canvas.style.height = H+'px';
     ctx.setTransform(_dpr,0,0,_dpr,0,0);
     ctx.clearRect(0,0,W,H);
-    drawStrip(W,H);
+    drawStrip(W,STRIP_H);
   }
 
   // ── Shape helpers (mirrors Shapes.roundRect's approach) ──────────────────
@@ -50,10 +68,9 @@ const WorkbenchStrip = (() => {
     ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
     ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
   }
-  // Only the top two corners rounded, so this strip meets the board flush
-  // along the full seam (the board canvas below keeps its own corners as-is —
-  // unchanged — so there's a small reveal at the two top board corners; see
-  // note in the project docs/chat about squaring those off later if wanted).
+  // Only the top two corners rounded. Combined with the OVERLAP trick above,
+  // this lets the strip's background peek through the (unmodified) board's
+  // rounded top corners below, instead of leaving a visible gap there.
   function roundRectTop(x,y,w,h,r){
     ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
     ctx.lineTo(x+w,y+h);ctx.lineTo(x,y+h);
@@ -75,50 +92,69 @@ const WorkbenchStrip = (() => {
     if (typeof Board !== 'undefined' && Board.holeToXY) return Board.holeToXY(0, col).x;
     return boardWidth()*fallbackFrac;
   }
-  function inputX(){ return colX(2, 0.06); }
-  function outputX(){ return colX(59, 0.94); } // near the far right column on the real (63-col) board
+  // This board is a lot longer than the mockup's — pulled the jacks in from
+  // the very edge a bit now that there's room to spread things out.
+  function inputX(){ return colX(6, 0.10); }
+  function outputX(){ return colX(55, 0.90); }
   function powerMinusX(){ return colX(18, 0.29); }
   function powerPlusX(){ return colX(19, 0.31); }
   function powerX(){ return (powerMinusX()+powerPlusX())/2; }
-  function switchX(){ return boardWidth()*0.66; }
+  // Switch/LED/CLR cluster centered between the power supply and the output
+  // jack, rather than a fixed fraction of total width.
+  function switchX(){ return (powerX()+outputX())/2; }
 
   function drawStrip(w,h){
     ctx.save();
+    // Background is drawn OVERLAP px taller than h (see OVERLAP comment above)
+    // so it can peek through the board's rounded top corners below.
     const grad = ctx.createLinearGradient(0,0,0,h);
     grad.addColorStop(0,'#E4DED6'); grad.addColorStop(1,'#D9D2C8');
     ctx.fillStyle=grad;
-    roundRectTop(0,0,w,h,10);
+    roundRectTop(0,0,w,h+OVERLAP,10);
     ctx.fill();
     ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=1; ctx.stroke();
 
-    drawLogo(30, h/2);
+    // Traces drawn BEFORE the components/labels that sit on top of them, so
+    // labels stay fully legible wherever a trace happens to run underneath —
+    // rather than the trace painting over already-drawn label text.
+    drawTrace(inputX(), h*0.62, inputX(), h);
+    drawTrace(outputX(), h*0.62, outputX(), h);
+    drawTrace(powerMinusX(), h*0.68, powerMinusX(), h, 'rgba(43,87,154,0.45)');
+    drawTrace(powerPlusX(),  h*0.68, powerPlusX(),  h, 'rgba(176,32,46,0.45)');
+
+    drawLogo(48, h/2); // left edge sits at x=35, matching the vertical (top/bottom) margin around a 26px logo
     drawJack(inputX(), h/2, 'IN');
     drawPowerBlock(powerX(), h/2);
     drawSwitchCluster(switchX(), h/2);
     drawJack(outputX(), h/2, 'OUT');
 
-    // Traces terminate at the strip's own bottom edge (flush seam with the
-    // board below) — they don't reach into specific board holes yet, since
-    // that would mean drawing onto the (unmodified) board canvas itself.
-    drawTrace(inputX(), h*0.8, inputX(), h);
-    drawTrace(outputX(), h*0.8, outputX(), h);
-    drawTrace(powerMinusX(), h*0.8, powerMinusX(), h, 'rgba(43,87,154,0.45)');
-    drawTrace(powerPlusX(),  h*0.8, powerPlusX(),  h, 'rgba(176,32,46,0.45)');
-
     ctx.restore();
   }
 
-  function drawLogo(cx,cy){
-    ctx.save();ctx.translate(cx,cy);
-    ctx.strokeStyle='rgba(92,64,51,0.55)'; ctx.lineWidth=2;
-    ctx.beginPath();ctx.arc(0,0,13,0,Math.PI*2);ctx.stroke();
+function drawLogo(cx, cy) {
+  const size = 42; // Size of logo in px
+  if (logoReady) {
+    ctx.save();
+    
+    // Set shadow properties for a soft drop shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 4;
+    
+    ctx.drawImage(logoImg, cx - size / 2, cy - size / 2, size, size);
+    ctx.restore();
+  } else {
+ 
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = 'rgba(92, 64, 51, 0.3)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(-5,7);ctx.lineTo(-5,-7);ctx.lineTo(3,-7);
-    ctx.quadraticCurveTo(8,-7,8,-2);ctx.quadraticCurveTo(8,3,3,3);ctx.lineTo(-5,3);
-    ctx.moveTo(1,3);ctx.lineTo(6,7);
-    ctx.strokeStyle='rgba(92,64,51,0.75)'; ctx.lineWidth=1.6; ctx.stroke();
+    ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
+}
 
   function drawJack(cx,cy,label){
     ctx.save();ctx.translate(cx,cy);
@@ -243,5 +279,5 @@ const WorkbenchStrip = (() => {
     if(Math.abs(x-cx)<32 && Math.abs(y-cy)<15){ bypassOn=!bypassOn; render(); }
   }
 
-  return { init, render };
+  return { init, render, getVisualHeight };
 })();
