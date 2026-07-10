@@ -68,9 +68,6 @@ const WorkbenchStrip = (() => {
     ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
     ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
   }
-  // Only the top two corners rounded. Combined with the OVERLAP trick above,
-  // this lets the strip's background peek through the (unmodified) board's
-  // rounded top corners below, instead of leaving a visible gap there.
   function roundRectTop(x,y,w,h,r){
     ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
     ctx.lineTo(x+w,y+h);ctx.lineTo(x,y+h);
@@ -200,76 +197,129 @@ function drawLogo(cx, cy) {
     ctx.fillText('POWER', 0, hh+16);
     ctx.restore();
   }
+  
+function drawSwitchCluster(cx, cy) {
+  ctx.save();
+  ctx.translate(cx, cy);
 
-  function drawSwitchCluster(cx,cy){
-    ctx.save(); ctx.translate(cx,cy);
-
-    const ledX=-58, ledY=-6;
-    ctx.save();ctx.translate(ledX,ledY);
-    const hex='#ff3b3b';
-    if(bypassOn){
-      const glow=ctx.createRadialGradient(0,0,0,0,0,14);
-      glow.addColorStop(0, hex+'cc'); glow.addColorStop(1,'transparent');
-      ctx.beginPath();ctx.arc(0,0,14,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();
-    }
-    ctx.beginPath();ctx.arc(0,0,5,0,Math.PI*2);
-    ctx.fillStyle = bypassOn ? hex : '#7a3030';
-    ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=0.8;ctx.stroke();
-    ctx.restore();
-
-    const clrX=-58, clrY=18;
-    ctx.save();ctx.translate(clrX,clrY);
-    const bw=26,bh=8;
-    ctx.fillStyle='#d4b896';roundRect(-bw/2,-bh/2,bw,bh,2);ctx.fill();
-    ctx.strokeStyle='#b09070';ctx.lineWidth=0.5;ctx.stroke();
-    ['#8B4513','#000','#f00','#c8a000'].forEach((col,i)=>{ctx.fillStyle=col;ctx.fillRect(-bw/2+4+i*4,-(bh-2)/2,2.4,bh-2);});
-    ctx.restore();
-    ctx.font='8px IBM Plex Mono, monospace'; ctx.fillStyle='rgba(92,64,51,0.7)'; ctx.textAlign='left';
-    ctx.fillText('CLR', clrX+16, clrY+3);
-
-    const swX=26;
-    ctx.save();ctx.translate(swX,0);
-    const bzW=64, bzH=30;
-    const gBz=ctx.createLinearGradient(0,-bzH/2,0,bzH/2);
-    gBz.addColorStop(0,'#9a9aa2');gBz.addColorStop(1,'#6a6a72');
-    roundRect(-bzW/2,-bzH/2,bzW,bzH,6); ctx.fillStyle=gBz; ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.35)';ctx.lineWidth=1;ctx.stroke();
-
-    const rW=56, rH=20, half=rW/2;
-    roundRect(-half,-rH/2,rW,rH,4); ctx.save(); ctx.clip();
-
-    const leftG = ctx.createLinearGradient(0,-rH/2,0,rH/2);
-    if(bypassOn){ leftG.addColorStop(0,'#8a8a92'); leftG.addColorStop(1,'#6e6e76'); }
-    else        { leftG.addColorStop(0,'#f2f2f5'); leftG.addColorStop(1,'#d4d4da'); }
-    ctx.fillStyle=leftG; ctx.fillRect(-half,-rH/2,half,rH);
-
-    const rightG = ctx.createLinearGradient(0,-rH/2,0,rH/2);
-    if(bypassOn){ rightG.addColorStop(0,'#f2f2f5'); rightG.addColorStop(1,'#d4d4da'); }
-    else        { rightG.addColorStop(0,'#8a8a92'); rightG.addColorStop(1,'#6e6e76'); }
-    ctx.fillStyle=rightG; ctx.fillRect(0,-rH/2,half,rH);
-
-    ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(0,-rH/2);ctx.lineTo(0,rH/2);ctx.stroke();
-    ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=1;
-    ctx.beginPath();
-    if(bypassOn) ctx.moveTo(0,-rH/2+1),ctx.lineTo(half,-rH/2+1);
-    else ctx.moveTo(-half,-rH/2+1),ctx.lineTo(0,-rH/2+1);
-    ctx.stroke();
-    ctx.restore();
-    ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=1; roundRect(-half,-rH/2,rW,rH,4); ctx.stroke();
-    ctx.restore();
-
-    const labelY = bzH/2+14;
-    ctx.font='bold 8px IBM Plex Mono, monospace'; ctx.fillStyle='rgba(92,64,51,0.8)';
-    ctx.textAlign='center';
-    ctx.fillText('BYPASS', swX-21, labelY);
-    ctx.fillText('ENGAGE', swX+21, labelY);
-    ctx.strokeStyle='rgba(92,64,51,0.5)'; ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.moveTo(swX,labelY-9);ctx.lineTo(swX,labelY+3);ctx.stroke();
-
-    ctx.restore();
+  // --- LED and CLR code ---
+  const ledX = -58, ledY = -6;
+  ctx.save(); ctx.translate(ledX, ledY);
+  const hex = '#00FF00';
+  if (bypassOn) {
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
+    glow.addColorStop(0, hex + 'cc'); glow.addColorStop(1, 'transparent');
+    ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fillStyle = glow; ctx.fill();
   }
+  ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
+  ctx.fillStyle = bypassOn ? hex : '#7a3030';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.restore();
+
+  const clrX = -58, clrY = 18;
+  ctx.save(); ctx.translate(clrX, clrY);
+  const bw = 26, bh = 8;
+  ctx.fillStyle = '#d4b896'; roundRect(-bw / 2, -bh / 2, bw, bh, 2); ctx.fill();
+  ctx.strokeStyle = '#b09070'; ctx.lineWidth = 0.5; ctx.stroke();
+  ['#8B4513', '#000', '#f00', '#c8a000'].forEach((col, i) => { ctx.fillStyle = col; ctx.fillRect(-bw / 2 + 4 + i * 4, -(bh - 2) / 2, 2.4, bh - 2); });
+  ctx.restore();
+  ctx.font = '8px IBM Plex Mono, monospace'; ctx.fillStyle = 'rgba(92,64,51,0.7)'; ctx.textAlign = 'left';
+  ctx.fillText('CLR', clrX + 16, clrY + 3);
+
+  // --- Toggle Switch ---
+  const swX = 26;
+  ctx.save(); ctx.translate(swX, 0);
+  const bzW = 64, bzH = 30;
+  const gBz = ctx.createLinearGradient(0, -bzH / 2, 0, bzH / 2);
+  gBz.addColorStop(0, '#9a9aa2'); gBz.addColorStop(1, '#6a6a72');
+  roundRect(-bzW / 2, -bzH / 2, bzW, bzH, 6); ctx.fillStyle = gBz; ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+
+  const rW = 56, rH = 20, half = rW / 2;
+  roundRect(-half, -rH / 2, rW, rH, 4); 
+  ctx.save(); 
+  ctx.clip();
+
+function fillHalf(active, left) {
+  ctx.save();
+  
+  // Create a clipping region for this half
+  if (left) {
+    ctx.beginPath();
+    ctx.rect(-half, -rH / 2, half, rH);
+  } else {
+    ctx.beginPath();
+    ctx.rect(0, -rH / 2, half, rH);
+  }
+  ctx.clip();
+  
+  if (active) {
+    // Active side: dark at center, light at outer edge
+    const grad = ctx.createLinearGradient(-half, 0, half, 0);
+    if (left) {
+      // Left half: dark at right (center), light at left (outer)
+      grad.addColorStop(0.5, '#3d3d3d');
+      grad.addColorStop(0.02, '#4a4a4a');
+      grad.addColorStop(0, '#606060');
+    } else {
+      // Right half: dark at left (center), light at right (outer)
+      grad.addColorStop(0.5, '#3d3d3d');
+      grad.addColorStop(0.98, '#4a4a4a');
+      grad.addColorStop(1, '#606060');
+    }
+    ctx.fillStyle = grad;
+  } else {
+    // Inactive side: light at outer edge, dark at center
+    const grad = ctx.createLinearGradient(-half, 0, half, 0);
+    if (left) {
+      // Left half: dark at center, abruptly transitions to gray then white edge
+      grad.addColorStop(0.5, '#4a4a4a');
+      grad.addColorStop(0.03, '#909090');
+      grad.addColorStop(0.005, '#ffffff');
+    } else {
+      // Right half: dark at center, abruptly transitions to gray then white edge
+      grad.addColorStop(0.5, '#4a4a4a');
+      grad.addColorStop(0.97, '#909090');
+      grad.addColorStop(0.995, '#ffffff');
+    }
+    ctx.fillStyle = grad;
+  }
+  
+  // Fill the appropriate half
+  if (left) {
+    ctx.fillRect(-half, -rH / 2, half, rH);
+  } else {
+    ctx.fillRect(0, -rH / 2, half, rH);
+  }
+  
+  ctx.restore();
+}
+
+  fillHalf(!bypassOn, true);
+  fillHalf(bypassOn, false);
+
+  ctx.restore();
+
+  // Divider line
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, -rH / 2); ctx.lineTo(0, rH / 2); ctx.stroke();
+
+  // Outer border
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; roundRect(-half, -rH / 2, rW, rH, 4); ctx.stroke();
+  ctx.restore();
+
+  // Labels
+  const labelY = bzH / 2 + 14;
+  ctx.font = 'bold 8px IBM Plex Mono, monospace'; ctx.fillStyle = 'rgba(92,64,51,0.8)';
+  ctx.textAlign = 'center';
+  ctx.fillText('BYPASS', swX - 21, labelY);
+  ctx.fillText('ENGAGE', swX + 21, labelY);
+  ctx.strokeStyle = 'rgba(92,64,51,0.5)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(swX, labelY - 9); ctx.lineTo(swX, labelY + 3); ctx.stroke();
+
+  ctx.restore();
+}
 
   function onClick(e){
     const rect=canvas.getBoundingClientRect();
