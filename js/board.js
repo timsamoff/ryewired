@@ -766,5 +766,5 @@ const Board = (() => {
 
   return{init,render,clear,loadLayout,getLayoutData,getPlaced,getWires,addWire,nextWireColor,
     setDragGhost,setStartWire,clearWire,setSelected,getSelected,deleteSelected,
-    onSelect,onPlace,holeToXY,xyToHole,redraw,setZoom};
+    onSelect,onPlace,holeToXY,xyToHole,redraw,setZoom,getBoardWidth:boardWidth};
 })();

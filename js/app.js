@@ -14,6 +14,7 @@ let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
   await ComponentRegistry.load();
 
   Board.init(document.getElementById('board-canvas'));
+  WorkbenchStrip.init(document.getElementById('workbench-strip-canvas'));
   Palette.init();
   Palette.populate(ComponentRegistry.getAll());
   PropertiesPanel.init();
@@ -224,12 +225,14 @@ function snapZoom(v) { return Math.round(v / ZOOM_STEP) * ZOOM_STEP; }
 function fitBoard() {
   const scroll = document.getElementById('board-scroll');
   const canvas = document.getElementById('board-canvas');
+  const strip  = document.getElementById('workbench-strip-canvas');
   if (!scroll || !canvas) return;
   const aW = scroll.clientWidth  - 56;
   const aH = scroll.clientHeight - 56;
   // Use CSS (logical) size, not canvas.width which is DPR-inflated
   const bW = parseFloat(canvas.style.width)  || canvas.clientWidth;
-  const bH = parseFloat(canvas.style.height) || canvas.clientHeight;
+  const stripH = strip ? (parseFloat(strip.style.height) || strip.clientHeight || 0) : 0;
+  const bH = (parseFloat(canvas.style.height) || canvas.clientHeight) + stripH;
   if (!bW || !bH) return;
   const raw = Math.min(aW / bW, aH / bH, 1.0);
   applyZoom(Math.max(ZOOM_MIN, snapZoom(raw)));

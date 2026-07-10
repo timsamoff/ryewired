@@ -287,6 +287,16 @@ input, select, textarea { font-family: var(--font-ui); }
   transition: transform 0.12s ease;
 }
 
+/* Permanent hardware strip — sits flush above the board canvas below it;
+   rounded on top only so the two read as one continuous molded piece where
+   they meet (the board canvas itself is completely unchanged). */
+#workbench-strip-canvas {
+  display: block;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 0 1px var(--border);
+  cursor: default;
+}
+
 #board-canvas {
   display: block; border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
@@ -642,7 +652,7 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
   display: flex; align-items: center; gap: 10px; padding: 14px 20px;
   background: var(--alert-subtle); border-bottom: 1px solid var(--alert-dim);
   font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-  letter-spacing: 0.12em; color: var(--text-on-alert); text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--alert); text-transform: uppercase;
 }
 #failure-header i { font-size: 14px; }
 #failure-icon-wrap { padding: 20px; text-align: center; font-size: 52px; line-height: 1; }
