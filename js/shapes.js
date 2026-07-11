@@ -132,9 +132,7 @@ const Shapes = (() => {
       const germColor='#a8a8a8';
       ctx.beginPath();ctx.arc(0,cy,r,0,Math.PI*2);ctx.fillStyle=germColor;ctx.fill();
       ctx.strokeStyle='#787878';ctx.lineWidth=0.8;ctx.stroke();
-      // Locating tab on the emitter side — real metal cans have a small
-      // rim tab marking pin orientation. Same color as the body, pushed
-      // outward past the circle's edge rather than straddling it.
+
       const eSide = pinout[0]==='E' ? -1 : 1;
       const tabSize = r*0.26;
       const tabPush = 3.5;
@@ -211,11 +209,8 @@ const Shapes = (() => {
     ctx.fillText(def.symbol||def.id.slice(0,4).toUpperCase(),0,3);
   }
 
-  // ── Dispatcher ─────────────────────────────────────────────────────────────
-  // The one place that maps a component id to its drawing function. `theme`
-  // is a small color object: { success, alert, scopeTrace }. Board.js passes
-  // its real CSS-variable-driven theme; palette.js passes a plain fallback
-  // (the drag-cursor icon doesn't need to track live theme changes).
+  // ── Dispatcher ─────────────────────────────────────────────────────────────\
+
   function drawBody(ctx,def,inst,theme,halfLen,ang){
     const bw=def.visual?.body_width||28, bh=def.visual?.body_height||14, col=def.visual?.body_color||'#888';
     switch(def.id){

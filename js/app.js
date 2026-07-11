@@ -15,6 +15,7 @@ let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
 
   Board.init(document.getElementById('board-canvas'));
   WorkbenchStrip.init(document.getElementById('workbench-strip-canvas'));
+  TraceOverlay.init(document.getElementById('trace-overlay-canvas'));
   Palette.init();
   Palette.populate(ComponentRegistry.getAll());
   PropertiesPanel.init();

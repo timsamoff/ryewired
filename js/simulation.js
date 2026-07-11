@@ -23,19 +23,13 @@ const Simulation = (() => {
     const wires  = Board.getWires();
     if (!placed.length) return;
 
-    // 1. Build union-find net map
     const nets = buildNetMap(placed, wires);
 
-    // 2. Find supply voltage and which nets are VCC / GND
     const supplyInst = placed.find(p => p.defId === 'power_supply' && !p.failed);
     const Vsupply    = supplyInst ? (parseFloat(supplyInst.props.voltage) || 9) : 0;
 
     let vccNet = null, gndNet = null;
     if (supplyInst && supplyInst.legs.length >= 2) {
-      // The board visually labels leg 0 as '–' and leg 1 as '+' (see
-      // board.js's power-supply polarity labels) — match that here so the
-      // visual and the actual electrical assignment agree. reverse_polarity
-      // swaps it.
       const reversed = !!supplyInst.props.reverse_polarity;
       const posLeg = reversed ? supplyInst.legs[0] : supplyInst.legs[1];
       const negLeg = reversed ? supplyInst.legs[1] : supplyInst.legs[0];
@@ -48,14 +42,6 @@ const Simulation = (() => {
       gndNet = nets.find(nets.key('rbm', 0));
     }
 
-    // 3. Solve the resistive network for EVERY net, not just VCC/GND.
-    // (Previously only vccNet/gndNet ever got a voltage; every other node —
-    // e.g. the node between a series resistor and an LED — fell through to
-    // `?? 0`, which silently mimicked "grounded" even when it wasn't. That
-    // made series circuits behave inconsistently depending on which side of
-    // a component happened to touch a rail directly. solveNetVoltages()
-    // does a real nodal solve, including diode/LED behavior, so every net
-    // gets a physically-derived voltage.)
     const { netVoltage, diodeCurrents } = solveNetVoltages(placed, nets, vccNet, gndNet, Vsupply);
 
     // 4. Solve each component
@@ -104,20 +90,6 @@ const Simulation = (() => {
         const vAnode   = vA ?? 0;
         const vCathode = vB ?? 0;
         const vAcross  = vAnode - vCathode;
-
-        // leg 0 = anode, leg 1 = cathode. Matches the LED's default visual
-        // (drawLED in shapes.js): dome/anode on the left ('+'), flat
-        // face/cathode on the right ('–'). Orientation changes via Rotate,
-        // which swaps which world-space hole each leg index lands in — so
-        // this needs no flip flag.
-
-        // Current now comes straight from the nodal solve (solveNetVoltages),
-        // which already modeled this exact LED as a diode edge and settled
-        // on a consistent on/off state and current for the whole network.
-        // This replaces the old approach of independently re-deriving vAcross
-        // and current here with a resistor-hunting helper (findSeriesResistance),
-        // which only ever found a single directly-touching resistor and broke
-        // for any less-trivial series/parallel arrangement.
         const I = diodeCurrents?.get(inst) ?? 0;
 
         if (I <= 0 && vCathode - vAnode > Vf * 0.5) {
@@ -160,9 +132,6 @@ const Simulation = (() => {
         const pm  = def.model_params?.[mk] || {};
         const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
         const vbe = pm.vbe || 0.65;
-        // Base is always the physical center leg (leg 1). Which outer leg
-        // is Emitter vs Collector depends on the pinout setting — B is
-        // fixed either way, only E/C swap ends.
         const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
         const vB  = legVoltage(inst, 1, nets, netVoltage);
         const vE  = legVoltage(inst, eIdx, nets, netVoltage);
@@ -181,9 +150,6 @@ const Simulation = (() => {
         const pm  = def.model_params?.[mk] || {};
         const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
         const vbe = pm.vbe || 0.65; // magnitude of the Veb turn-on threshold
-        // Same physical leg layout as bjt_npn (B is always leg 1), but PNP
-        // conducts the opposite way: emitter must sit ABOVE base by vbe,
-        // not base above emitter.
         const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
         const vB  = legVoltage(inst, 1, nets, netVoltage);
         const vE  = legVoltage(inst, eIdx, nets, netVoltage);
@@ -418,10 +384,6 @@ const Simulation = (() => {
       union(k1, k2);
     }
 
-    // Closed switches behave like a wire between their two legs. (Previously
-    // a switch's open/closed state only set inst._closed for display —
-    // nothing ever unioned its legs, so no current could pass through a
-    // switch in ANY state.)
     for (const inst of placed) {
       const def = ComponentRegistry.getById(inst.defId);
       if (def?.behavior?.type !== 'switch_spst') continue;

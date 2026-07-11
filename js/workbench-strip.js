@@ -11,19 +11,8 @@
 const WorkbenchStrip = (() => {
   let canvas, ctx, _dpr = 1;
 
-  // Same unit scale as board.js (HOLE_PITCH=20, ML/MR=52, MT/MB=14) so this
-  // strip is proportional to the real board without needing to duplicate its
-  // full layout math — it only borrows the handful of constants relevant here.
   const HOLE_PITCH = 20;
   const STRIP_H = 96;
-  // The board canvas below is completely unmodified, so its top corners are
-  // still rounded. Rather than leaving a visible gap there, the strip's own
-  // background is drawn OVERLAP px taller than its visible content, and pulled
-  // back up by the same amount via a negative CSS margin (see app.css) — so
-  // the board (painted after, in DOM order) covers that extra strip content
-  // everywhere except inside its own rounded corner notches, where the strip's
-  // background shows through instead of the page background. Net layout
-  // height is unchanged; only the corner seam looks different.
   const OVERLAP = 16;
   const BYPASS_ON_DEFAULT = false;
 
@@ -46,9 +35,6 @@ const WorkbenchStrip = (() => {
     return (typeof Board !== 'undefined' && Board.getBoardWidth) ? Board.getBoardWidth() : 800;
   }
 
-  // Layout-flow height this strip actually occupies (excludes the hidden
-  // overlap, which is cancelled out by the negative margin) — used by
-  // app.js's fitBoard() so "fit to screen" still accounts for this correctly.
   function getVisualHeight() { return STRIP_H; }
 
   function render() {
@@ -81,29 +67,32 @@ const WorkbenchStrip = (() => {
     ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
   }
 
-  // Real board column positions (via Board's own holeToXY — same source of
-  // truth the board itself uses, so these line up with actual holes once
-  // wiring is added later). Falls back to a fraction of width if Board isn't
-  // ready yet, so this never throws during early load.
+  function labelBg(text, cx, cy, font){
+    ctx.save();
+    ctx.font = font;
+    const w = ctx.measureText(text).width;
+    const padX = 4, padY = 2, h = 8;
+    ctx.fillStyle = '#DCD5CA'; // approximates the strip's own background gradient
+    roundRect(cx - w/2 - padX, cy - h/2 - padY, w + padX*2, h + padY*2, 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   function colX(col, fallbackFrac) {
     if (typeof Board !== 'undefined' && Board.holeToXY) return Board.holeToXY(0, col).x;
     return boardWidth()*fallbackFrac;
   }
-  // This board is a lot longer than the mockup's — pulled the jacks in from
-  // the very edge a bit now that there's room to spread things out.
+
   function inputX(){ return colX(6, 0.10); }
   function outputX(){ return colX(55, 0.90); }
   function powerMinusX(){ return colX(18, 0.29); }
   function powerPlusX(){ return colX(19, 0.31); }
   function powerX(){ return (powerMinusX()+powerPlusX())/2; }
-  // Switch/LED/CLR cluster centered between the power supply and the output
-  // jack, rather than a fixed fraction of total width.
   function switchX(){ return (powerX()+outputX())/2; }
 
   function drawStrip(w,h){
     ctx.save();
-    // Background is drawn OVERLAP px taller than h (see OVERLAP comment above)
-    // so it can peek through the board's rounded top corners below.
+
     const grad = ctx.createLinearGradient(0,0,0,h);
     grad.addColorStop(0,'#E4DED6'); grad.addColorStop(1,'#D9D2C8');
     ctx.fillStyle=grad;
@@ -111,15 +100,14 @@ const WorkbenchStrip = (() => {
     ctx.fill();
     ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=1; ctx.stroke();
 
-    // Traces drawn BEFORE the components/labels that sit on top of them, so
-    // labels stay fully legible wherever a trace happens to run underneath —
-    // rather than the trace painting over already-drawn label text.
-    drawTrace(inputX(), h*0.62, inputX(), h);
-    drawTrace(outputX(), h*0.62, outputX(), h);
-    drawTrace(powerMinusX(), h*0.68, powerMinusX(), h, 'rgba(43,87,154,0.45)');
-    drawTrace(powerPlusX(),  h*0.68, powerPlusX(),  h, 'rgba(176,32,46,0.45)');
+    const jackTraceStart  = h/2 + 22; // just below the jack's hex nut
+    const powerTraceStart = h/2 + 24; // just below the power block
+    drawTrace(inputX(), jackTraceStart, inputX(), h);
+    drawTrace(outputX(), jackTraceStart, outputX(), h);
+    drawTrace(powerMinusX(), powerTraceStart, powerMinusX(), h, 'rgba(43,87,154,0.45)');
+    drawTrace(powerPlusX(),  powerTraceStart, powerPlusX(),  h, 'rgba(176,32,46,0.45)');
 
-    drawLogo(48, h/2); // left edge sits at x=35, matching the vertical (top/bottom) margin around a 26px logo
+    drawLogo(48, h/2);
     drawJack(inputX(), h/2, 'IN');
     drawPowerBlock(powerX(), h/2);
     drawSwitchCluster(switchX(), h/2);
@@ -176,7 +164,9 @@ function drawLogo(cx, cy) {
     ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=1;ctx.stroke();
     ctx.beginPath();ctx.arc(0,0,barrelR*0.82,0,Math.PI*2);ctx.fillStyle='#141414';ctx.fill();
 
-    ctx.font='bold 9px IBM Plex Mono, monospace'; ctx.textAlign='center'; ctx.fillStyle='rgba(92,64,51,0.8)';
+    ctx.font='bold 9px IBM Plex Mono, monospace'; ctx.textAlign='center';
+    labelBg(label, 0, hexR+11, ctx.font);
+    ctx.fillStyle='rgba(92,64,51,0.8)';
     ctx.fillText(label,0,hexR+14);
     ctx.restore();
   }
@@ -193,7 +183,9 @@ function drawLogo(cx, cy) {
     ctx.fillStyle='rgba(255,255,255,0.85)';
     ctx.fillText('–',0,-hh+10);
     ctx.fillText('+',0,hh-4);
-    ctx.font='bold 9px IBM Plex Mono, monospace'; ctx.fillStyle='rgba(92,64,51,0.8)'; ctx.textAlign='center';
+    ctx.font='bold 9px IBM Plex Mono, monospace'; ctx.textAlign='center';
+    labelBg('POWER', 0, hh+13, ctx.font);
+    ctx.fillStyle='rgba(92,64,51,0.8)';
     ctx.fillText('POWER', 0, hh+16);
     ctx.restore();
   }
@@ -203,7 +195,7 @@ function drawSwitchCluster(cx, cy) {
   ctx.translate(cx, cy);
 
   // --- LED and CLR code ---
-  const ledX = -58, ledY = -6;
+  const ledX = -80, ledY = -6;
   ctx.save(); ctx.translate(ledX, ledY);
   const hex = '#00FF00';
   if (bypassOn) {
@@ -217,27 +209,29 @@ function drawSwitchCluster(cx, cy) {
   ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.8; ctx.stroke();
   ctx.restore();
 
-  const clrX = -58, clrY = 18;
+  const clrX = -80, clrY = 18;
   ctx.save(); ctx.translate(clrX, clrY);
-  const bw = 26, bh = 8;
-  ctx.fillStyle = '#d4b896'; roundRect(-bw / 2, -bh / 2, bw, bh, 2); ctx.fill();
+  const bw = 28, bh = 12;
+  ctx.fillStyle = '#d4b896'; roundRect(-bw / 2, -bh / 2, bw, bh, 3); ctx.fill();
   ctx.strokeStyle = '#b09070'; ctx.lineWidth = 0.5; ctx.stroke();
-  ['#8B4513', '#000', '#f00', '#c8a000'].forEach((col, i) => { ctx.fillStyle = col; ctx.fillRect(-bw / 2 + 4 + i * 4, -(bh - 2) / 2, 2.4, bh - 2); });
+  ['#8B4513', '#000', '#f00', '#c8a000'].forEach((col, i) => { ctx.fillStyle = col; ctx.fillRect(-bw / 2 + 6 + i * 6, -(bh - 2) / 2, 4, bh - 2); });
   ctx.restore();
-  ctx.font = '8px IBM Plex Mono, monospace'; ctx.fillStyle = 'rgba(92,64,51,0.7)'; ctx.textAlign = 'left';
-  ctx.fillText('CLR', clrX + 16, clrY + 3);
+ctx.font = 'bold 8px IBM Plex Mono, monospace';
+ctx.textAlign = 'left';
+labelBg('CLR', clrX + bw/2 + 6 + 8, clrY + 2, ctx.font);
+ctx.fillStyle = 'rgba(92,64,51,0.8)';
+ctx.fillText('CLR', clrX + bw/2 + 6, clrY + 3);
 
-  // --- Toggle Switch ---
-  const swX = 26;
+  const swX = 80;
   ctx.save(); ctx.translate(swX, 0);
-  const bzW = 64, bzH = 30;
+  const bzW = 96, bzH = 45;
   const gBz = ctx.createLinearGradient(0, -bzH / 2, 0, bzH / 2);
   gBz.addColorStop(0, '#9a9aa2'); gBz.addColorStop(1, '#6a6a72');
-  roundRect(-bzW / 2, -bzH / 2, bzW, bzH, 6); ctx.fillStyle = gBz; ctx.fill();
+  roundRect(-bzW / 2, -bzH / 2, bzW, bzH, 9); ctx.fillStyle = gBz; ctx.fill();
   ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke();
 
-  const rW = 56, rH = 20, half = rW / 2;
-  roundRect(-half, -rH / 2, rW, rH, 4); 
+  const rW = 84, rH = 30, half = rW / 2;
+  roundRect(-half, -rH / 2, rW, rH, 6); 
   ctx.save(); 
   ctx.clip();
 
@@ -309,12 +303,15 @@ function fillHalf(active, left) {
   ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; roundRect(-half, -rH / 2, rW, rH, 4); ctx.stroke();
   ctx.restore();
 
-  // Labels
+  // Labels — back below the switch (moving them above wasn't reading well)
   const labelY = bzH / 2 + 14;
-  ctx.font = 'bold 8px IBM Plex Mono, monospace'; ctx.fillStyle = 'rgba(92,64,51,0.8)';
+  ctx.font = 'bold 8px IBM Plex Mono, monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('BYPASS', swX - 21, labelY);
-  ctx.fillText('ENGAGE', swX + 21, labelY);
+  labelBg('BYPASS', swX - 32, labelY - 3, ctx.font);
+  labelBg('ENGAGE', swX + 32, labelY - 3, ctx.font);
+  ctx.fillStyle = 'rgba(92,64,51,0.8)';
+  ctx.fillText('BYPASS', swX - 32, labelY);
+  ctx.fillText('ENGAGE', swX + 32, labelY);
   ctx.strokeStyle = 'rgba(92,64,51,0.5)'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(swX, labelY - 9); ctx.lineTo(swX, labelY + 3); ctx.stroke();
 
@@ -325,9 +322,16 @@ function fillHalf(active, left) {
     const rect=canvas.getBoundingClientRect();
     const x=(e.clientX-rect.left)*(canvas.width/rect.width)/_dpr;
     const y=(e.clientY-rect.top)*(canvas.height/rect.height)/_dpr;
-    const cx = switchX()+26, cy = STRIP_H/2;
-    if(Math.abs(x-cx)<32 && Math.abs(y-cy)<15){ bypassOn=!bypassOn; render(); }
+    const cx = switchX()+80, cy = STRIP_H/2;
+    if(Math.abs(x-cx)<48 && Math.abs(y-cy)<23){ bypassOn=!bypassOn; render(); }
   }
 
-  return { init, render, getVisualHeight };
+  return {
+    init, render, getVisualHeight,
+    getConnectionPoints: () => ({
+      inputX: inputX(), outputX: outputX(),
+      powerMinusX: powerMinusX(), powerPlusX: powerPlusX(),
+      inputCol: 6, outputCol: 55, powerMinusCol: 18, powerPlusCol: 19
+    })
+  };
 })();

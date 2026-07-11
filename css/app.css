@@ -283,8 +283,20 @@ input, select, textarea { font-family: var(--font-ui); }
 
 /* Board canvas wrapped in a transform container for zoom */
 #board-transform {
+  position: relative; /* anchors #trace-overlay-canvas below */
   transform-origin: top left;
   transition: transform 0.12s ease;
+}
+
+/* Bridges the workbench strip's traces into the real board holes. Purely a
+   visual overlay — transparent, click-through, and drawn on top of both the
+   strip and the (untouched) board canvas, so neither of those needs to
+   change for this connection to be visible. */
+#trace-overlay-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* Permanent hardware strip — sits flush above the board canvas below it;
@@ -763,14 +775,14 @@ body.dragging  #board-canvas { cursor: grabbing; }
 
 #help-support a,
 #help-copyright a {
-  color: var(--accent);
+  color: var(--text-primary);
   text-decoration: none;
   transition: color var(--t-fast);
 }
 
 #help-support a:hover,
 #help-copyright a:hover {
-  color: var(--accent-hover);
+  color: var(--text-primary);
   text-decoration: underline;
 }
 
@@ -780,7 +792,7 @@ body.dragging  #board-canvas { cursor: grabbing; }
 }
 
 #help-copyright {
-  color: var(--text-dim);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 10px;
   margin-bottom: 12px;

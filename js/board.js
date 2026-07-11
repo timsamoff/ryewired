@@ -599,17 +599,6 @@ const Board = (() => {
     if(_dragMode==='wire-dragging'){_dragMode='idle';_dragWire=null;_dragWireEnd=-1;_savedWireEnds=null;Storage.markDirty();History.push();render();return;}
     if(_dragMode==='comp-dragging'){
       if(_dragInst&&_savedLegs){
-        // Snap as a rigid body: find where the reference leg (leg 0) lands,
-        // then shift every other leg by that same PIXEL delta (not a row
-        // index delta) and re-resolve each to its own nearest hole. Pixel
-        // math is what lets this bridge numeric rows and rail rows
-        // correctly — e.g. a power supply's top leg landing on a rail
-        // while its bottom leg lands in the regular grid a couple of rows
-        // down. Snapping each leg independently (the old approach) let
-        // multi-leg parts drift out of their correct relative spacing over
-        // repeated drags; snapping only by numeric-row delta (an earlier
-        // fix) broke dropping onto rails entirely, since rail rows aren't
-        // numbers. This is the general fix for both.
         const ref=_savedLegs[0];
         const {x:rx,y:ry}=holeToXY(ref.row,ref.col);
         const snapped=xyToHole(rx+_dragOffsetX, ry+_dragOffsetY, DROP_SNAP_RADIUS);
@@ -626,9 +615,6 @@ const Board = (() => {
             newLegs.push(h);
           }
           if(ok) _dragInst.legs=newLegs;
-          // else: couldn't resolve every leg to a real hole at the shifted
-          // position — leave the part at its original position rather than
-          // risk a partially-invalid layout.
         } // no hole nearby the reference leg: leave the part at its original position
       }
       _dragMode='idle';_dragOffsetX=0;_dragOffsetY=0;
@@ -687,10 +673,6 @@ const Board = (() => {
     const inst=ComponentRegistry.createInstance(defId,hole.row,hole.col);
 
     if (defId==='power_supply' && inst.legs.length===2) {
-      // Power flows up/down the board, so the supply defaults to standing
-      // vertically instead of lying sideways. Done here in real pixels
-      // (not row arithmetic) so it works correctly whether the drop landed
-      // on a rail (a string row key) or a normal numeric row.
       const def  = ComponentRegistry.getById(defId);
       const span = def.leg_span || 2;
       const orig = inst.legs[0];
@@ -698,12 +680,6 @@ const Board = (() => {
       const other = xyToHole(x0, y0 - span*HOLE_PITCH, DROP_SNAP_RADIUS)
                  || xyToHole(x0, y0 + span*HOLE_PITCH, DROP_SNAP_RADIUS);
       if (other) {
-        // A rail hole's row key directly encodes its real polarity —
-        // 'rtp'/'rbp' are + (red), 'rtm'/'rbm' are – (blue) — regardless
-        // of screen position. That's the ground truth when either leg
-        // actually lands on a rail: comparing absolute Y instead would get
-        // it backwards, since the – row sits physically ABOVE the + row
-        // within BOTH the top and bottom rail strips.
         const railPol = row => (row==='rtp'||row==='rbp') ? '+' : (row==='rtm'||row==='rbm') ? '-' : null;
         const origPol = railPol(orig.row), otherPol = railPol(other.row);
         if (origPol==='+' || otherPol==='-') {
@@ -711,9 +687,6 @@ const Board = (() => {
         } else if (origPol==='-' || otherPol==='+') {
           inst.legs = [orig, other]; // orig is the – one -> leg 0
         } else {
-          // Neither landed on a rail (open main grid) — default to the
-          // board's regular-polarity look: topmost becomes leg 0 (–, blue),
-          // bottommost becomes leg 1 (+, red).
           const {y:oy} = holeToXY(other.row, other.col);
           inst.legs = (oy < y0) ? [other, orig] : [orig, other];
         }

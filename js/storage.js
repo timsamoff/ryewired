@@ -156,7 +156,7 @@ const Storage = (() => {
     const d=document.getElementById('app-dirty');
     if(n) n.textContent=_fileName||'Untitled';
     if(d) d.classList.toggle('hidden',!dirty);
-    document.title='Ryewired — '+(_fileName||'Untitled');
+    document.title='RYEWIRED — '+(_fileName||'Untitled');
   }
 
   function markDirty()   { updateTitle(true); }
