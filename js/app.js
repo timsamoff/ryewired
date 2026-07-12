@@ -31,6 +31,12 @@ let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
     document.body.classList.toggle('comp-selected', !!inst);
   });
 
+  // Permanent workbench device clicks (Power Supply / Input / Output)
+  WorkbenchStrip.onSelectPermanent(kind => {
+    PropertiesPanel.showPermanent(kind);
+    document.body.classList.add('comp-selected');
+  });
+
   Board.onPlace(inst => {
     Storage.markDirty();
     const label = ComponentRegistry.getById(inst.defId)?.label || inst.defId;

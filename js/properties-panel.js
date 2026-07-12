@@ -4,15 +4,132 @@ const PropertiesPanel = (() => {
   let _content;
   let _currentInst = null;
   let _currentWire = null;
+  let _currentPermanentKind = null; // 'power' | 'input' | 'output' | null
+
+  // Property schemas for the permanent workbench devices (Phase 1 of the
+  // "Future Workbench Architecture" doc). These mirror the same `properties`
+  // array shape used by component JSON files, specifically so buildPropField()
+  // below can render them with zero special-casing. State itself lives in
+  // WorkbenchStrip, not here — this table is just "what fields to show."
+  // Anything the doc marks "(future)" (max current/current limiting, battery
+  // health, Output Device, Record Audio, Live Audio Input) is intentionally
+  // left out for now.
+  const PERMANENT_DEFS = {
+    power: {
+      label: 'Power Supply', symbol: '9V',
+      properties: [
+        { key:'voltage', label:'Voltage (V)', type:'number', default:9, min:1, max:24 },
+        { key:'reverse_polarity', label:'Reverse Polarity', type:'boolean', default:false },
+        { key:'power_on', label:'Power On', type:'boolean', default:true },
+        { key:'battery_sag', label:'Battery Sag', type:'range', min:0, max:1, step:0.01, default:0 },
+        { key:'internal_resistance', label:'Internal Resistance (Ω)', type:'number', default:1, min:0 },
+      ]
+    },
+    input: {
+      label: 'Input', symbol: 'IN',
+      properties: [
+        { key:'waveform', label:'Source', type:'select', default:'Sine',
+          options:['Sine','Square','Triangle','Sawtooth','White Noise','Pink Noise','Audio File'] },
+        { key:'frequency', label:'Frequency (Hz)', type:'number', default:440, min:1, max:20000 },
+        { key:'amplitude', label:'Amplitude (V)', type:'number', default:1.0, min:0.01, max:12 },
+        { key:'dc_offset', label:'DC Offset (V)', type:'number', default:0, min:-12, max:12 },
+        { key:'phase', label:'Phase (°)', type:'number', default:0, min:0, max:360 },
+        { key:'looping', label:'Loop Audio File', type:'boolean', default:true },
+        { key:'audio_file', label:'Audio File', type:'audio_file', default:null },
+      ]
+    },
+    output: {
+      label: 'Output', symbol: 'OUT',
+      properties: [
+        { key:'volume', label:'Master Volume', type:'range', min:0, max:1, step:0.01, default:1.0 },
+        { key:'mute', label:'Mute', type:'boolean', default:false },
+      ]
+    }
+  };
 
   function init() { _content = document.getElementById('props-content'); }
 
   function show(inst, wire) {
     _currentInst = inst;
     _currentWire = wire;
+    _currentPermanentKind = null;
     if (wire && !inst) { showWire(wire); return; }
     if (!inst)         { hide();         return; }
     showComponent(inst);
+  }
+
+  // ── Permanent workbench devices (Power Supply, Input, Output) ────────────────
+  function showPermanent(kind) {
+    const def = PERMANENT_DEFS[kind];
+    if (!def || typeof WorkbenchStrip === 'undefined') return;
+    _currentInst = null; _currentWire = null;
+    _currentPermanentKind = kind;
+
+    const state = WorkbenchStrip.getPermanentState()[kind];
+
+    let html = `
+      <div class="prop-component-header">
+        <div class="prop-component-symbol">${def.symbol}</div>
+        <div class="prop-component-info">
+          <div class="prop-component-label">${def.label}</div>
+          <div class="prop-component-id">Permanent Workbench Device</div>
+        </div>
+      </div>`;
+
+    for (const prop of def.properties) {
+      html += buildPropField(prop, state[prop.key], undefined, undefined);
+    }
+    // No Rotate section (nothing to rotate) and no Remove button — permanent
+    // devices are fixed, non-draggable parts of the workbench, per the doc.
+
+    _content.innerHTML = html;
+
+    _content.querySelectorAll('.prop-input, input[type="range"]').forEach(el => {
+      el.addEventListener('input',  onPermanentPropChange);
+      el.addEventListener('change', onPermanentPropChange);
+    });
+
+    const audioBtn = _content.querySelector('.prop-audio-btn');
+    if (audioBtn) {
+      audioBtn.addEventListener('click', async () => {
+        const fileData = await Storage.openAudioFile();
+        if (!fileData) return;
+        const name = await AudioEngine.loadAudioFile(fileData);
+        if (!name) return;
+        state.audio_file = name;
+        const nameEl = _content.querySelector('.prop-audio-name');
+        if (nameEl) nameEl.textContent = name;
+        audioBtn.innerHTML = '<i class="fa-solid fa-music"></i> Change Audio File';
+        Storage.markDirty(); History.pushDebounced();
+      });
+    }
+  }
+
+  function onPermanentPropChange(e) {
+    const kind = _currentPermanentKind;
+    if (!kind) return;
+    const key = e.target.dataset.key;
+    if (!key) return;
+    const def   = PERMANENT_DEFS[kind];
+    const prop  = def.properties.find(p=>p.key===key);
+    const state = WorkbenchStrip.getPermanentState()[kind];
+    const rawVal = e.target.value;
+
+    if (prop?.type==='number' || e.target.type==='range') {
+      state[key] = rawVal==='' ? '' : parseFloat(rawVal);
+    } else if (prop?.type==='boolean') {
+      state[key] = rawVal==='true';
+    } else {
+      state[key] = rawVal;
+    }
+
+    if (prop?.type==='range') {
+      const v = document.getElementById(`rval-${key}`);
+      if (v) v.textContent = Math.round(parseFloat(rawVal)*100)+'%';
+    }
+
+    WorkbenchStrip.render();
+    Storage.markDirty(); History.pushDebounced();
   }
 
   // ── Wire ────────────────────────────────────────────────────────────────────
@@ -299,7 +416,7 @@ const PropertiesPanel = (() => {
   }
 
   function hide() {
-    _currentInst = null; _currentWire = null;
+    _currentInst = null; _currentWire = null; _currentPermanentKind = null;
     _content.innerHTML = `
       <div class="props-empty">
         <i class="fa-solid fa-arrow-pointer"></i>
@@ -307,5 +424,5 @@ const PropertiesPanel = (() => {
       </div>`;
   }
 
-  return { init, show, hide };
+  return { init, show, hide, showPermanent };
 })();

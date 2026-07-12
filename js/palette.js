@@ -17,6 +17,10 @@ const Palette = (() => {
   function populate(defs) { render(defs); }
 
   function render(defs) {
+    // Signal Generator stays registered (so any already-placed instance from
+    // an earlier save still renders/simulates) but is hidden from the
+    // palette — its functionality now lives on the permanent Input device.
+    defs = defs.filter(d => d.id !== 'signal_generator');
     _list.innerHTML = '';
     const groups = {};
     for (const def of defs) {

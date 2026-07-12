@@ -732,9 +732,17 @@ const Board = (() => {
   function redraw(){render();}
 
   function clear(){_placed=[];_wires=[];setSelected(null,null);}
-  function loadLayout(layout){_placed=layout.components||[];_wires=layout.wires||[];setSelected(null,null);render();}
+  function loadLayout(layout){
+    _placed=layout.components||[];_wires=layout.wires||[];setSelected(null,null);
+    if (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.setPermanentState) {
+      WorkbenchStrip.setPermanentState(layout.permanentDevices);
+    }
+    render();
+  }
   function getLayoutData(){
-    return{components:_placed.map(inst=>{const c=Utils.clone(inst);delete c._voltage;delete c._current;delete c._audioNode;delete c._brightness;delete c._state;delete c._pressed;return c;}),wires:_wires};
+    const permanentDevices = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getPermanentState)
+      ? WorkbenchStrip.getPermanentState() : undefined;
+    return{components:_placed.map(inst=>{const c=Utils.clone(inst);delete c._voltage;delete c._current;delete c._audioNode;delete c._brightness;delete c._state;delete c._pressed;return c;}),wires:_wires,permanentDevices};
   }
 
   return{init,render,clear,loadLayout,getLayoutData,getPlaced,getWires,addWire,nextWireColor,

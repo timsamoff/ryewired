@@ -4,9 +4,11 @@
 // above the (unmodified) board canvas, sized to match its width exactly via
 // Board.getBoardWidth() so the two always stay proportional to each other.
 //
-// This is visual only, matching the approved mockup pixel-for-pixel at the
-// same unit scale as the real board (same HOLE_PITCH/margins) — none of it is
-// wired into the simulation yet.
+// Phase 1 of the "future workbench" architecture: the Power Supply, Input,
+// and Output devices now have real, editable, persisted state — clicking one
+// opens it in the Properties panel, same as any placed component. None of
+// this is wired into the net/simulation graph yet (that's Phase 2+); this is
+// purely the data model and UI groundwork everything else builds on.
 
 const WorkbenchStrip = (() => {
   let canvas, ctx, _dpr = 1;
@@ -18,6 +20,34 @@ const WorkbenchStrip = (() => {
 
   let bypassOn = BYPASS_ON_DEFAULT;
   let logoImg = null, logoReady = false;
+
+  // Defaults mirror the property list in the "Future Workbench Architecture"
+  // doc for each device. Anything explicitly marked "(future)" there
+  // (max current/current limiting, battery health, Output Device, Record
+  // Audio, Live Audio Input) is intentionally left out for now.
+  const DEFAULT_PERMANENT_STATE = {
+    power:  { voltage: 9, reverse_polarity: false, power_on: true, battery_sag: 0, internal_resistance: 1 },
+    input:  { waveform: 'Sine', frequency: 440, amplitude: 1.0, dc_offset: 0, phase: 0, looping: true, audio_file: null },
+    output: { volume: 1.0, mute: false },
+  };
+  let permanentState = cloneState(DEFAULT_PERMANENT_STATE);
+  function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
+
+  function getPermanentState() { return permanentState; }
+  // Merges saved state over defaults, key by key, so older save files (or a
+  // missing/partial permanentDevices block) still load fine with sensible
+  // defaults for anything they don't have.
+  function setPermanentState(saved) {
+    permanentState = {
+      power:  Object.assign(cloneState(DEFAULT_PERMANENT_STATE).power,  saved?.power  || {}),
+      input:  Object.assign(cloneState(DEFAULT_PERMANENT_STATE).input,  saved?.input  || {}),
+      output: Object.assign(cloneState(DEFAULT_PERMANENT_STATE).output, saved?.output || {}),
+    };
+    render();
+  }
+
+  let _onSelectPermanent = null;
+  function onSelectPermanent(fn) { _onSelectPermanent = fn; }
 
   function cv(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
@@ -172,17 +202,25 @@ function drawLogo(cx, cy) {
   }
 
   function drawPowerBlock(cx,cy){
+    const p = permanentState.power;
     const bw=40,bh=44,hw=bw/2,hh=bh/2;
     ctx.save();ctx.translate(cx,cy);
-    ctx.fillStyle='rgba(43,87,154,0.85)'; ctx.fillRect(-hw,-hh,bw,bh/2);
-    ctx.fillStyle='rgba(176,32,46,0.85)'; ctx.fillRect(-hw,0,bw,bh/2);
+    if (!p.power_on) ctx.globalAlpha = 0.45; // visually dimmed while off
+    // reverse_polarity swaps which half is drawn – / + (matches the doc's
+    // "expose reverse polarity" property; purely visual for now — Phase 2
+    // is what actually feeds this into the top rail's net voltages).
+    const minusFirst = !p.reverse_polarity;
+    ctx.fillStyle='rgba(43,87,154,0.85)'; ctx.fillRect(-hw, minusFirst?-hh:0, bw, bh/2);
+    ctx.fillStyle='rgba(176,32,46,0.85)'; ctx.fillRect(-hw, minusFirst?0:-hh, bw, bh/2);
     ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=0.8;roundRect(-hw,-hh,bw,bh,3);ctx.stroke();
     ctx.fillStyle='#fff';ctx.font='bold 11px IBM Plex Mono, monospace';ctx.textAlign='center';
-    ctx.fillText('9V',0,4);
+    const vLabel = Number.isFinite(p.voltage) ? (Math.round(p.voltage*10)/10)+'V' : '9V';
+    ctx.fillText(vLabel,0,4);
     ctx.font='bold 8px monospace';
     ctx.fillStyle='rgba(255,255,255,0.85)';
-    ctx.fillText('–',0,-hh+10);
-    ctx.fillText('+',0,hh-4);
+    ctx.fillText(minusFirst?'–':'+',0,-hh+10);
+    ctx.fillText(minusFirst?'+':'–',0,hh-4);
+    ctx.globalAlpha = 1;
     ctx.font='bold 9px IBM Plex Mono, monospace'; ctx.textAlign='center';
     labelBg('POWER', 0, hh+13, ctx.font);
     ctx.fillStyle='rgba(92,64,51,0.8)';
@@ -322,8 +360,18 @@ function fillHalf(active, left) {
     const rect=canvas.getBoundingClientRect();
     const x=(e.clientX-rect.left)*(canvas.width/rect.width)/_dpr;
     const y=(e.clientY-rect.top)*(canvas.height/rect.height)/_dpr;
-    const cx = switchX()+80, cy = STRIP_H/2;
-    if(Math.abs(x-cx)<48 && Math.abs(y-cy)<23){ bypassOn=!bypassOn; render(); }
+    const cy = STRIP_H/2;
+
+    // Bypass toggle (direct action, not a Properties-panel target)
+    const swX = switchX()+80;
+    if (Math.abs(x-swX) < 48 && Math.abs(y-cy) < 23) { bypassOn = !bypassOn; render(); return; }
+
+    // Power supply, Input, and Output open their properties — same pattern
+    // as clicking a placed component. LED/CLR aren't included: per the doc
+    // they're permanent visual indicators only, not editable.
+    if (Math.abs(x-powerX()) < 22 && Math.abs(y-cy) < 24) { _onSelectPermanent?.('power'); return; }
+    if (Math.abs(x-inputX()) < 22 && Math.abs(y-cy) < 24) { _onSelectPermanent?.('input'); return; }
+    if (Math.abs(x-outputX()) < 22 && Math.abs(y-cy) < 24) { _onSelectPermanent?.('output'); return; }
   }
 
   return {
@@ -332,6 +380,7 @@ function fillHalf(active, left) {
       inputX: inputX(), outputX: outputX(),
       powerMinusX: powerMinusX(), powerPlusX: powerPlusX(),
       inputCol: 6, outputCol: 55, powerMinusCol: 18, powerPlusCol: 19
-    })
+    }),
+    getPermanentState, setPermanentState, onSelectPermanent,
   };
 })();
