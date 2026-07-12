@@ -410,6 +410,15 @@ input, select, textarea { font-family: var(--font-ui); }
 .prop-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(43,87,154,0.15); }
 select.prop-input { cursor: pointer; }
 
+.prop-input:disabled, button:disabled.prop-audio-btn { opacity: 0.45; cursor: not-allowed; }
+
+.prop-locked-note {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--warning-subtle); border: 1px solid var(--warning);
+  color: var(--warning); border-radius: var(--radius-sm);
+  font-size: 11px; padding: 7px 10px; margin-bottom: 10px;
+}
+
 /* Number input spinner arrows — tinted to match the theme instead of
    default browser gray, and only shown clearly on hover/focus so they
    don't clutter every field at rest. */

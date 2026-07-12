@@ -385,6 +385,7 @@ function setSimState(state) {
     ind?.classList.remove('running'); if(lbl)lbl.textContent='Stopped';
     if(run)run.disabled=false; if(stp)stp.disabled=true;
   }
+  PropertiesPanel.refresh();
 }
 
 function setStatus(msg) {
