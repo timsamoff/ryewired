@@ -129,6 +129,7 @@ const PropertiesPanel = (() => {
     }
 
     WorkbenchStrip.render();
+    if (typeof TraceOverlay !== 'undefined') TraceOverlay.render();
     Storage.markDirty(); History.pushDebounced();
   }
 
