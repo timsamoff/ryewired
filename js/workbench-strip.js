@@ -366,7 +366,12 @@ function fillHalf(active, left) {
     getConnectionPoints: () => ({
       inputX: inputX(), outputX: outputX(),
       powerMinusX: powerMinusX(), powerPlusX: powerPlusX(),
-      inputCol: 6, outputCol: 55, powerMinusCol: 18, powerPlusCol: 19
+      inputCol: 6, outputCol: 55, powerMinusCol: 18, powerPlusCol: 19,
+      // Row index 5 (label 'f') is the row actually adjacent to the top
+      // rail — board.js's row-index-to-y mapping is not straightforwardly
+      // top-to-bottom (row index 0, label 'a', is near the BOTTOM rail).
+      // Verified against board.js's own buildLayout() math.
+      firstRow: 5,
     }),
     getPermanentState, setPermanentState, onSelectPermanent,
     isBypassOn: () => bypassOn,

@@ -416,5 +416,18 @@ const Simulation = (() => {
   function onFailure(fn) { _onFailure=fn; }
   function onUpdate(fn)  { _onUpdate=fn; }
 
-  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,notifyStateChange };
+  // Whether two specific holes are on the same electrical net right now —
+  // reuses buildNetMap() exactly as tick() does (same wires, same closed-
+  // switch handling), so this always matches what the simulation itself
+  // would consider connected. Used by AudioEngine to decide whether an
+  // engaged bypass actually has a complete Input->Output path, rather than
+  // just assuming one exists because components happen to be placed.
+  function hasElectricalPath(rowA, colA, rowB, colB) {
+    const placed = Board.getPlaced();
+    const wires  = Board.getWires();
+    const nets   = buildNetMap(placed, wires);
+    return nets.find(nets.key(rowA, colA)) === nets.find(nets.key(rowB, colB));
+  }
+
+  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,notifyStateChange,hasElectricalPath };
 })();

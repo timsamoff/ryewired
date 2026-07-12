@@ -56,14 +56,29 @@ const Oscilloscope = (() => {
     const buf = new Float32Array(analyser.fftSize);
     analyser.getFloatTimeDomainData(buf);
 
-    // Find trigger (zero crossing, positive slope)
+    // ms/div: the grid has 10 horizontal divisions (see drawGrid's cols=10),
+    // so the total visible window is 10× the slider's ms/div value. This
+    // control previously did nothing — drawScope always plotted exactly one
+    // sample per pixel regardless of it.
+    const tdiv          = parseFloat(document.getElementById('scope-tdiv')?.value || 5); // ms/div
+    const sampleRate     = AudioEngine.getSampleRate ? AudioEngine.getSampleRate() : 44100;
+    const totalMs        = tdiv * 10;
+    const samplesInWindow = Math.max(2, Math.min(buf.length, Math.round((totalMs / 1000) * sampleRate)));
+
+    // Find trigger (zero crossing, positive slope), searching only far enough
+    // back that a full window still fits after it.
     let trigIdx = 0;
-    for (let i = 1; i < buf.length - W; i++) {
+    for (let i = 1; i < buf.length - samplesInWindow; i++) {
       if (buf[i-1] < 0 && buf[i] >= 0) { trigIdx = i; break; }
     }
 
-    const vdiv  = parseFloat(document.getElementById('scope-vdiv')?.value || 1);
-    const scale = (H / 2) / (vdiv * 5);
+    // V/div: the grid has 8 rows, so ±4 divisions span from center to each
+    // edge — full vertical range is therefore ±(4×V/div) volts. The old
+    // formula used an arbitrary "*80" multiplier unrelated to the actual
+    // grid geometry, which is why the trace overflowed the viewport at every
+    // V/div setting, including the slider's own max (5.0).
+    const vdiv = parseFloat(document.getElementById('scope-vdiv')?.value || 1);
+    const pxPerVolt = (H / 2) / (4 * vdiv);
 
     ctx.beginPath();
     ctx.strokeStyle = scopeTrace;
@@ -72,8 +87,9 @@ const Oscilloscope = (() => {
     ctx.shadowBlur  = 4;
 
     for (let i = 0; i < W; i++) {
-      const s = buf[trigIdx + i] || 0;
-      const y = H / 2 - s * scale * 80;
+      const sampleIdx = trigIdx + Math.floor((i / W) * samplesInWindow);
+      const s = buf[sampleIdx] || 0;
+      const y = H / 2 - s * pxPerVolt;
       i === 0 ? ctx.moveTo(i, y) : ctx.lineTo(i, y);
     }
     ctx.stroke();
@@ -111,10 +127,10 @@ const Oscilloscope = (() => {
 
     const buf  = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteFrequencyData(buf);
-    const step = Math.floor(buf.length / W);
 
     for (let i = 0; i < W; i++) {
-      const val  = buf[i * step] / 255;
+      const idx  = Math.min(buf.length - 1, Math.floor((i / W) * buf.length));
+      const val  = buf[idx] / 255;
       const barH = val * (H - 2);
       const hue  = Utils.mapRange(i / W, 0, 1, 200, 80); // blue→green→yellow
       ctx.fillStyle = `hsl(${hue}, 75%, ${40 + val * 25}%)`;

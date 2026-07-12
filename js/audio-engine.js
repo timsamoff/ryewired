@@ -40,7 +40,12 @@ const AudioEngine = (() => {
       _gainOut.gain.value = out.mute ? 0 : Utils.clamp(out.volume ?? 0.7, 0, 1);
 
       _analyser = ctx.createAnalyser();
-      _analyser.fftSize = 2048;
+      // Sized to comfortably hold the full time window the scope can ever
+      // request: 50ms/div (its slider max) × 10 divisions = 500ms, which at
+      // 44100Hz is ~22k samples — 32768 (the API's max fftSize) covers that
+      // with room to spare. The old 2048 (~46ms) couldn't support the ms/div
+      // control at all past its lowest couple of settings.
+      _analyser.fftSize = 32768;
 
       _analyserSpectrum = ctx.createAnalyser();
       _analyserSpectrum.fftSize = 2048;
@@ -53,12 +58,34 @@ const AudioEngine = (() => {
       // Bypass ON:  Input -> user circuit -> Output. This is audio routing
       // only — the electrical simulation (js/simulation.js) always runs the
       // full circuit regardless, per the doc.
-      _chain = bypassOn() ? buildChain(ctx, placed) : [];
+      // Bypass ON needs an actual Input->Output path to pass anything —
+      // matching a real pedal: engaging bypass with an open/incomplete
+      // circuit gets you silence, not whatever components happen to be
+      // sitting on the board. Reuses the real net graph (via Simulation),
+      // not just "are there placed components" like buildChain alone would
+      // imply.
+      const wantsChain = bypassOn();
+      let hasPath = true;
+      if (wantsChain) {
+        const cp = (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getConnectionPoints() : null;
+        hasPath = (cp && typeof Simulation !== 'undefined' && Simulation.hasElectricalPath)
+          ? Simulation.hasElectricalPath(cp.firstRow, cp.inputCol, cp.firstRow, cp.outputCol)
+          : true; // fail open if the check itself isn't available, rather than going silently mute
+      }
 
-      let node = _source;
-      for (const n of _chain) { node.connect(n); node = n; }
-      node.connect(_analyser);
-      node.connect(_analyserSpectrum);
+      _chain = (wantsChain && hasPath) ? buildChain(ctx, placed) : [];
+
+      if (wantsChain && !hasPath) {
+        // Engaged but no complete path: leave the source disconnected from
+        // everything downstream. Analysers stay connected but see nothing,
+        // so the scope/spectrum correctly flatline too — same as probing
+        // past a real open circuit.
+      } else {
+        let node = _source;
+        for (const n of _chain) { node.connect(n); node = n; }
+        node.connect(_analyser);
+        node.connect(_analyserSpectrum);
+      }
       _analyser.connect(_gainOut);
       _gainOut.connect(ctx.destination);
 
@@ -259,10 +286,11 @@ const AudioEngine = (() => {
   function getSpectrumAnalyser() { return _analyserSpectrum; }
   function isRunning()           { return _running; }
   function getAudioFileName()    { return _audioFileName; }
+  function getSampleRate()       { return _ctx ? _ctx.sampleRate : 44100; }
 
   return {
     start, stop, loadAudioFile,
     getAnalyser, getSpectrumAnalyser,
-    isRunning, getAudioFileName, updatePotWiper, setOutputGain
+    isRunning, getAudioFileName, updatePotWiper, setOutputGain, getSampleRate
   };
 })();
