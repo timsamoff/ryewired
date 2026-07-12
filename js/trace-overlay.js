@@ -46,8 +46,14 @@ const TraceOverlay = (() => {
     drawBridge(pts.outputX, sH, pts.outputX, sH+outHole.y);
 
     // Power lands on the top rail's actual – and + rows.
-    const minusHole = Board.holeToXY('rtm', pts.powerMinusCol);
-    const plusHole  = Board.holeToXY('rtp', pts.powerPlusCol);
+    // When reverse polarity is on, the block's minus-side terminal is now
+    // sourcing the rail's + row and vice versa — so the traces need to swap
+    // which rail row they land on, matching drawPowerBlock's own top/bottom
+    // swap in workbench-strip.js.
+    const reversed = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getPermanentState)
+      ? !!WorkbenchStrip.getPermanentState().power.reverse_polarity : false;
+    const minusHole = Board.holeToXY(reversed ? 'rtp' : 'rtm', pts.powerMinusCol);
+    const plusHole  = Board.holeToXY(reversed ? 'rtm' : 'rtp', pts.powerPlusCol);
     drawBridge(pts.powerMinusX, sH, pts.powerMinusX, sH+minusHole.y, 'rgba(43,87,154,0.45)');
     drawBridge(pts.powerPlusX,  sH, pts.powerPlusX,  sH+plusHole.y,  'rgba(176,32,46,0.45)');
   }

@@ -82,7 +82,19 @@ const PropertiesPanel = (() => {
     // No Rotate section (nothing to rotate) and no Remove button — permanent
     // devices are fixed, non-draggable parts of the workbench, per the doc.
 
+    // Input's properties don't take effect live (unlike Output's volume/mute,
+    // which do) — changing them mid-run silently wouldn't do anything, so
+    // gray them out and say why instead.
+    const isLocked = kind === 'input' && typeof Simulation !== 'undefined' && Simulation.isRunning();
+    if (isLocked) {
+      html = `<div class="prop-locked-note"><i class="fa-solid fa-lock"></i> Stop the simulation to change Input settings</div>` + html;
+    }
+
     _content.innerHTML = html;
+
+    if (isLocked) {
+      _content.querySelectorAll('input, select, button').forEach(el => { el.disabled = true; });
+    }
 
     _content.querySelectorAll('.prop-input, input[type="range"]').forEach(el => {
       el.addEventListener('input',  onPermanentPropChange);
@@ -130,6 +142,9 @@ const PropertiesPanel = (() => {
 
     WorkbenchStrip.render();
     if (typeof TraceOverlay !== 'undefined') TraceOverlay.render();
+    if (kind === 'output' && (key === 'volume' || key === 'mute') && typeof AudioEngine !== 'undefined') {
+      AudioEngine.setOutputGain(state.volume, state.mute);
+    }
     Storage.markDirty(); History.pushDebounced();
   }
 
@@ -425,5 +440,12 @@ const PropertiesPanel = (() => {
       </div>`;
   }
 
-  return { init, show, hide, showPermanent };
+  // Re-renders whatever's currently shown — used when simulation state
+  // changes (run/stop) so an already-open Input panel grays out/unlocks
+  // immediately, instead of only updating the next time it's opened.
+  function refresh() {
+    if (_currentPermanentKind) showPermanent(_currentPermanentKind);
+  }
+
+  return { init, show, hide, showPermanent, refresh };
 })();

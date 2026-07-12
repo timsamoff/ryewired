@@ -345,7 +345,13 @@ function fillHalf(active, left) {
 
     // Bypass toggle (direct action, not a Properties-panel target)
     const swX = switchX()+80;
-    if (Math.abs(x-swX) < 48 && Math.abs(y-cy) < 23) { bypassOn = !bypassOn; render(); return; }
+    if (Math.abs(x-swX) < 48 && Math.abs(y-cy) < 23) {
+      bypassOn = !bypassOn; render();
+      if (typeof Simulation !== 'undefined' && Simulation.isRunning() && typeof AudioEngine !== 'undefined') {
+        AudioEngine.stop(); AudioEngine.start();
+      }
+      return;
+    }
 
     // Power supply, Input, and Output open their properties — same pattern
     // as clicking a placed component. LED/CLR aren't included: per the doc
@@ -363,5 +369,6 @@ function fillHalf(active, left) {
       inputCol: 6, outputCol: 55, powerMinusCol: 18, powerPlusCol: 19
     }),
     getPermanentState, setPermanentState, onSelectPermanent,
+    isBypassOn: () => bypassOn,
   };
 })();

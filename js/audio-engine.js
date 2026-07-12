@@ -1,8 +1,15 @@
 // ── Audio Engine ──────────────────────────────────────────────────────────────
+// Reads the permanent Input/Output device state (WorkbenchStrip) rather than
+// a placed 'signal_generator' component — that component is retired in favor
+// of the permanent Input, per the "Future Workbench Architecture" doc.
+// Audio routing (bypass) is intentionally kept separate from electrical
+// simulation: bypass only changes what buildChain() is asked to do here, it
+// never touches Simulation.
 
 const AudioEngine = (() => {
   let _ctx              = null;
-  let _source           = null;
+  let _source           = null;   // node the rest of the graph connects FROM
+  let _sourceStartable  = null;   // the actual OscillatorNode/BufferSource/ConstantSource(s) needing .start()
   let _chain            = [];
   let _analyser         = null;
   let _analyserSpectrum = null;
@@ -18,15 +25,19 @@ const AudioEngine = (() => {
     return _ctx;
   }
 
+  function inputState()  { return (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getPermanentState().input  : {}; }
+  function outputState() { return (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getPermanentState().output : {}; }
+  function bypassOn()    { return (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.isBypassOn) ? WorkbenchStrip.isBypassOn() : false; }
+
   function start() {
     const placed = Board.getPlaced();
-    const sigGen = placed.find(p => p.defId === 'signal_generator');
     try {
       const ctx = getContext();
       if (ctx.state === 'suspended') ctx.resume();
 
+      const out = outputState();
       _gainOut = ctx.createGain();
-      _gainOut.gain.value = 0.7;
+      _gainOut.gain.value = out.mute ? 0 : Utils.clamp(out.volume ?? 0.7, 0, 1);
 
       _analyser = ctx.createAnalyser();
       _analyser.fftSize = 2048;
@@ -34,8 +45,15 @@ const AudioEngine = (() => {
       _analyserSpectrum = ctx.createAnalyser();
       _analyserSpectrum.fftSize = 2048;
 
-      _source = buildSource(ctx, sigGen);
-      _chain  = buildChain(ctx, placed);
+      const built = buildSource(ctx, inputState());
+      _source = built.output;
+      _sourceStartable = built.startable;
+
+      // Bypass OFF: Input -> Output directly (clean signal, no user circuit).
+      // Bypass ON:  Input -> user circuit -> Output. This is audio routing
+      // only — the electrical simulation (js/simulation.js) always runs the
+      // full circuit regardless, per the doc.
+      _chain = bypassOn() ? buildChain(ctx, placed) : [];
 
       let node = _source;
       for (const n of _chain) { node.connect(n); node = n; }
@@ -44,7 +62,7 @@ const AudioEngine = (() => {
       _analyser.connect(_gainOut);
       _gainOut.connect(ctx.destination);
 
-      if (_source.start) _source.start();
+      for (const s of _sourceStartable) { if (s.start) s.start(s._startAt || 0); }
       _running = true;
     } catch (err) {
       console.error('[Audio] Start error:', err);
@@ -53,7 +71,11 @@ const AudioEngine = (() => {
 
   function stop() {
     try {
-      if (_source) { if (_source.stop) _source.stop(); _source.disconnect(); _source = null; }
+      if (_sourceStartable) {
+        for (const s of _sourceStartable) { try { if (s.stop) s.stop(); s.disconnect(); } catch(e){} }
+      }
+      _sourceStartable = null;
+      if (_source) { _source.disconnect(); _source = null; }
       for (const n of _chain) { try { n.disconnect(); } catch(e){} }
       _chain = [];
       if (_analyser)         { _analyser.disconnect(); _analyser = null; }
@@ -63,38 +85,63 @@ const AudioEngine = (() => {
     _running = false;
   }
 
-  function buildSource(ctx, sigGen) {
-    if (!sigGen) {
-      const osc = ctx.createOscillator();
-      osc.frequency.value = 440;
-      const g = ctx.createGain(); g.gain.value = 0;
-      osc.connect(g); return g;
-    }
+  // Live-updates Output's volume/mute while running, without rebuilding the
+  // graph — called from properties-panel.js when those specific props change.
+  function setOutputGain(volume, mute) {
+    if (!_gainOut || !_ctx) return;
+    const target = mute ? 0 : Utils.clamp(volume ?? 0.7, 0, 1);
+    _gainOut.gain.setTargetAtTime(target, _ctx.currentTime, 0.01);
+  }
 
-    const waveform = sigGen.props.waveform || 'Sine';
-    const freq     = parseFloat(sigGen.props.frequency) || 440;
-    const amp      = parseFloat(sigGen.props.amplitude) || 1.0;
+  // Returns { startable: [...nodes needing .start()], output: nodeToConnectFrom }
+  function buildSource(ctx, input) {
+    const waveform = input.waveform || 'Sine';
+    const freq     = parseFloat(input.frequency) || 440;
+    const amp      = input.amplitude !== undefined && input.amplitude !== '' ? parseFloat(input.amplitude) : 1.0;
+    const dcOffset = parseFloat(input.dc_offset) || 0;
+    const loop     = input.looping !== false;
+
+    let startable = [], wave;
 
     if (waveform === 'Audio File' && _audioBuffer) {
       const src = ctx.createBufferSource();
-      src.buffer = _audioBuffer; src.loop = true;
+      src.buffer = _audioBuffer; src.loop = loop;
       const g = ctx.createGain(); g.gain.value = amp * 0.5;
-      src.connect(g); return g;
+      src.connect(g);
+      startable.push(src); wave = g;
+    } else if (waveform === 'White Noise' || waveform === 'Pink Noise') {
+      const built = buildNoiseSource(ctx, waveform, amp, loop);
+      startable = built.startable; wave = built.output;
+    } else {
+      const osc  = ctx.createOscillator();
+      const map  = { 'Sine':'sine','Square':'square','Sawtooth':'sawtooth','Triangle':'triangle' };
+      osc.type   = map[waveform] || 'sine';
+      osc.frequency.value = freq;
+      const g    = ctx.createGain(); g.gain.value = amp * 0.5;
+      osc.connect(g);
+      // Phase isn't a directly automatable AudioParam on OscillatorNode, so
+      // it's approximated as a start-time delay — equivalent to a phase
+      // shift once the periodic waveform is running.
+      const phaseDeg   = parseFloat(input.phase) || 0;
+      const phaseDelay = freq > 0 ? ((((phaseDeg % 360) + 360) % 360) / 360) * (1 / freq) : 0;
+      osc._startAt = ctx.currentTime + phaseDelay;
+      startable.push(osc); wave = g;
     }
 
-    if (waveform === 'White Noise' || waveform === 'Pink Noise') {
-      return buildNoiseSource(ctx, waveform, amp);
+    let output = wave;
+    if (dcOffset) {
+      const dc = ctx.createConstantSource();
+      dc.offset.value = dcOffset;
+      const sum = ctx.createGain(); // plain summing node
+      wave.connect(sum); dc.connect(sum);
+      startable.push(dc);
+      output = sum;
     }
 
-    const osc  = ctx.createOscillator();
-    const map  = { 'Sine':'sine','Square':'square','Sawtooth':'sawtooth','Triangle':'triangle' };
-    osc.type   = map[waveform] || 'sine';
-    osc.frequency.value = freq;
-    const g    = ctx.createGain(); g.gain.value = amp * 0.5;
-    osc.connect(g); return g;
+    return { startable, output };
   }
 
-  function buildNoiseSource(ctx, type, amp) {
+  function buildNoiseSource(ctx, type, amp, loop) {
     const sz  = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, sz, ctx.sampleRate);
     const d   = buf.getChannelData(0);
@@ -111,9 +158,10 @@ const AudioEngine = (() => {
       }
     }
     const src = ctx.createBufferSource();
-    src.buffer = buf; src.loop = true;
+    src.buffer = buf; src.loop = loop;
     const g = ctx.createGain(); g.gain.value = amp * 0.5;
-    src.connect(g); return g;
+    src.connect(g);
+    return { startable: [src], output: g };
   }
 
   function buildChain(ctx, placed) {
@@ -215,6 +263,6 @@ const AudioEngine = (() => {
   return {
     start, stop, loadAudioFile,
     getAnalyser, getSpectrumAnalyser,
-    isRunning, getAudioFileName, updatePotWiper
+    isRunning, getAudioFileName, updatePotWiper, setOutputGain
   };
 })();
