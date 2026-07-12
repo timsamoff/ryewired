@@ -1,14 +1,4 @@
 // ── Workbench Strip ───────────────────────────────────────────────────────────
-// Permanent hardware strip: logo, input/output jacks, power supply, and the
-// bypass switch + status LED/CLR. Renders on its own canvas, stacked directly
-// above the (unmodified) board canvas, sized to match its width exactly via
-// Board.getBoardWidth() so the two always stay proportional to each other.
-//
-// Phase 1 of the "future workbench" architecture: the Power Supply, Input,
-// and Output devices now have real, editable, persisted state — clicking one
-// opens it in the Properties panel, same as any placed component. None of
-// this is wired into the net/simulation graph yet (that's Phase 2+); this is
-// purely the data model and UI groundwork everything else builds on.
 
 const WorkbenchStrip = (() => {
   let canvas, ctx, _dpr = 1;
@@ -21,10 +11,6 @@ const WorkbenchStrip = (() => {
   let bypassOn = BYPASS_ON_DEFAULT;
   let logoImg = null, logoReady = false;
 
-  // Defaults mirror the property list in the "Future Workbench Architecture"
-  // doc for each device. Anything explicitly marked "(future)" there
-  // (max current/current limiting, battery health, Output Device, Record
-  // Audio, Live Audio Input) is intentionally left out for now.
   const DEFAULT_PERMANENT_STATE = {
     power:  { voltage: 9, reverse_polarity: false, power_on: true, battery_sag: 0, internal_resistance: 1 },
     input:  { waveform: 'Sine', frequency: 440, amplitude: 1.0, dc_offset: 0, phase: 0, looping: true, audio_file: null },
@@ -34,9 +20,6 @@ const WorkbenchStrip = (() => {
   function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
 
   function getPermanentState() { return permanentState; }
-  // Merges saved state over defaults, key by key, so older save files (or a
-  // missing/partial permanentDevices block) still load fine with sensible
-  // defaults for anything they don't have.
   function setPermanentState(saved) {
     permanentState = {
       power:  Object.assign(cloneState(DEFAULT_PERMANENT_STATE).power,  saved?.power  || {}),
@@ -205,10 +188,8 @@ function drawLogo(cx, cy) {
     const p = permanentState.power;
     const bw=40,bh=44,hw=bw/2,hh=bh/2;
     ctx.save();ctx.translate(cx,cy);
-    if (!p.power_on) ctx.globalAlpha = 0.45; // visually dimmed while off
-    // reverse_polarity swaps which half is drawn – / + (matches the doc's
-    // "expose reverse polarity" property; purely visual for now — Phase 2
-    // is what actually feeds this into the top rail's net voltages).
+    if (!p.power_on) ctx.globalAlpha = 0.45;
+    
     const minusFirst = !p.reverse_polarity;
     ctx.fillStyle='rgba(43,87,154,0.85)'; ctx.fillRect(-hw, minusFirst?-hh:0, bw, bh/2);
     ctx.fillStyle='rgba(176,32,46,0.85)'; ctx.fillRect(-hw, minusFirst?0:-hh, bw, bh/2);
