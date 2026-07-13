@@ -26,6 +26,12 @@ const WorkbenchStrip = (() => {
       input:  Object.assign(cloneState(DEFAULT_PERMANENT_STATE).input,  saved?.input  || {}),
       output: Object.assign(cloneState(DEFAULT_PERMANENT_STATE).output, saved?.output || {}),
     };
+    // The decoded audio buffer only ever lives in memory (AudioEngine's
+    // _audioBuffer) — it's never persisted. Only the filename string was
+    // saved, so on reload it would otherwise show "Change Audio File" with
+    // the old name even though nothing is actually loaded. Clear it so the
+    // UI correctly says "Load Audio File..." again.
+    if (permanentState.input.audio_file) permanentState.input.audio_file = null;
     render();
   }
 
@@ -38,6 +44,7 @@ const WorkbenchStrip = (() => {
     canvas = canvasEl;
     ctx = canvas.getContext('2d');
     canvas.addEventListener('click', onClick);
+    canvas.addEventListener('mousemove', onMouseMove);
     logoImg = new Image();
     logoImg.onload = () => { logoReady = true; render(); };
     logoImg.src = './icon.png';
@@ -337,28 +344,46 @@ function fillHalf(active, left) {
   ctx.restore();
 }
 
-  function onClick(e){
-    const rect=canvas.getBoundingClientRect();
-    const x=(e.clientX-rect.left)*(canvas.width/rect.width)/_dpr;
-    const y=(e.clientY-rect.top)*(canvas.height/rect.height)/_dpr;
+  // Shared by onClick and onMouseMove so the clickable area and the
+  // pointer-cursor area can never drift apart from each other.
+  function hitTest(x, y) {
     const cy = STRIP_H/2;
-
-    // Bypass toggle (direct action, not a Properties-panel target)
     const swX = switchX()+80;
-    if (Math.abs(x-swX) < 48 && Math.abs(y-cy) < 23) {
+    if (Math.abs(x-swX) < 48 && Math.abs(y-cy) < 23) return 'switch';
+    if (Math.abs(x-powerX())  < 22 && Math.abs(y-cy) < 24) return 'power';
+    if (Math.abs(x-inputX())  < 22 && Math.abs(y-cy) < 24) return 'input';
+    if (Math.abs(x-outputX()) < 22 && Math.abs(y-cy) < 24) return 'output';
+    return null;
+  }
+
+  function eventToCanvasXY(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX-rect.left)*(canvas.width/rect.width)/_dpr,
+      y: (e.clientY-rect.top)*(canvas.height/rect.height)/_dpr,
+    };
+  }
+
+  function onClick(e){
+    const {x,y} = eventToCanvasXY(e);
+    const hit = hitTest(x,y);
+
+    if (hit === 'switch') {
       bypassOn = !bypassOn; render();
       if (typeof Simulation !== 'undefined' && Simulation.isRunning() && typeof AudioEngine !== 'undefined') {
         AudioEngine.stop(); AudioEngine.start();
       }
       return;
     }
-
     // Power supply, Input, and Output open their properties — same pattern
     // as clicking a placed component. LED/CLR aren't included: per the doc
     // they're permanent visual indicators only, not editable.
-    if (Math.abs(x-powerX()) < 22 && Math.abs(y-cy) < 24) { _onSelectPermanent?.('power'); return; }
-    if (Math.abs(x-inputX()) < 22 && Math.abs(y-cy) < 24) { _onSelectPermanent?.('input'); return; }
-    if (Math.abs(x-outputX()) < 22 && Math.abs(y-cy) < 24) { _onSelectPermanent?.('output'); return; }
+    if (hit === 'power' || hit === 'input' || hit === 'output') { _onSelectPermanent?.(hit); return; }
+  }
+
+  function onMouseMove(e){
+    const {x,y} = eventToCanvasXY(e);
+    canvas.style.cursor = hitTest(x,y) ? 'pointer' : 'default';
   }
 
   return {
