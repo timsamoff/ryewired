@@ -13,7 +13,7 @@ const WorkbenchStrip = (() => {
 
   const DEFAULT_PERMANENT_STATE = {
     power:  { voltage: 9, reverse_polarity: false, power_on: true, battery_sag: 0, internal_resistance: 1 },
-    input:  { waveform: 'Sine', frequency: 440, amplitude: 1.0, dc_offset: 0, phase: 0, looping: true, audio_file: null },
+    input:  { waveform: 'None', frequency: 440, amplitude: 1.0, dc_offset: 0, phase: 0, looping: true, audio_file: null },
     output: { volume: 1.0, mute: false },
   };
   let permanentState = cloneState(DEFAULT_PERMANENT_STATE);

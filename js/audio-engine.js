@@ -122,7 +122,7 @@ const AudioEngine = (() => {
 
   // Returns { startable: [...nodes needing .start()], output: nodeToConnectFrom }
   function buildSource(ctx, input) {
-    const waveform = input.waveform || 'Sine';
+    const waveform = input.waveform || 'None';
     const freq     = parseFloat(input.frequency) || 440;
     const amp      = input.amplitude !== undefined && input.amplitude !== '' ? parseFloat(input.amplitude) : 1.0;
     const dcOffset = parseFloat(input.dc_offset) || 0;
@@ -130,12 +130,23 @@ const AudioEngine = (() => {
 
     let startable = [], wave;
 
-    if (waveform === 'Audio File' && _audioBuffer) {
-      const src = ctx.createBufferSource();
-      src.buffer = _audioBuffer; src.loop = loop;
-      const g = ctx.createGain(); g.gain.value = amp * 0.5;
-      src.connect(g);
-      startable.push(src); wave = g;
+    if (waveform === 'None') {
+      ({ startable, output: wave } = buildSilentSource(ctx));
+    } else if (waveform === 'Audio File') {
+      if (_audioBuffer) {
+        const src = ctx.createBufferSource();
+        src.buffer = _audioBuffer; src.loop = loop;
+        const g = ctx.createGain(); g.gain.value = amp * 0.5;
+        src.connect(g);
+        startable.push(src); wave = g;
+      } else {
+        // 'Audio File' selected but nothing actually loaded (e.g. right
+        // after reopening a saved project — the file name persists but the
+        // decoded buffer doesn't). Previously this fell through to the
+        // oscillator branch below, which defaulted to an audible sine wave
+        // since 'Audio File' isn't in its waveform map. Should be silent.
+        ({ startable, output: wave } = buildSilentSource(ctx));
+      }
     } else if (waveform === 'White Noise' || waveform === 'Pink Noise') {
       const built = buildNoiseSource(ctx, waveform, amp, loop);
       startable = built.startable; wave = built.output;
@@ -166,6 +177,19 @@ const AudioEngine = (() => {
     }
 
     return { startable, output };
+  }
+
+  // Genuine silence: a zero-offset ConstantSourceNode through a zero-gain
+  // node. Used for waveform 'None' and as the fallback when 'Audio File' is
+  // selected but nothing is actually loaded — both need to produce nothing,
+  // not just very quietly play some other default waveform.
+  function buildSilentSource(ctx) {
+    const src = ctx.createConstantSource();
+    src.offset.value = 0;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    src.connect(g);
+    return { startable: [src], output: g };
   }
 
   function buildNoiseSource(ctx, type, amp, loop) {
