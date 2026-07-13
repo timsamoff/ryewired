@@ -458,7 +458,7 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
 .prop-audio-btn i { font-size: 12px; }
 .prop-audio-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-.prop-audio-name { font-family: var(--font-mono); font-size: 10px; color: var(--accent); margin-top: 4px; word-break: break-all; padding: 0 2px; }
+.prop-audio-name { font-family: var(--font-mono); font-size: 10px; color: var(--text-primary); margin-top: 4px; word-break: break-all; padding: 0 2px; }
 
 .prop-section-div { height: 1px; background: var(--border); margin: 10px 0 8px; }
 
