@@ -156,7 +156,10 @@ function initMenubar() {
 
 function runSim() {
   if (Simulation.isRunning()) return;
-  if (Board.getPlaced().length===0) { setStatus('Place some components first'); return; }
+  // No "board must have components" guard here on purpose: the workbench's
+  // permanent Input/Output form a clean passthrough (AudioEngine.start()
+  // handles bypass-off/no-circuit on its own), so Run must always be able
+  // to start — an empty board is a valid, fully-functional state.
   Simulation.start(); AudioEngine.start(); Oscilloscope.start();
   setSimState('running'); setStatus('Simulation running');
 }
@@ -171,7 +174,7 @@ function stopSim() {
 
 async function newLayout() {
   if (Simulation.isRunning()) stopSim();
-  if (Board.getPlaced().length>0) {
+  if (Board.getPlaced().length>0 || Board.getWires().length>0) {
     const ok = await Modal.confirm('Start a new layout? Unsaved changes will be lost.', {title:'New Layout', okLabel:'New Layout', danger:true});
     if (!ok) return;
   }
@@ -363,7 +366,7 @@ function onKeyDown(e) {
 // ── Utility ───────────────────────────────────────────────────────────────────
 
 async function confirmClear() {
-  if (Board.getPlaced().length===0) return;
+  if (Board.getPlaced().length===0 && Board.getWires().length===0) return;
   const ok = await Modal.confirm('Clear the board? This cannot be undone.', {title:'Clear Board', okLabel:'Clear', danger:true});
   if (ok) {
     if (Simulation.isRunning()) stopSim();

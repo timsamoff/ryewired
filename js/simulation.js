@@ -6,9 +6,16 @@ const Simulation = (() => {
   let _running=false, _interval=null, _onFailure=null, _onUpdate=null;
   const TICK_MS=10;
 
-  function start() { if(_running)return; _running=true; _interval=setInterval(tick,TICK_MS); }
+  // Permanent power supply's battery-sag state (Phase 3). Persists across
+  // ticks (sag is inherently a running-average effect), but resets whenever
+  // the sim starts fresh or Reset Failures is used, so a stopped/restarted
+  // run doesn't inherit sag from a previous one.
+  let _battery = { effectiveV: null, lastCurrent: 0, posNet: null, virtualPos: null, Rint: 0 };
+
+  function start() { if(_running)return; _running=true; _battery={effectiveV:null,lastCurrent:0,posNet:null,virtualPos:null,Rint:0}; _interval=setInterval(tick,TICK_MS); }
   function stop()  { if(!_running)return; _running=false; clearInterval(_interval); _interval=null; }
   function reset() {
+    _battery = { effectiveV: null, lastCurrent: 0, posNet: null, virtualPos: null, Rint: 0 };
     for (const inst of Board.getPlaced()) {
       inst.failed=false; inst.failureType=null;
       inst._voltage=0; inst._current=0; inst._brightness=0;
@@ -21,35 +28,130 @@ const Simulation = (() => {
   function tick() {
     const placed = Board.getPlaced();
     const wires  = Board.getWires();
-    if (!placed.length) return;
+    if (!placed.length && !wires.length) return;
 
     const nets = buildNetMap(placed, wires);
 
-    const supplyInst = placed.find(p => p.defId === 'power_supply' && !p.failed);
-    const Vsupply    = supplyInst ? (parseFloat(supplyInst.props.voltage) || 9) : 0;
+    // ── Permanent power supply (Phase 3): feeds the TOP rail only. The
+    // bottom rail is deliberately left untouched here — it's electrically
+    // isolated unless the user jumpers it to the top rail or places their
+    // own power_supply component there (handled separately below).
+    //
+    // intendedFixed tracks what each source is TRYING to assign, at its true
+    // voltage, before any internal-resistance virtual-node substitution —
+    // this is checked for conflicts first, so a short can't be silently
+    // absorbed into "well, current just flows through the internal
+    // resistance" and go unreported. Two sources (or two rails via a
+    // wrong-rail jumper) landing on the same net at different voltages is a
+    // wiring mistake, not something to solve around.
+    const intendedFixed = [];
+    const power = (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getPermanentState().power : null;
 
-    let vccNet = null, gndNet = null;
-    if (supplyInst && supplyInst.legs.length >= 2) {
-      const reversed = !!supplyInst.props.reverse_polarity;
-      const posLeg = reversed ? supplyInst.legs[0] : supplyInst.legs[1];
-      const negLeg = reversed ? supplyInst.legs[1] : supplyInst.legs[0];
-      vccNet = nets.find(nets.key(posLeg.row, posLeg.col));
-      gndNet = nets.find(nets.key(negLeg.row, negLeg.col));
+    let permPosNet = null, permNegNet = null, permEmf = 0;
+    if (power && power.power_on) {
+      const nominalV = parseFloat(power.voltage) || 9;
+      const reversed = !!power.reverse_polarity;
+      const topPlusNet  = nets.find(nets.key('rtp', 0));
+      const topMinusNet = nets.find(nets.key('rtm', 0));
+      permPosNet = reversed ? topMinusNet : topPlusNet;
+      permNegNet = reversed ? topPlusNet : topMinusNet;
+
+      const sag  = Utils.clamp(parseFloat(power.battery_sag) || 0, 0, 1);
+      if (sag > 0) {
+        if (_battery.effectiveV == null) _battery.effectiveV = nominalV;
+        const sagVolts = sag * nominalV * Utils.clamp(_battery.lastCurrent / 0.5, 0, 1);
+        const target = nominalV - sagVolts;
+        _battery.effectiveV += (target - _battery.effectiveV) * 0.05;
+        permEmf = _battery.effectiveV;
+      } else {
+        _battery.effectiveV = nominalV;
+        permEmf = nominalV;
+      }
+
+      if (permPosNet && permNegNet) {
+        intendedFixed.push({ net: permPosNet, voltage: permEmf });
+        intendedFixed.push({ net: permNegNet, voltage: 0 });
+      }
     } else {
-      // No power supply placed — try to infer from rail connections
-      // Top + rail and bottom – rail are common defaults
-      vccNet = nets.find(nets.key('rtp', 0));
-      gndNet = nets.find(nets.key('rbm', 0));
+      _battery.effectiveV = null; _battery.lastCurrent = 0; _battery.virtualPos = null;
     }
 
-    const { netVoltage, diodeCurrents } = solveNetVoltages(placed, nets, vccNet, gndNet, Vsupply);
+    // Any placed power_supply component(s) contribute their own independent
+    // fixed nets too — e.g. one sitting on the bottom rail, powering it
+    // separately from the permanent supply above.
+    const placedSupplies = [];
+    for (const inst of placed) {
+      if (inst.failed || inst.defId !== 'power_supply' || inst.legs.length < 2) continue;
+      const v = parseFloat(inst.props.voltage) || 9;
+      const reversed = !!inst.props.reverse_polarity;
+      const posLeg = reversed ? inst.legs[0] : inst.legs[1];
+      const negLeg = reversed ? inst.legs[1] : inst.legs[0];
+      const pNet = nets.find(nets.key(posLeg.row, posLeg.col));
+      const nNet = nets.find(nets.key(negLeg.row, negLeg.col));
+      placedSupplies.push({ pNet, nNet, v });
+      if (pNet) intendedFixed.push({ net: pNet, voltage: v });
+      if (nNet) intendedFixed.push({ net: nNet, voltage: 0 });
+    }
+
+    const conflict = detectSupplyConflict(intendedFixed);
+    if (conflict) {
+      failBoard('⚡', 'Power Supply Conflict',
+        `Two different voltages are connected to the same point (${conflict.vA}V and ${conflict.vB}V). ` +
+        `That's a short between mismatched supplies — check for a jumper crossing between + and – rails, ` +
+        `or two power supplies wired to the same point.`);
+      return;
+    }
+
+    // No conflict — now build what the solver actually uses, substituting
+    // the permanent supply's positive terminal for a virtual EMF node when
+    // it has internal resistance (so current through it can be measured for
+    // next tick's sag, and the drop under load is real, not assumed).
+    const fixedNodes = [];
+    const extraResistorEdges = [];
+
+    if (permPosNet && permNegNet) {
+      const Rint = Math.max(0, parseFloat(power.internal_resistance) || 0);
+      const sag  = Utils.clamp(parseFloat(power.battery_sag) || 0, 0, 1);
+      // Sag needs *some* internal resistance to actually manifest as a
+      // voltage drop under load — if the user hasn't set one, use a small
+      // floor rather than requiring them to configure two properties just
+      // to see one of them do anything.
+      const effectiveRint = sag > 0 ? Math.max(Rint, 0.1) : Rint;
+
+      fixedNodes.push({ net: permNegNet, voltage: 0 });
+      if (effectiveRint > 0) {
+        const virtualPos = '__perm_supply_pos__';
+        fixedNodes.push({ net: virtualPos, voltage: permEmf });
+        extraResistorEdges.push({ a: virtualPos, b: permPosNet, R: effectiveRint });
+        _battery.posNet = permPosNet; _battery.virtualPos = virtualPos; _battery.Rint = effectiveRint;
+      } else {
+        fixedNodes.push({ net: permPosNet, voltage: permEmf });
+        _battery.posNet = null; _battery.virtualPos = null;
+      }
+    }
+    for (const { pNet, nNet, v } of placedSupplies) {
+      if (pNet) fixedNodes.push({ net: pNet, voltage: v });
+      if (nNet) fixedNodes.push({ net: nNet, voltage: 0 });
+    }
+
+    const { netVoltage, diodeCurrents } = solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges);
+
+    // Current actually drawn from the permanent supply, remembered for next
+    // tick's sag calculation.
+    if (_battery.virtualPos) {
+      const vVirt = netVoltage.get(_battery.virtualPos);
+      const vReal = netVoltage.get(_battery.posNet);
+      _battery.lastCurrent = (vVirt != null && vReal != null) ? Math.abs(vVirt - vReal) / _battery.Rint : 0;
+    } else {
+      _battery.lastCurrent = 0;
+    }
 
     // 4. Solve each component
     for (const inst of placed) {
       if (inst.failed) continue;
       const def = ComponentRegistry.getById(inst.defId);
       if (!def) continue;
-      try { solveComponent(inst, def, Vsupply, nets, netVoltage, placed, diodeCurrents); }
+      try { solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents); }
       catch(e) { console.warn('[Sim]', e.message); }
     }
 
@@ -58,7 +160,7 @@ const Simulation = (() => {
   }
 
   // ── Component solver ─────────────────────────────────────────────────────────
-  function solveComponent(inst, def, Vsupply, nets, netVoltage, placed, diodeCurrents) {
+  function solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents) {
     const btype = def.behavior?.type;
 
     switch(btype) {
@@ -208,14 +310,14 @@ const Simulation = (() => {
   const ROFF = 1e9;   // ohms — effectively open for a non-conducting diode/LED
   const EPS  = 1e-12; // tiny leak-to-ground on every net so isolated islands don't produce a singular matrix
 
-  function solveNetVoltages(placed, nets, vccNet, gndNet, Vsupply) {
+  function solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges) {
+    extraResistorEdges = extraResistorEdges || [];
     const fixed = new Map();
-    if (vccNet) fixed.set(vccNet, Vsupply);
-    if (gndNet) fixed.set(gndNet, 0);
+    for (const { net, voltage } of fixedNodes) { if (net != null) fixed.set(net, voltage); }
 
     function netOf(row, col) { return nets.find(nets.key(row, col)); }
 
-    const resistorEdges = []; // {a,b,R}
+    const resistorEdges = [...extraResistorEdges]; // {a,b,R}
     const diodeEdges    = []; // {a,b,Vf,inst}  a=anode net, b=cathode net
 
     for (const inst of placed) {
@@ -408,6 +510,32 @@ const Simulation = (() => {
       title: `${def.label} Failed`,
       message: fm?.message||`Component failure: ${mode}`
     });
+    stop(); Board.redraw();
+  }
+
+  // Two fixed-voltage assignments landing on the same net at different
+  // voltages — two supplies wired together, or a jumper crossing between
+  // mismatched-polarity rails. Returns the first conflict found, or null.
+  function detectSupplyConflict(intendedFixed) {
+    const seen = new Map();
+    for (const { net, voltage } of intendedFixed) {
+      if (net == null) continue;
+      if (seen.has(net)) {
+        const prev = seen.get(net);
+        if (Math.abs(prev - voltage) > 1e-6) return { net, vA: prev, vB: voltage };
+      } else {
+        seen.set(net, voltage);
+      }
+    }
+    return null;
+  }
+
+  // Board-level failure — a wiring/topology fault with no single
+  // responsible component instance, so nothing gets marked .failed the way
+  // fail() marks a specific inst. Same user-facing treatment otherwise:
+  // reported through the same onFailure channel, and stops the sim.
+  function failBoard(icon, title, message) {
+    if (_onFailure) _onFailure({ icon, title, message });
     stop(); Board.redraw();
   }
 

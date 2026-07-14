@@ -10,6 +10,7 @@ const WorkbenchStrip = (() => {
 
   let bypassOn = BYPASS_ON_DEFAULT;
   let logoImg = null, logoReady = false;
+  let _hoverTarget = null; // 'input' | 'output' | 'power' | 'switch' | null — drives the hover highlight
 
   const DEFAULT_PERMANENT_STATE = {
     power:  { voltage: 9, reverse_polarity: false, power_on: true, battery_sag: 0, internal_resistance: 1 },
@@ -45,6 +46,7 @@ const WorkbenchStrip = (() => {
     ctx = canvas.getContext('2d');
     canvas.addEventListener('click', onClick);
     canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('mouseleave', onMouseLeave);
     logoImg = new Image();
     logoImg.onload = () => { logoReady = true; render(); };
     logoImg.src = './icon.png';
@@ -132,7 +134,32 @@ const WorkbenchStrip = (() => {
     drawPowerBlock(powerX(), h/2);
     drawSwitchCluster(switchX(), h/2);
     drawJack(outputX(), h/2, 'OUT');
+    drawHoverHighlight(h);
 
+    ctx.restore();
+  }
+
+  // Reuses hitTest's own regions as the highlight bounds, so hover feedback
+  // can never drift out of sync with what's actually clickable.
+  function drawHoverHighlight(h) {
+    if (!_hoverTarget) return;
+    const cy = h/2;
+    let cx, rx, ry;
+    if (_hoverTarget === 'switch')      { cx = switchX()+80; rx = 48; ry = 23; }
+    else if (_hoverTarget === 'power')  { cx = powerX();     rx = 22; ry = 24; }
+    else if (_hoverTarget === 'input')  { cx = inputX();     rx = 22; ry = 24; }
+    else if (_hoverTarget === 'output') { cx = outputX();    rx = 22; ry = 24; }
+    else return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighten';
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry) * 1.15);
+    g.addColorStop(0, 'rgba(255,255,255,0.30)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx * 1.15, ry * 1.15, 0, 0, Math.PI*2);
+    ctx.fill();
     ctx.restore();
   }
 
@@ -383,7 +410,14 @@ function fillHalf(active, left) {
 
   function onMouseMove(e){
     const {x,y} = eventToCanvasXY(e);
-    canvas.style.cursor = hitTest(x,y) ? 'pointer' : 'default';
+    const hit = hitTest(x,y);
+    canvas.style.cursor = hit ? 'pointer' : 'default';
+    if (hit !== _hoverTarget) { _hoverTarget = hit; render(); }
+  }
+
+  function onMouseLeave(){
+    if (_hoverTarget) { _hoverTarget = null; render(); }
+    canvas.style.cursor = 'default';
   }
 
   return {
