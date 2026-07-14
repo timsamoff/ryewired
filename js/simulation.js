@@ -6,6 +6,11 @@ const Simulation = (() => {
   let _running=false, _interval=null, _onFailure=null, _onUpdate=null;
   const TICK_MS=10;
 
+  // Latest solved net map + per-net voltages, cached from the most recent
+  // tick() so the Voltage Meter tool can query "what's the voltage under
+  // the cursor" on demand (mousemove) without re-running the solver.
+  let _lastNets = null, _lastNetVoltage = null;
+
   // Permanent power supply's battery-sag state (Phase 3). Persists across
   // ticks (sag is inherently a running-average effect), but resets whenever
   // the sim starts fresh or Reset Failures is used, so a stopped/restarted
@@ -135,6 +140,7 @@ const Simulation = (() => {
     }
 
     const { netVoltage, diodeCurrents } = solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges);
+    _lastNets = nets; _lastNetVoltage = netVoltage;
 
     // Current actually drawn from the permanent supply, remembered for next
     // tick's sag calculation.
@@ -557,5 +563,15 @@ const Simulation = (() => {
     return nets.find(nets.key(rowA, colA)) === nets.find(nets.key(rowB, colB));
   }
 
-  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,notifyStateChange,hasElectricalPath };
+  // Voltage at a given hole, from the most recent tick's solve. Per the
+  // doc, empty/no-voltage nodes (including "sim hasn't ticked yet") read
+  // as 0V rather than null/blank — matches probing an unpowered real board.
+  function getVoltageAt(row, col) {
+    if (!_lastNets || !_lastNetVoltage) return 0;
+    const net = _lastNets.find(_lastNets.key(row, col));
+    const v = _lastNetVoltage.get(net);
+    return typeof v === 'number' ? v : 0;
+  }
+
+  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,notifyStateChange,hasElectricalPath,getVoltageAt };
 })();

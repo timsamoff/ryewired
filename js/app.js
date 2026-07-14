@@ -118,7 +118,9 @@ function handleAction(action) {
     case 'toggle-spectrum': togglePanel('spectrum-panel', 'btn-toggle-spectrum'); break;
     case 'toggle-palette':  toggleSidebar('palette');                             break;
     case 'toggle-props':    toggleSidebar('props-panel');                         break;
-    case 'wire-mode':       toggleJumperMode();                                   break;
+    case 'wire-mode':       setTool('jumper');                                   break;
+    case 'tool-voltmeter':  setTool('voltmeter');                                 break;
+    case 'tool-probe':      setTool('probe');                                     break;
     case 'zoom-in':         zoomIn();          break;
     case 'zoom-out':        zoomOut();         break;
     case 'zoom-fit':        fitBoard();        break;
@@ -197,33 +199,55 @@ async function saveLayout(forceDialog=false) {
   if (result?.saved) setStatus(`Saved: ${result.fileName}`);
 }
 
-// ── Jumper mode ───────────────────────────────────────────────────────────────
+// ── Tools ─────────────────────────────────────────────────────────────────────
+// Single active tool at a time, per the workbench doc. 'select' is the
+// implicit default (no dedicated button, same as before) — Jumper,
+// Voltmeter, and Probe are mutually exclusive modes sharing one dispatch
+// point, so a future tool only ever needs an entry here instead of another
+// one-off boolean+enter/exit pair.
 
-let _jumperActive = false;
+let _currentTool = 'select';
 
-function toggleJumperMode() {
-  _jumperActive = !_jumperActive;
-  const btn = document.getElementById('btn-wire-mode');
-  if (_jumperActive) {
-    Wire.enter();
-    btn?.classList.add('active');
-    document.getElementById('status-wire-mode').textContent = '⬡ JUMPER';
-    setStatus('Jumper mode ON — click a hole to start, click another to finish. W or Esc to exit.');
-  } else {
-    Wire.exit();
-    btn?.classList.remove('active');
-    document.getElementById('status-wire-mode').textContent = '';
-    setStatus('Jumper mode off');
-  }
+const TOOL_CONFIG = {
+  jumper:    { btnId:'btn-wire-mode',      bodyClass:'wire-mode',      label:'⬡ JUMPER',      onMsg:'Jumper mode ON — click a hole to start, click another to finish. W or Esc to exit.', offMsg:'Jumper mode off' },
+  voltmeter: { btnId:'btn-tool-voltmeter', bodyClass:'voltmeter-mode', label:'⬡ VOLTMETER',   onMsg:'Voltage Meter ON — hover any hole to read its voltage. V or Esc to exit.',            offMsg:'Voltage Meter off' },
+  probe:     { btnId:'btn-tool-probe',     bodyClass:'probe-mode',     label:'⬡ AUDIO PROBE', onMsg:'Audio Probe ON — hover any hole to listen. P or Esc to exit.',                        offMsg:'Audio Probe off' },
+};
+
+function setTool(tool) {
+  if (_currentTool === tool) { exitToolToSelect(); return; } // re-clicking the active tool returns to Selection
+  if (_currentTool !== 'select') deactivateTool(_currentTool);
+  _currentTool = tool;
+  activateTool(tool);
 }
 
-function exitJumperMode() {
-  if (!_jumperActive) return;
-  _jumperActive = false;
-  Wire.exit();
-  document.getElementById('btn-wire-mode')?.classList.remove('active');
+function activateTool(tool) {
+  const cfg = TOOL_CONFIG[tool];
+  if (tool === 'jumper') Wire.enter();
+  document.body.classList.add(cfg.bodyClass);
+  document.getElementById(cfg.btnId)?.classList.add('active');
+  document.getElementById('status-wire-mode').textContent = cfg.label;
+  setStatus(cfg.onMsg);
+}
+
+function deactivateTool(tool) {
+  const cfg = TOOL_CONFIG[tool];
+  if (tool === 'jumper') Wire.exit();
+  document.body.classList.remove(cfg.bodyClass);
+  document.getElementById(cfg.btnId)?.classList.remove('active');
+}
+
+function exitToolToSelect() {
+  if (_currentTool === 'select') return;
+  const cfg = TOOL_CONFIG[_currentTool];
+  deactivateTool(_currentTool);
+  _currentTool = 'select';
   document.getElementById('status-wire-mode').textContent = '';
+  setStatus(cfg.offMsg);
 }
+
+function currentTool()  { return _currentTool; }
+function isMeasuring()  { return _currentTool === 'voltmeter' || _currentTool === 'probe'; }
 
 // ── Zoom ──────────────────────────────────────────────────────────────────────
 
@@ -331,7 +355,7 @@ function onKeyDown(e) {
     if (document.querySelector('.menu-item.open')) {
       document.querySelectorAll('.menu-item').forEach(m=>m.classList.remove('open')); return;
     }
-    if (_jumperActive) { exitJumperMode(); return; }
+    if (_currentTool !== 'select') { exitToolToSelect(); return; }
     if (Wire.hasStart()) { Wire.cancelCurrent(); return; }
     if (Simulation.isRunning()) { stopSim(); return; }
   }
@@ -339,7 +363,9 @@ function onKeyDown(e) {
   if (typing) return;
 
   if (e.code==='Space') { e.preventDefault(); Simulation.isRunning()?stopSim():runSim(); }
-  if (e.code==='KeyW')  { toggleJumperMode(); }
+  if (e.code==='KeyW')  { setTool('jumper'); }
+  if (e.code==='KeyV')  { setTool('voltmeter'); }
+  if (e.code==='KeyP')  { setTool('probe'); }
   if (e.code==='Delete'||e.code==='Backspace') {
     Board.deleteSelected(); PropertiesPanel.hide();
     updateComponentCount(); Storage.markDirty();

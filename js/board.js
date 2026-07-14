@@ -212,6 +212,40 @@ const Board = (() => {
     ctx.clearRect(0,0,boardWidth(),boardHeight());
     drawBoardSurface(c); drawWires(c); drawComponents(c);
     if(_paletteGhost) drawPaletteGhost(ghostX??_mouseX,ghostY??_mouseY,c);
+    drawMeasurementReadout();
+  }
+
+  // Voltage Meter / Audio Probe hover tag. Piggybacks on render() so it
+  // refreshes both on mousemove and on Simulation's own per-tick redraw —
+  // no separate timer needed. Audio Probe's value is a placeholder until
+  // the audio chain is topology-aware (Phase 2); it still shows the tool
+  // is live and hovering correctly.
+  function drawMeasurementReadout() {
+    if (!_hoverHole || typeof currentTool!=='function') return;
+    const tool = currentTool();
+    if (tool!=='voltmeter' && tool!=='probe') return;
+
+    let text, tint;
+    if (tool==='voltmeter') {
+      const v = (typeof Simulation!=='undefined' && Simulation.getVoltageAt) ? Simulation.getVoltageAt(_hoverHole.row,_hoverHole.col) : 0;
+      text = (Math.round(v*100)/100) + 'V';
+      tint = '#2B579A';
+    } else {
+      text = 'listening…'; // real per-node audio tap lands with the Phase 2 topology fix
+      tint = '#2A7A4A';
+    }
+
+    const {x,y} = holeToXY(_hoverHole.row,_hoverHole.col);
+    ctx.save();
+    ctx.font = 'bold 11px IBM Plex Mono, monospace';
+    const w = ctx.measureText(text).width;
+    const padX=6, tagH=18, tagY = y - HOLE_R - 12 - tagH;
+    Shapes.roundRect(ctx, x-w/2-padX, tagY, w+padX*2, tagH, 4);
+    ctx.fillStyle='rgba(20,16,12,0.9)'; ctx.fill();
+    ctx.strokeStyle=tint; ctx.lineWidth=1.2; ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(text, x, tagY+tagH/2+1);
+    ctx.restore();
   }
 
   // ── Board surface ─────────────────────────────────────────────────────────────
@@ -563,6 +597,7 @@ const Board = (() => {
     if(e.button!==0) return;
     const {x,y}=eventToCanvas(e);
     if(Wire.isWiring()){const h=xyToHole(x,y);if(h) Wire.startOrFinish(h);return;}
+    if(typeof isMeasuring==='function' && isMeasuring()) return; // Voltmeter/Probe are hover-only, per the doc
     const legHit=hitTestLeg(x,y);
     if(legHit){
       _dragMode='leg-dragging';_dragInst=legHit.inst;_dragLegIdx=legHit.legIdx;
