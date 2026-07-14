@@ -1,44 +1,139 @@
-// ── Workbench Strip ───────────────────────────────────────────────────────────
+// ── Ryewired App Bootstrap ────────────────────────────────────────────────────
 
-const WorkbenchStrip = (() => {
-  let canvas, ctx, _dpr = 1;
+const APP_VERSION = '0.1.0';
 
-  const HOLE_PITCH = 20;
-  const STRIP_H = 96;
-  const OVERLAP = 16;
-  const BYPASS_ON_DEFAULT = false;
+let _zoomLevel = 1.0;
+const ZOOM_MIN  = 0.1;
+const ZOOM_MAX  = 2.0;
+const ZOOM_STEP = 0.1;
 
-  let bypassOn = BYPASS_ON_DEFAULT;
-  let logoImg = null, logoReady = false;
+let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
 
-  const DEFAULT_PERMANENT_STATE = {
-    power:  { voltage: 9, reverse_polarity: false, power_on: true, battery_sag: 0, internal_resistance: 1 },
-    input:  { waveform: 'None', frequency: 440, amplitude: 1.0, dc_offset: 0, phase: 0, looping: true, audio_file: null },
-    output: { volume: 1.0, mute: false },
-  };
-  let permanentState = cloneState(DEFAULT_PERMANENT_STATE);
-  function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
+(async function initApp() {
 
-  function getPermanentState() { return permanentState; }
-  function setPermanentState(saved) {
-    permanentState = {
-      power:  Object.assign(cloneState(DEFAULT_PERMANENT_STATE).power,  saved?.power  || {}),
-      input:  Object.assign(cloneState(DEFAULT_PERMANENT_STATE).input,  saved?.input  || {}),
-      output: Object.assign(cloneState(DEFAULT_PERMANENT_STATE).output, saved?.output || {}),
-    };
-    // The decoded audio buffer only ever lives in memory (AudioEngine's
-    // _audioBuffer) — it's never persisted. Only the filename string was
-    // saved, so on reload it would otherwise show "Change Audio File" with
-    // the old name even though nothing is actually loaded. Clear it so the
-    // UI correctly says "Load Audio File..." again.
-    if (permanentState.input.audio_file) permanentState.input.audio_file = null;
-    render();
+  await ComponentRegistry.load();
+
+  Board.init(document.getElementById('board-canvas'));
+  WorkbenchStrip.init(document.getElementById('workbench-strip-canvas'));
+  TraceOverlay.init(document.getElementById('trace-overlay-canvas'));
+  Palette.init();
+  Palette.populate(ComponentRegistry.getAll());
+  PropertiesPanel.init();
+  Modal.init();
+  Oscilloscope.init(
+    document.getElementById('scope-canvas'),
+    document.getElementById('spectrum-canvas')
+  );
+
+  // Board callbacks
+  Board.onSelect((inst, wire) => {
+    PropertiesPanel.show(inst, wire);
+    document.body.classList.toggle('comp-selected', !!inst);
+  });
+
+  // Permanent workbench device clicks (Power Supply / Input / Output)
+  WorkbenchStrip.onSelectPermanent(kind => {
+    PropertiesPanel.showPermanent(kind);
+    document.body.classList.add('comp-selected');
+  });
+
+  Board.onPlace(inst => {
+    Storage.markDirty();
+    const label = ComponentRegistry.getById(inst.defId)?.label || inst.defId;
+    setStatus(`Placed ${label} — select it to set properties`);
+    updateComponentCount();
+    // History already pushed by board.js onDrop
+  });
+
+  // Simulation callbacks
+  Simulation.onFailure(({ icon, title, message }) => {
+    AudioEngine.stop(); Oscilloscope.stop(); setSimState('stopped');
+    document.getElementById('failure-icon').textContent    = icon;
+    document.getElementById('failure-title').textContent   = title;
+    document.getElementById('failure-message').textContent = message;
+    document.getElementById('failure-overlay').classList.remove('hidden');
+  });
+
+  document.getElementById('failure-dismiss').addEventListener('click', () => {
+    document.getElementById('failure-overlay').classList.add('hidden');
+    Simulation.reset();
+    setStatus('Failures cleared — fix the circuit and try again');
+  });
+
+  document.getElementById('help-close').addEventListener('click',    () => closeHelp());
+  document.getElementById('help-backdrop').addEventListener('click', () => closeHelp());
+  document.getElementById('failure-backdrop').addEventListener('click', () => {
+    document.getElementById('failure-overlay').classList.add('hidden');
+    Simulation.reset();
+  });
+
+  bindActions();
+  initMenubar();
+  initScopeKnobs();
+  initZoom();
+  initPan();
+
+  document.addEventListener('keydown', onKeyDown);
+
+  // History — init AFTER board is ready
+  History.init();
+
+  // Restore autosave if no file is being opened fresh
+  AutoSave.restore();
+
+  setTimeout(fitBoard, 100);
+  window.addEventListener('resize', Utils.debounce(fitBoard, 200));
+
+  Storage.newLayout();
+  setStatus('Drop a component to get started — press W to place jumper wires');
+
+})();
+
+// ── Action dispatcher ─────────────────────────────────────────────────────────
+
+function handleAction(action) {
+  switch (action) {
+    case 'new':      newLayout();           break;
+    case 'open':     openLayout();          break;
+    case 'save':     saveLayout(false);     break;
+    case 'save-as':  saveLayout(true);      break;
+    case 'undo':     History.undo();        break;
+    case 'redo':     History.redo();        break;
+    case 'delete':
+      Board.deleteSelected();
+      PropertiesPanel.hide();
+      updateComponentCount();
+      Storage.markDirty();
+      document.body.classList.remove('comp-selected');
+      History.push();
+      break;
+    case 'clear':           confirmClear();    break;
+    case 'sim-run':         runSim();          break;
+    case 'sim-stop':        stopSim();         break;
+    case 'sim-reset':
+      Simulation.reset();
+      setStatus('Failures cleared — components and wires unchanged');
+      break;
+    case 'toggle-scope':    togglePanel('scope-panel',    'btn-toggle-scope');    break;
+    case 'toggle-spectrum': togglePanel('spectrum-panel', 'btn-toggle-spectrum'); break;
+    case 'toggle-palette':  toggleSidebar('palette');                             break;
+    case 'toggle-props':    toggleSidebar('props-panel');                         break;
+    case 'wire-mode':       toggleJumperMode();                                   break;
+    case 'zoom-in':         zoomIn();          break;
+    case 'zoom-out':        zoomOut();         break;
+    case 'zoom-fit':        fitBoard();        break;
+    case 'help':            openHelp();        break;
   }
+}
 
-  let _onSelectPermanent = null;
-  function onSelectPermanent(fn) { _onSelectPermanent = fn; }
+function bindActions() {
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (btn) handleAction(btn.dataset.action);
+  });
+}
 
-  function cv(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+// ── Menubar ───────────────────────────────────────────────────────────────────
 
 function initMenubar() {
   const items = document.querySelectorAll('.menu-item');
@@ -83,203 +178,192 @@ async function newLayout() {
     const ok = await Modal.confirm('Start a new layout? Unsaved changes will be lost.', {title:'New Layout', okLabel:'New Layout', danger:true});
     if (!ok) return;
   }
+  Board.clear(); PropertiesPanel.hide(); Storage.newLayout();
+  History.clear(); History.init(); AutoSave.clear();
+  updateComponentCount(); setStatus('New layout — drop components to get started');
+}
 
-  function boardWidth() {
-    return (typeof Board !== 'undefined' && Board.getBoardWidth) ? Board.getBoardWidth() : 800;
-  }
+async function openLayout() {
+  if (Simulation.isRunning()) stopSim();
+  const layout = await Storage.openLayout();
+  if (!layout) return;
+  Board.loadLayout(layout); PropertiesPanel.hide();
+  History.clear(); History.init(); AutoSave.clear();
+  updateComponentCount(); setStatus(`Loaded — ${layout.components?.length||0} components`);
+}
 
-  function getVisualHeight() { return STRIP_H; }
+async function saveLayout(forceDialog=false) {
+  const data=Board.getLayoutData(), result=await Storage.saveLayout(data,forceDialog);
+  if (result?.saved) setStatus(`Saved: ${result.fileName}`);
+}
 
-  function render() {
-    _dpr = window.devicePixelRatio || 1;
-    const W = boardWidth(), H = STRIP_H + OVERLAP;
-    canvas.width = Math.round(W*_dpr); canvas.height = Math.round(H*_dpr);
-    canvas.style.width = W+'px'; canvas.style.height = H+'px';
-    ctx.setTransform(_dpr,0,0,_dpr,0,0);
-    ctx.clearRect(0,0,W,H);
-    drawStrip(W,STRIP_H);
-  }
+// ── Jumper mode ───────────────────────────────────────────────────────────────
 
-  // ── Shape helpers (mirrors Shapes.roundRect's approach) ──────────────────
-  function roundRect(x,y,w,h,r){
-    ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-    ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-    ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
-    ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
-  }
-  function roundRectTop(x,y,w,h,r){
-    ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-    ctx.lineTo(x+w,y+h);ctx.lineTo(x,y+h);
-    ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
-  }
+let _jumperActive = false;
 
-  function drawTrace(x1,y1,x2,y2,tint){
-    ctx.strokeStyle=tint||'rgba(90,70,55,0.35)'; ctx.lineWidth=3;
-    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
-    ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
-  }
-
-  function labelBg(text, cx, cy, font){
-    ctx.save();
-    ctx.font = font;
-    const w = ctx.measureText(text).width;
-    const padX = 4, padY = 2, h = 8;
-    ctx.fillStyle = '#DCD5CA'; // approximates the strip's own background gradient
-    roundRect(cx - w/2 - padX, cy - h/2 - padY, w + padX*2, h + padY*2, 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function colX(col, fallbackFrac) {
-    if (typeof Board !== 'undefined' && Board.holeToXY) return Board.holeToXY(0, col).x;
-    return boardWidth()*fallbackFrac;
-  }
-
-  function inputX(){ return colX(6, 0.10); }
-  function outputX(){ return colX(55, 0.90); }
-  function powerMinusX(){ return colX(18, 0.29); }
-  function powerPlusX(){ return colX(19, 0.31); }
-  function powerX(){ return (powerMinusX()+powerPlusX())/2; }
-  function switchX(){ return (powerX()+outputX())/2; }
-
-  function drawStrip(w,h){
-    ctx.save();
-
-    const grad = ctx.createLinearGradient(0,0,0,h);
-    grad.addColorStop(0,'#E4DED6'); grad.addColorStop(1,'#D9D2C8');
-    ctx.fillStyle=grad;
-    roundRectTop(0,0,w,h+OVERLAP,10);
-    ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=1; ctx.stroke();
-
-    const jackTraceStart  = h/2 + 22; // just below the jack's hex nut
-    const powerTraceStart = h/2 + 24; // just below the power block
-    drawTrace(inputX(), jackTraceStart, inputX(), h);
-    drawTrace(outputX(), jackTraceStart, outputX(), h);
-    drawTrace(powerMinusX(), powerTraceStart, powerMinusX(), h, 'rgba(43,87,154,0.45)');
-    drawTrace(powerPlusX(),  powerTraceStart, powerPlusX(),  h, 'rgba(176,32,46,0.45)');
-
-    drawLogo(48, h/2);
-    drawJack(inputX(), h/2, 'IN');
-    drawPowerBlock(powerX(), h/2);
-    drawSwitchCluster(switchX(), h/2);
-    drawJack(outputX(), h/2, 'OUT');
-
-    ctx.restore();
-  }
-
-function drawLogo(cx, cy) {
-  const size = 42; // Size of logo in px
-  if (logoReady) {
-    ctx.save();
-    
-    // Set shadow properties for a soft drop shadow
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetY = 4;
-    
-    ctx.drawImage(logoImg, cx - size / 2, cy - size / 2, size, size);
-    ctx.restore();
+function toggleJumperMode() {
+  _jumperActive = !_jumperActive;
+  const btn = document.getElementById('btn-wire-mode');
+  if (_jumperActive) {
+    Wire.enter();
+    btn?.classList.add('active');
+    document.getElementById('status-wire-mode').textContent = '⬡ JUMPER';
+    setStatus('Jumper mode ON — click a hole to start, click another to finish. W or Esc to exit.');
   } else {
- 
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.strokeStyle = 'rgba(92, 64, 51, 0.3)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+    Wire.exit();
+    btn?.classList.remove('active');
+    document.getElementById('status-wire-mode').textContent = '';
+    setStatus('Jumper mode off');
   }
 }
 
-  function drawJack(cx,cy,label){
-    ctx.save();ctx.translate(cx,cy);
-    const hexR=19.965;
-    ctx.beginPath();
-    for(let i=0;i<6;i++){
-      const a=Math.PI/6 + i*Math.PI/3;
-      const px=Math.cos(a)*hexR, py=Math.sin(a)*hexR;
-      i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+function exitJumperMode() {
+  if (!_jumperActive) return;
+  _jumperActive = false;
+  Wire.exit();
+  document.getElementById('btn-wire-mode')?.classList.remove('active');
+  document.getElementById('status-wire-mode').textContent = '';
+}
+
+// ── Zoom ──────────────────────────────────────────────────────────────────────
+
+function initZoom()  { applyZoom(1.0); }
+function zoomIn()    { applyZoom(Math.min(ZOOM_MAX, snapZoom(_zoomLevel + ZOOM_STEP))); }
+function zoomOut()   { applyZoom(Math.max(ZOOM_MIN, snapZoom(_zoomLevel - ZOOM_STEP))); }
+function snapZoom(v) { return Math.round(v / ZOOM_STEP) * ZOOM_STEP; }
+
+function fitBoard() {
+  const scroll = document.getElementById('board-scroll');
+  const canvas = document.getElementById('board-canvas');
+  if (!scroll || !canvas) return;
+  const aW = scroll.clientWidth  - 56;
+  const aH = scroll.clientHeight - 56;
+  // Use CSS (logical) size, not canvas.width which is DPR-inflated
+  const bW = parseFloat(canvas.style.width)  || canvas.clientWidth;
+  const stripH = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getVisualHeight) ? WorkbenchStrip.getVisualHeight() : 0;
+  const bH = (parseFloat(canvas.style.height) || canvas.clientHeight) + stripH;
+  if (!bW || !bH) return;
+  const raw = Math.min(aW / bW, aH / bH, 1.0);
+  applyZoom(Math.max(ZOOM_MIN, snapZoom(raw)));
+}
+
+function applyZoom(level) {
+  _zoomLevel = Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level)) * 10) / 10;
+  const t=document.getElementById('board-transform');
+  if (t) t.style.transform=`scale(${_zoomLevel})`;
+  const el=document.getElementById('zoom-level');
+  if (el) el.textContent=Math.round(_zoomLevel*100)+'%';
+  Board.setZoom(_zoomLevel);
+}
+
+// ── Pan ───────────────────────────────────────────────────────────────────────
+
+function initPan() {
+  const scroll=document.getElementById('board-scroll');
+  if (!scroll) return;
+
+  scroll.addEventListener('mousedown', e => {
+    if (e.button!==2) return;
+    e.preventDefault();
+    _panning=true; _panStartX=e.clientX; _panStartY=e.clientY;
+    _panScrollX=scroll.scrollLeft; _panScrollY=scroll.scrollTop;
+    scroll.style.cursor='grabbing';
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!_panning) return;
+    scroll.scrollLeft=_panScrollX-(e.clientX-_panStartX);
+    scroll.scrollTop =_panScrollY-(e.clientY-_panStartY);
+  });
+
+  window.addEventListener('mouseup', e => {
+    if (e.button!==2||!_panning) return;
+    _panning=false; scroll.style.cursor='';
+  });
+
+  scroll.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect=scroll.getBoundingClientRect();
+    const mX=e.clientX-rect.left, mY=e.clientY-rect.top;
+    const oldZ=_zoomLevel;
+    if (e.deltaY<0) zoomIn(); else zoomOut();
+    const newZ=_zoomLevel;
+    if (newZ===oldZ) return;
+    scroll.scrollLeft=(scroll.scrollLeft+mX)*(newZ/oldZ)-mX;
+    scroll.scrollTop =(scroll.scrollTop +mY)*(newZ/oldZ)-mY;
+  }, { passive:false });
+}
+
+// ── Panel toggles ─────────────────────────────────────────────────────────────
+
+function togglePanel(panelId, btnId) {
+  const p=document.getElementById(panelId), b=document.getElementById(btnId);
+  p.classList.toggle('hidden'); b?.classList.toggle('active', !p.classList.contains('hidden'));
+}
+
+function toggleSidebar(id) {
+  const el=document.getElementById(id);
+  if (el) el.style.display=el.style.display==='none'?'':'none';
+}
+
+// ── Help ──────────────────────────────────────────────────────────────────────
+
+function openHelp()  { document.getElementById('help-overlay').classList.remove('hidden'); }
+function closeHelp() { document.getElementById('help-overlay').classList.add('hidden'); }
+
+// ── Scope knobs ───────────────────────────────────────────────────────────────
+
+function initScopeKnobs() {
+  [['scope-vdiv','scope-vdiv-val'],['scope-tdiv','scope-tdiv-val']].forEach(([rid,vid])=>{
+    const r=document.getElementById(rid), v=document.getElementById(vid);
+    if (r&&v) r.addEventListener('input',()=>{ v.textContent=parseFloat(r.value).toFixed(1); });
+  });
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+
+function onKeyDown(e) {
+  const typing=['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName);
+
+  if (e.code==='Escape') {
+    if (Modal.handleEscape()) return;
+    if (!document.getElementById('help-overlay').classList.contains('hidden')) { closeHelp(); return; }
+    if (document.querySelector('.menu-item.open')) {
+      document.querySelectorAll('.menu-item').forEach(m=>m.classList.remove('open')); return;
     }
-    ctx.closePath();
-    const gHex=ctx.createLinearGradient(-hexR,-hexR,hexR,hexR);
-    gHex.addColorStop(0,'#c4c4cc');gHex.addColorStop(0.5,'#8a8a92');gHex.addColorStop(1,'#5c5c64');
-    ctx.fillStyle=gHex; ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.35)';ctx.lineWidth=1;ctx.stroke();
-
-    const barrelR=13.31;
-    ctx.beginPath();ctx.arc(0,0,barrelR,0,Math.PI*2);
-    const g=ctx.createRadialGradient(-2,-2,barrelR*0.7,0,0,barrelR);
-    g.addColorStop(0,'#9a9aa2');g.addColorStop(1,'#5c5c64');
-    ctx.fillStyle=g;ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=1;ctx.stroke();
-    ctx.beginPath();ctx.arc(0,0,barrelR*0.82,0,Math.PI*2);ctx.fillStyle='#141414';ctx.fill();
-
-    ctx.font='bold 9px IBM Plex Mono, monospace'; ctx.textAlign='center';
-    labelBg(label, 0, hexR+11, ctx.font);
-    ctx.fillStyle='rgba(92,64,51,0.8)';
-    ctx.fillText(label,0,hexR+14);
-    ctx.restore();
+    if (_jumperActive) { exitJumperMode(); return; }
+    if (Wire.hasStart()) { Wire.cancelCurrent(); return; }
+    if (Simulation.isRunning()) { stopSim(); return; }
   }
 
-  function drawPowerBlock(cx,cy){
-    const p = permanentState.power;
-    const bw=40,bh=44,hw=bw/2,hh=bh/2;
-    ctx.save();ctx.translate(cx,cy);
-    if (!p.power_on) ctx.globalAlpha = 0.45;
-    
-    const minusFirst = !p.reverse_polarity;
-    ctx.fillStyle='rgba(43,87,154,0.85)'; ctx.fillRect(-hw, minusFirst?-hh:0, bw, bh/2);
-    ctx.fillStyle='rgba(176,32,46,0.85)'; ctx.fillRect(-hw, minusFirst?0:-hh, bw, bh/2);
-    ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=0.8;roundRect(-hw,-hh,bw,bh,3);ctx.stroke();
-    ctx.fillStyle='#fff';ctx.font='bold 11px IBM Plex Mono, monospace';ctx.textAlign='center';
-    const vLabel = Number.isFinite(p.voltage) ? (Math.round(p.voltage*10)/10)+'V' : '9V';
-    ctx.fillText(vLabel,0,4);
-    ctx.font='bold 8px monospace';
-    ctx.fillStyle='rgba(255,255,255,0.85)';
-    ctx.fillText(minusFirst?'–':'+',0,-hh+10);
-    ctx.fillText(minusFirst?'+':'–',0,hh-4);
-    ctx.globalAlpha = 1;
-    ctx.font='bold 9px IBM Plex Mono, monospace'; ctx.textAlign='center';
-    labelBg('POWER', 0, hh+13, ctx.font);
-    ctx.fillStyle='rgba(92,64,51,0.8)';
-    ctx.fillText('POWER', 0, hh+16);
-    ctx.restore();
-  }
-  
-function drawSwitchCluster(cx, cy) {
-  ctx.save();
-  ctx.translate(cx, cy);
+  if (typing) return;
 
-  // --- LED and CLR code ---
-  const ledX = -80, ledY = -6;
-  ctx.save(); ctx.translate(ledX, ledY);
-  const hex = '#00FF00';
-  if (bypassOn) {
-    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
-    glow.addColorStop(0, hex + 'cc'); glow.addColorStop(1, 'transparent');
-    ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fillStyle = glow; ctx.fill();
+  if (e.code==='Space') { e.preventDefault(); Simulation.isRunning()?stopSim():runSim(); }
+  if (e.code==='KeyW')  { toggleJumperMode(); }
+  if (e.code==='Delete'||e.code==='Backspace') {
+    Board.deleteSelected(); PropertiesPanel.hide();
+    updateComponentCount(); Storage.markDirty();
+    document.body.classList.remove('comp-selected');
+    History.push();
   }
-  ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
-  ctx.fillStyle = bypassOn ? hex : '#7a3030';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.8; ctx.stroke();
-  ctx.restore();
+  if (e.key==='+'||e.key==='=') zoomIn();
+  if (e.key==='-'||e.key==='_') zoomOut();
 
-  const clrX = -80, clrY = 18;
-  ctx.save(); ctx.translate(clrX, clrY);
-  const bw = 28, bh = 12;
-  ctx.fillStyle = '#d4b896'; roundRect(-bw / 2, -bh / 2, bw, bh, 3); ctx.fill();
-  ctx.strokeStyle = '#b09070'; ctx.lineWidth = 0.5; ctx.stroke();
-  ['#8B4513', '#000', '#f00', '#c8a000'].forEach((col, i) => { ctx.fillStyle = col; ctx.fillRect(-bw / 2 + 6 + i * 6, -(bh - 2) / 2, 4, bh - 2); });
-  ctx.restore();
-ctx.font = 'bold 8px IBM Plex Mono, monospace';
-ctx.textAlign = 'left';
-labelBg('CLR', clrX + bw/2 + 6 + 8, clrY + 2, ctx.font);
-ctx.fillStyle = 'rgba(92,64,51,0.8)';
-ctx.fillText('CLR', clrX + bw/2 + 6, clrY + 3);
+  if (e.ctrlKey||e.metaKey) {
+    if (e.key==='z'&&!e.shiftKey) { e.preventDefault(); History.undo(); }
+    if (e.key==='z'&&e.shiftKey)  { e.preventDefault(); History.redo(); }
+    if (e.key==='y')               { e.preventDefault(); History.redo(); }
+    if (e.key==='n') { e.preventDefault(); newLayout(); }
+    if (e.key==='o') { e.preventDefault(); openLayout(); }
+    if (e.key==='s') { e.preventDefault(); saveLayout(e.shiftKey); }
+    if (e.key==='0') { e.preventDefault(); fitBoard(); }
+    if (e.key==='d') { e.preventDefault(); togglePanel('scope-panel','btn-toggle-scope'); }
+    if (e.key==='D') { e.preventDefault(); togglePanel('spectrum-panel','btn-toggle-spectrum'); }
+    if (e.key==='f') { e.preventDefault(); document.getElementById('palette-search')?.focus(); }
+  }
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
 
 async function confirmClear() {
   if (Board.getPlaced().length===0 && Board.getWires().length===0) return;
@@ -292,149 +376,28 @@ async function confirmClear() {
   }
 }
 
-  const rW = 84, rH = 30, half = rW / 2;
-  roundRect(-half, -rH / 2, rW, rH, 6); 
-  ctx.save(); 
-  ctx.clip();
-
-function fillHalf(active, left) {
-  ctx.save();
-  
-  // Create a clipping region for this half
-  if (left) {
-    ctx.beginPath();
-    ctx.rect(-half, -rH / 2, half, rH);
+function setSimState(state) {
+  const ind=document.getElementById('sim-indicator');
+  const lbl=document.getElementById('sim-indicator-label');
+  const run=document.getElementById('btn-run');
+  const stp=document.getElementById('btn-stop');
+  if (state==='running') {
+    ind?.classList.add('running'); if(lbl)lbl.textContent='Running';
+    if(run)run.disabled=true; if(stp)stp.disabled=false;
   } else {
-    ctx.beginPath();
-    ctx.rect(0, -rH / 2, half, rH);
+    ind?.classList.remove('running'); if(lbl)lbl.textContent='Stopped';
+    if(run)run.disabled=false; if(stp)stp.disabled=true;
   }
-  ctx.clip();
-  
-  if (active) {
-    // Active side: dark at center, light at outer edge
-    const grad = ctx.createLinearGradient(-half, 0, half, 0);
-    if (left) {
-      // Left half: dark at right (center), light at left (outer)
-      grad.addColorStop(0.5, '#3d3d3d');
-      grad.addColorStop(0.02, '#4a4a4a');
-      grad.addColorStop(0, '#606060');
-    } else {
-      // Right half: dark at left (center), light at right (outer)
-      grad.addColorStop(0.5, '#3d3d3d');
-      grad.addColorStop(0.98, '#4a4a4a');
-      grad.addColorStop(1, '#606060');
-    }
-    ctx.fillStyle = grad;
-  } else {
-    // Inactive side: light at outer edge, dark at center
-    const grad = ctx.createLinearGradient(-half, 0, half, 0);
-    if (left) {
-      // Left half: dark at center, abruptly transitions to gray then white edge
-      grad.addColorStop(0.5, '#4a4a4a');
-      grad.addColorStop(0.03, '#909090');
-      grad.addColorStop(0.005, '#ffffff');
-    } else {
-      // Right half: dark at center, abruptly transitions to gray then white edge
-      grad.addColorStop(0.5, '#4a4a4a');
-      grad.addColorStop(0.97, '#909090');
-      grad.addColorStop(0.995, '#ffffff');
-    }
-    ctx.fillStyle = grad;
-  }
-  
-  // Fill the appropriate half
-  if (left) {
-    ctx.fillRect(-half, -rH / 2, half, rH);
-  } else {
-    ctx.fillRect(0, -rH / 2, half, rH);
-  }
-  
-  ctx.restore();
+  PropertiesPanel.refresh();
 }
 
-  fillHalf(!bypassOn, true);
-  fillHalf(bypassOn, false);
-
-  ctx.restore();
-
-  // Divider line
-  ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, -rH / 2); ctx.lineTo(0, rH / 2); ctx.stroke();
-
-  // Outer border
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; roundRect(-half, -rH / 2, rW, rH, 4); ctx.stroke();
-  ctx.restore();
-
-  // Labels — back below the switch (moving them above wasn't reading well)
-  const labelY = bzH / 2 + 14;
-  ctx.font = 'bold 8px IBM Plex Mono, monospace';
-  ctx.textAlign = 'center';
-  labelBg('BYPASS', swX - 32, labelY - 3, ctx.font);
-  labelBg('ENGAGE', swX + 32, labelY - 3, ctx.font);
-  ctx.fillStyle = 'rgba(92,64,51,0.8)';
-  ctx.fillText('BYPASS', swX - 32, labelY);
-  ctx.fillText('ENGAGE', swX + 32, labelY);
-  ctx.strokeStyle = 'rgba(92,64,51,0.5)'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(swX, labelY - 9); ctx.lineTo(swX, labelY + 3); ctx.stroke();
-
-  ctx.restore();
+function setStatus(msg) {
+  const el=document.getElementById('status-msg'); if(el) el.textContent=msg;
 }
 
-  // Shared by onClick and onMouseMove so the clickable area and the
-  // pointer-cursor area can never drift apart from each other.
-  function hitTest(x, y) {
-    const cy = STRIP_H/2;
-    const swX = switchX()+80;
-    if (Math.abs(x-swX) < 48 && Math.abs(y-cy) < 23) return 'switch';
-    if (Math.abs(x-powerX())  < 22 && Math.abs(y-cy) < 24) return 'power';
-    if (Math.abs(x-inputX())  < 22 && Math.abs(y-cy) < 24) return 'input';
-    if (Math.abs(x-outputX()) < 22 && Math.abs(y-cy) < 24) return 'output';
-    return null;
-  }
-
-  function eventToCanvasXY(e) {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (e.clientX-rect.left)*(canvas.width/rect.width)/_dpr,
-      y: (e.clientY-rect.top)*(canvas.height/rect.height)/_dpr,
-    };
-  }
-
-  function onClick(e){
-    const {x,y} = eventToCanvasXY(e);
-    const hit = hitTest(x,y);
-
-    if (hit === 'switch') {
-      bypassOn = !bypassOn; render();
-      if (typeof Simulation !== 'undefined' && Simulation.isRunning() && typeof AudioEngine !== 'undefined') {
-        AudioEngine.stop(); AudioEngine.start();
-      }
-      return;
-    }
-    // Power supply, Input, and Output open their properties — same pattern
-    // as clicking a placed component. LED/CLR aren't included: per the doc
-    // they're permanent visual indicators only, not editable.
-    if (hit === 'power' || hit === 'input' || hit === 'output') { _onSelectPermanent?.(hit); return; }
-  }
-
-  function onMouseMove(e){
-    const {x,y} = eventToCanvasXY(e);
-    canvas.style.cursor = hitTest(x,y) ? 'pointer' : 'default';
-  }
-
-  return {
-    init, render, getVisualHeight,
-    getConnectionPoints: () => ({
-      inputX: inputX(), outputX: outputX(),
-      powerMinusX: powerMinusX(), powerPlusX: powerPlusX(),
-      inputCol: 6, outputCol: 55, powerMinusCol: 18, powerPlusCol: 19,
-      // Row index 5 (label 'f') is the row actually adjacent to the top
-      // rail — board.js's row-index-to-y mapping is not straightforwardly
-      // top-to-bottom (row index 0, label 'a', is near the BOTTOM rail).
-      // Verified against board.js's own buildLayout() math.
-      firstRow: 5,
-    }),
-    getPermanentState, setPermanentState, onSelectPermanent,
-    isBypassOn: () => bypassOn,
-  };
-})();
+function updateComponentCount() {
+  const el = document.getElementById('status-component-count');
+  if (!el) return;
+  const n = Board.getPlaced().length;
+  el.textContent = n ? (n + ' component' + (n !== 1 ? 's' : '')) : '';
+}
