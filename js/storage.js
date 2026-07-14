@@ -67,6 +67,20 @@ const Storage = (() => {
             suggestedName: (_fileName||'untitled')+'.'+FILE_EXT,
             types: [{description:FILE_DESC, accept:{[FILE_MIME]:['.' +FILE_EXT]}}]
           });
+        } else {
+          // A handle from Open Layout only carries 'read' permission —
+          // writing to it needs 'readwrite', which the browser gates behind
+          // its own native permission prompt (can't be replaced by an app
+          // modal, same security constraint as the file picker itself).
+          // Surface our own modal first, on a fresh click, so that native
+          // prompt doesn't appear out of nowhere on a plain Ctrl+S.
+          const perm = await _fileHandle.queryPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') {
+            await Modal.alert(
+              'Ryewired needs permission to save changes to this file. Click Allow on the next prompt.',
+              { title: 'Save Permission Needed', okLabel: 'Continue' }
+            );
+          }
         }
         const w = await _fileHandle.createWritable();
         await w.write(json); await w.close();
@@ -75,6 +89,10 @@ const Storage = (() => {
         return { saved:true, fileName:_fileHandle.name };
       } catch(err) {
         if (err.name==='AbortError') return { saved:false };
+        if (err.name==='NotAllowedError') {
+          await Modal.alert("Save permission was denied, so the file wasn't saved.", { title:'Save Cancelled' });
+          return { saved:false };
+        }
       }
     }
     downloadJson(json, (_fileName||'untitled')+'.'+FILE_EXT);
