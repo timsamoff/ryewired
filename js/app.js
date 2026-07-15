@@ -24,6 +24,7 @@ let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
     document.getElementById('scope-canvas'),
     document.getElementById('spectrum-canvas')
   );
+  updateSelectButton();
 
   // Board callbacks
   Board.onSelect((inst, wire) => {
@@ -119,8 +120,9 @@ function handleAction(action) {
     case 'toggle-palette':  toggleSidebar('palette');                             break;
     case 'toggle-props':    toggleSidebar('props-panel');                         break;
     case 'wire-mode':       setTool('jumper');                                   break;
-    case 'tool-voltmeter':  setTool('voltmeter');                                 break;
-    case 'tool-probe':      setTool('probe');                                     break;
+    case 'tool-select':     setTool('select');                                   break;
+    case 'tool-voltmeter':  setTool('voltmeter');                                break;
+    case 'tool-probe':      setTool('probe');                                    break;
     case 'zoom-in':         zoomIn();          break;
     case 'zoom-out':        zoomOut();         break;
     case 'zoom-fit':        fitBoard();        break;
@@ -170,6 +172,7 @@ function stopSim() {
   if (!Simulation.isRunning()) return;
   Simulation.stop(); AudioEngine.stop(); Oscilloscope.stop();
   setSimState('stopped'); setStatus('Simulation stopped');
+  if (_currentTool !== 'select') exitToolToSelect();
 }
 
 // ── Layout I/O ────────────────────────────────────────────────────────────────

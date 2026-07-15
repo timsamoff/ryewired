@@ -880,8 +880,12 @@ input[type="color"].prop-input {
 
 /* ── Leg drag targets ────────────────────────────────────────────────────── */
 
-/* Cursor hint when hovering over board in non-jumper mode with component selected */
-body.comp-selected #board-canvas {
+/* Cursor hint when hovering over board in Selection mode with a component
+   selected. Excludes all tool-mode classes explicitly — otherwise this ties
+   in specificity with the tool cursor rules and wins on source order,
+   which is exactly why cursors were reverting to the arrow whenever a
+   component stayed selected from before a tool got activated. */
+body.comp-selected:not(.wire-mode):not(.voltmeter-mode):not(.probe-mode) #board-canvas {
   cursor: default;
 }
 
@@ -912,7 +916,3 @@ body.comp-selected #board-canvas {
 }
 
 /* ── Leg drag cursor ─────────────────────────────────────────────────────── */
-
-body.comp-selected #board-canvas {
-  cursor: default;
-}

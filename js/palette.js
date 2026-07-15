@@ -70,6 +70,9 @@ const Palette = (() => {
         e.dataTransfer.setDragImage(img, Math.floor(img.width/2), Math.floor(img.height/2));
       }
 
+      if (typeof currentTool==='function' && currentTool()!=='select' && typeof exitToolToSelect==='function') {
+        exitToolToSelect(); // placing a component wants normal board interaction, not a measuring/jumper tool
+      }
       Board.setDragGhost(def.id);
       document.body.classList.add('dragging');
     });
