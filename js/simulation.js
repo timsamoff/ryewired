@@ -576,5 +576,5 @@ const Simulation = (() => {
     return typeof v === 'number' ? v : 0;
   }
 
-  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,notifyStateChange,hasElectricalPath,getVoltageAt };
+  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,notifyStateChange,hasElectricalPath,getVoltageAt,buildNetMap };
 })();

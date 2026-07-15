@@ -231,7 +231,8 @@ const Board = (() => {
       text = (Math.round(v*100)/100) + 'V';
       tint = '#2B579A';
     } else {
-      text = 'listening…'; // real per-node audio tap lands with the Phase 2 topology fix
+      const audible = (typeof AudioEngine!=='undefined' && AudioEngine.probeIsAudible) ? AudioEngine.probeIsAudible(_hoverHole.row,_hoverHole.col) : false;
+      text = audible ? '🔊 audible' : 'silent';
       tint = '#2A7A4A';
     }
 
@@ -560,6 +561,9 @@ const Board = (() => {
     const {x,y}=eventToCanvas(e);
     _mouseX=x;_mouseY=y;
     _hoverHole=xyToHole(x,y);
+    if(typeof currentTool==='function' && currentTool()==='probe' && typeof AudioEngine!=='undefined'){
+      AudioEngine.probeHover(_hoverHole?_hoverHole.row:null, _hoverHole?_hoverHole.col:null);
+    }
     if(Wire.isWiring()){render(x,y);return;}
     if(_dragMode==='comp-pending'){if(Math.hypot(x-_dragStartX,y-_dragStartY)>DRAG_THRESHOLD){_dragMode='comp-dragging';document.body.classList.add('dragging');}}
     if(_dragMode==='comp-dragging'){_dragOffsetX=x-_dragStartX;_dragOffsetY=y-_dragStartY;}

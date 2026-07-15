@@ -224,6 +224,7 @@ function setTool(tool) {
 function activateTool(tool) {
   const cfg = TOOL_CONFIG[tool];
   if (tool === 'jumper') Wire.enter();
+  if (tool === 'probe' && typeof AudioEngine !== 'undefined') AudioEngine.probeEnable();
   document.body.classList.add(cfg.bodyClass);
   document.getElementById(cfg.btnId)?.classList.add('active');
   document.getElementById('status-wire-mode').textContent = cfg.label;
@@ -233,6 +234,7 @@ function activateTool(tool) {
 function deactivateTool(tool) {
   const cfg = TOOL_CONFIG[tool];
   if (tool === 'jumper') Wire.exit();
+  if (tool === 'probe' && typeof AudioEngine !== 'undefined') AudioEngine.probeDisable();
   document.body.classList.remove(cfg.bodyClass);
   document.getElementById(cfg.btnId)?.classList.remove('active');
 }
