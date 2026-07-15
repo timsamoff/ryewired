@@ -33,7 +33,10 @@ const Simulation = (() => {
   function tick() {
     const placed = Board.getPlaced();
     const wires  = Board.getWires();
-    if (!placed.length && !wires.length) return;
+    // No "nothing placed" bail-out here: the permanent power supply still
+    // needs to solve the rail's voltage on a completely empty board (same
+    // reasoning as the Input->Output audio passthrough) — everything below
+    // already handles empty placed/wires arrays fine on its own.
 
     const nets = buildNetMap(placed, wires);
 
