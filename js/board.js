@@ -601,6 +601,7 @@ const Board = (() => {
     if(e.button!==0) return;
     const {x,y}=eventToCanvas(e);
     if(Wire.isWiring()){const h=xyToHole(x,y);if(h) Wire.startOrFinish(h);return;}
+    if(_pasteActive){confirmPaste(x,y);return;}
     if(typeof isMeasuring==='function' && isMeasuring()) return; // Voltmeter/Probe are hover-only, per the doc
     const legHit=hitTestLeg(x,y);
     if(legHit){
@@ -709,7 +710,17 @@ const Board = (() => {
     const defId=e.dataTransfer.getData('text/plain');if(!defId) return;
     const {x,y}=eventToCanvas(e);
     const hole=xyToHole(x,y,DROP_SNAP_RADIUS);if(!hole) return;
+    finalizePlacement(defId, hole, null);
+  }
+
+  // Shared by drag-and-drop placement (onDrop) and Paste's click-to-confirm
+  // placement (confirmPaste) — both end up creating one new instance at a
+  // hole, with the same power_supply rail-orientation snapping either way.
+  // `overrideProps`, when given (Paste), replaces the definition's defaults
+  // with the copied component's actual values.
+  function finalizePlacement(defId, hole, overrideProps){
     const inst=ComponentRegistry.createInstance(defId,hole.row,hole.col);
+    if (overrideProps) inst.props = {...overrideProps};
 
     if (defId==='power_supply' && inst.legs.length===2) {
       const def  = ComponentRegistry.getById(defId);
@@ -737,6 +748,36 @@ const Board = (() => {
     _placed.push(inst);setSelected(inst.instanceId,null);
     if(_onPlace) _onPlace(inst);
     History.push();render();
+    return inst;
+  }
+
+  // ── Paste ────────────────────────────────────────────────────────────────
+  // Ghost rendering reuses _paletteGhost/drawPaletteGhost (already generic —
+  // render() draws it on every mousemove regardless of what triggered it);
+  // this just adds a click-to-confirm placement path distinct from the
+  // drag-and-drop one, since Paste has no drag gesture to hook a 'drop'
+  // event off of.
+  let _pasteActive=false;
+
+  function beginPaste(defId, props){
+    _pasteActive=true;
+    _paletteGhost={defId, clipboardProps:props};
+    render(_mouseX,_mouseY);
+  }
+  function cancelPaste(){
+    if(!_pasteActive) return;
+    _pasteActive=false;
+    _paletteGhost=null;
+    render();
+  }
+  function confirmPaste(x,y){
+    const hole=xyToHole(x,y,DROP_SNAP_RADIUS);
+    if(!hole) return; // missed a valid hole — stay in paste mode, let them try again
+    const {defId, clipboardProps} = _paletteGhost;
+    _pasteActive=false;
+    _paletteGhost=null;
+    finalizePlacement(defId, hole, clipboardProps);
+    if (typeof exitToolToSelect==='function') exitToolToSelect(); // one paste, then back to Select — same as a normal placement
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -786,5 +827,6 @@ const Board = (() => {
 
   return{init,render,clear,loadLayout,getLayoutData,getPlaced,getWires,addWire,nextWireColor,
     setDragGhost,setStartWire,clearWire,setSelected,getSelected,deleteSelected,
-    onSelect,onPlace,holeToXY,xyToHole,redraw,setZoom,getBoardWidth:boardWidth};
+    onSelect,onPlace,holeToXY,xyToHole,redraw,setZoom,getBoardWidth:boardWidth,
+    beginPaste,cancelPaste};
 })();

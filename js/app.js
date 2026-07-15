@@ -109,6 +109,8 @@ function handleAction(action) {
       History.push();
       break;
     case 'clear':           confirmClear();    break;
+    case 'copy':            copySelected();    break;
+    case 'paste':           pasteFromClipboard(); break;
     case 'sim-run':         runSim();          break;
     case 'sim-stop':        stopSim();         break;
     case 'sim-reset':
@@ -261,6 +263,29 @@ function updateSelectButton() {
 function currentTool()  { return _currentTool; }
 function isMeasuring()  { return _currentTool === 'voltmeter' || _currentTool === 'probe'; }
 
+// ── Copy / Paste ─────────────────────────────────────────────────────────────
+// Clipboard holds defId + a snapshot of props only — legs/position are
+// re-derived at paste time from wherever the user clicks (same as a fresh
+// placement), and runtime sim state (_voltage/_current/failed/etc.) is
+// deliberately left out, same reasoning as the doc's duplication spec: a
+// paste should start clean, not carry over what the original happened to
+// be doing mid-simulation.
+let _clipboard = null;
+
+function copySelected() {
+  const inst = Board.getSelected();
+  if (!inst) { setStatus('Nothing selected to copy'); return; }
+  _clipboard = { defId: inst.defId, props: {...inst.props} };
+  setStatus(`Copied ${ComponentRegistry.getById(inst.defId)?.label || inst.defId}`);
+}
+
+function pasteFromClipboard() {
+  if (!_clipboard) { setStatus('Nothing to paste'); return; }
+  if (_currentTool !== 'select') exitToolToSelect(); // pasting wants normal board interaction, same as picking from the palette
+  Board.beginPaste(_clipboard.defId, _clipboard.props);
+  setStatus('Click to place — Esc to cancel');
+}
+
 // ── Zoom ──────────────────────────────────────────────────────────────────────
 
 function initZoom()  { applyZoom(1.0); }
@@ -398,6 +423,8 @@ function onKeyDown(e) {
     if (e.key==='d') { e.preventDefault(); togglePanel('scope-panel','btn-toggle-scope'); }
     if (e.key==='D') { e.preventDefault(); togglePanel('spectrum-panel','btn-toggle-spectrum'); }
     if (e.key==='f') { e.preventDefault(); document.getElementById('palette-search')?.focus(); }
+    if (e.key==='c') { e.preventDefault(); copySelected(); }
+    if (e.key==='v') { e.preventDefault(); pasteFromClipboard(); }
   }
 }
 
