@@ -215,10 +215,12 @@ const TOOL_CONFIG = {
 };
 
 function setTool(tool) {
+  if (tool === 'select') { exitToolToSelect(); return; }
   if (_currentTool === tool) { exitToolToSelect(); return; } // re-clicking the active tool returns to Selection
   if (_currentTool !== 'select') deactivateTool(_currentTool);
   _currentTool = tool;
   activateTool(tool);
+  updateSelectButton();
 }
 
 function activateTool(tool) {
@@ -240,12 +242,17 @@ function deactivateTool(tool) {
 }
 
 function exitToolToSelect() {
-  if (_currentTool === 'select') return;
+  if (_currentTool === 'select') { updateSelectButton(); return; }
   const cfg = TOOL_CONFIG[_currentTool];
   deactivateTool(_currentTool);
   _currentTool = 'select';
   document.getElementById('status-wire-mode').textContent = '';
   setStatus(cfg.offMsg);
+  updateSelectButton();
+}
+
+function updateSelectButton() {
+  document.getElementById('btn-tool-select')?.classList.toggle('active', _currentTool==='select');
 }
 
 function currentTool()  { return _currentTool; }

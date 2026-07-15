@@ -18,9 +18,10 @@ const Simulation = (() => {
   let _battery = { effectiveV: null, lastCurrent: 0, posNet: null, virtualPos: null, Rint: 0 };
 
   function start() { if(_running)return; _running=true; _battery={effectiveV:null,lastCurrent:0,posNet:null,virtualPos:null,Rint:0}; _interval=setInterval(tick,TICK_MS); }
-  function stop()  { if(!_running)return; _running=false; clearInterval(_interval); _interval=null; }
+  function stop()  { if(!_running)return; _running=false; clearInterval(_interval); _interval=null; _lastNets=null; _lastNetVoltage=null; }
   function reset() {
     _battery = { effectiveV: null, lastCurrent: 0, posNet: null, virtualPos: null, Rint: 0 };
+    _lastNets = null; _lastNetVoltage = null;
     for (const inst of Board.getPlaced()) {
       inst.failed=false; inst.failureType=null;
       inst._voltage=0; inst._current=0; inst._brightness=0;
