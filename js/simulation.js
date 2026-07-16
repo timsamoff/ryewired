@@ -192,6 +192,31 @@ const Simulation = (() => {
         break;
       }
 
+      case 'diode': {
+        const mk  = inst.props.model || '1N4148';
+        const pm  = def.model_params?.[mk] || {};
+        const Vf  = parseFloat(inst.props.forward_voltage) || pm.vf || 0.7;
+        const ImA = (pm.max_current_ma || 200) / 1000;
+
+        const [vA, vB] = legVoltages(inst, nets, netVoltage);
+        const vAnode   = vA ?? 0;
+        const vCathode = vB ?? 0;
+        const I = diodeCurrents?.get(inst) ?? 0;
+
+        if (I <= 0 && vCathode - vAnode > Vf * 0.5) {
+          fail(inst, def, 'reverse_voltage'); return;
+        }
+
+        if (I <= 0) { inst._current = 0; break; }
+
+        inst._current = I;
+        // diode.json's over_current mode has no threshold_multiplier (unlike
+        // the LED's 1.5x headroom) — it fires right at the rated max.
+        const threshold = ImA * (def.failure_modes?.over_current?.threshold_multiplier || 1);
+        if (I > threshold) fail(inst, def, 'over_current');
+        break;
+      }
+
       case 'led': {
         const cm  = def.color_map?.[inst.props.color] || { vf: 2.0 };
         const Vf  = parseFloat(inst.props.forward_voltage) || cm.vf;

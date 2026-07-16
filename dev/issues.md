@@ -1,0 +1,14 @@
+- Change Run/Stop to a single Power button (square/rounded corners, power symbol, bright green when on, dull green when off). Grays out permanent power source when off. Draggable/DC power sources are independent and are always on, like batteries.
+- Remove Power on/off from permanent power source, but add it to draggable/DC power sources.
+- DC Power supplies should have the same options as the permanent supply.
+- When a DC Power supply is to the board, but not on the lower power rail and got the two power supply error even though it was disconnected from everything else in the circuit, including the permanent power supply. Adding it to the lower rail, doesn't produce the error. The error should only happen when the positives of the two power supplies are connected.
+- Clear Board should also reset the Audio In to None.
+- Dragging in a new component shows the ghost spanning 4 holes. But dropping it only spans three holes, which makes placement frustrating. Can the ghosts match th dropped span?
+- Quickly drag-selecting text in a Settings text field snaps automatically to no selection because the mouse button is not released until it's out of the field. The result is carefully drag-selecting the text again to edit it. Fixable or not fixable?
+- Film, Ceramic, Monolithic caps need color changes. Film is good as is, Ceramic should be a brick-orange color; monolithic should be more of a yellow-orange color.
+- Reverse the direction of the hole numbering.
+- Reverse the direction of the hole lettering.
+- Swap the In and Out jacks so that IN is on the right and OUT is on the left.
+- Swap the Bypass Switch/LED group with the permanent Power Source (leave all spacing the same).
+- Zoom In/Out +/- symbols are too far from ech other. Give them normal spacing at the right of the modal.
+- The Redo button works, but Ctrl+Shift+Z doesn't.

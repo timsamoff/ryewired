@@ -268,79 +268,137 @@ const AudioEngine = (() => {
     return { startable: [src], output: g };
   }
 
-  // ── Real-topology signal walk ───────────────────────────────────────────
-  // Walks the net graph from Input's net to Output's net, hopping through
-  // whichever placed component actually has a leg on the current net.
-  // Single primary path only (see file header) — components not reachable
-  // this way just aren't part of the returned taps.
+  // ── Real-topology signal walk (branch-aware) ────────────────────────────
+  // BFS over the net graph from Input's net. Every net that gets reached
+  // gets its own small GainNode "bus" (gain=1, a pure summing/passthrough
+  // point) — that's what makes branching work: a net with two components
+  // touching it (say a series resistor continuing on, and something else
+  // shunting off it) just gets two things connected out of the same bus,
+  // and Web Audio naturally sums whatever comes back together at a shared
+  // destination bus. Each component is only ever built once (`used`),
+  // however many nets reach it, so a loop in the wiring can't cause
+  // infinite work — worst case is bounded by the number of parts on the
+  // board (see MAX_STAGES).
+  //
+  // One honest limitation carried over from the single-path version: this
+  // is a signal-level graph, not an impedance-aware one. A shunt-to-ground
+  // capacitor next to a series resistor doesn't "steal" high frequencies
+  // away from the series path the way it does on a real board — that
+  // specific, common case (resistor + a capacitor sharing one of its nets)
+  // is still special-cased in buildAudioStage as a combined lowpass, same
+  // as before. What's new is that capacitor is now ALSO reachable as its
+  // own independent branch (so probing past it, in whatever direction its
+  // other leg goes, hears its own coupling-highpass stage) — a deliberate
+  // small redundancy, not a bug: two valid, differently-useful ways to
+  // listen to the same physical capacitor, rather than one gaining
+  // "realism" at the cost of the other's probeability.
   function traceSignalPath(ctx, placed, wires, cp, source) {
     const nets = Simulation.buildNetMap(placed, wires);
     const inputNet  = nets.find(nets.key(cp.firstRow, cp.inputCol));
     const outputNet = nets.find(nets.key(cp.firstRow, cp.outputCol));
 
-    const netTaps  = new Map();
+    // Ground is a fixed 0V reference, not an ordinary circuit node — real
+    // audio never "appears" there (a shunt cap's job is to send unwanted
+    // content OUT of the signal path to the reference, not to make it
+    // newly audible AT the reference). Mirrors simulation.js's own
+    // permPosNet/permNegNet polarity check.
+    const power    = (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getPermanentState().power : null;
+    const reversed = !!power?.reverse_polarity;
+    const topPlusNet  = nets.find(nets.key('rtp', 0));
+    const topMinusNet = nets.find(nets.key('rtm', 0));
+    const groundNet   = reversed ? topPlusNet : topMinusNet;
+
+    const netTaps  = new Map(); // net -> bus GainNode, doubles as the Audio Probe tap
     const allNodes = [];
-    netTaps.set(inputNet, source);
+    const used      = new Set(); // instanceIds already built — each component gets exactly one stage, however many of its nets get reached
+    const MAX_STAGES = 64;       // finitely many parts on a board — `used` already prevents true infinite loops, this is just a documented backstop
 
-    let currentNet = inputNet, tail = source;
-    const used = new Set();
-    const MAX_HOPS = 64; // finitely many parts on a board — more hops than that means a wiring loop, not a real path
-
-    for (let hop = 0; hop < MAX_HOPS && currentNet !== outputNet; hop++) {
-      const next = findNextHop(placed, nets, currentNet, used);
-      if (!next) break; // dead end — primary path doesn't (yet) reach Output
-      used.add(next.inst.instanceId);
-
-      const built = buildAudioStage(ctx, next.inst, next.def, nets, placed, next.entryNet, next.exitNet);
-      if (built) {
-        tail.connect(built.in);
-        allNodes.push(built.in); if (built.out !== built.in) allNodes.push(built.out);
-        tail = built.out;
+    function busFor(net) {
+      if (!netTaps.has(net)) {
+        const bus = ctx.createGain(); bus.gain.value = 1;
+        netTaps.set(net, bus);
+        allNodes.push(bus);
       }
-      // else: this hop's component contributes no audio shaping (e.g. a
-      // resistor with no paired shunt cap) — signal passes through
-      // unchanged, `tail` stays what it was.
-      netTaps.set(next.exitNet, tail);
-      currentNet = next.exitNet;
+      return netTaps.get(net);
     }
 
-    return { nets, netTaps, reachedOutput: currentNet === outputNet, tail, allNodes };
-  }
+    source.connect(busFor(inputNet));
 
-  // Finds a not-yet-used component with one leg on `fromNet` and the other
-  // on a different net, per its type's canonical signal-leg pair. First
-  // match wins — see the "single primary path" note above for why this
-  // doesn't try to resolve branches.
-  function findNextHop(placed, nets, fromNet, used) {
-    for (const inst of placed) {
-      if (inst.failed || used.has(inst.instanceId)) continue;
-      const def = ComponentRegistry.getById(inst.defId);
-      if (!def) continue;
-      const pair = signalLegPair(inst, def);
-      if (!pair) continue;
-      const netA = nets.find(nets.key(pair[0].row, pair[0].col));
-      const netB = nets.find(nets.key(pair[1].row, pair[1].col));
-      if (netA === fromNet && netB !== fromNet) return { inst, def, entryNet: netA, exitNet: netB };
-      if (netB === fromNet && netA !== fromNet) return { inst, def, entryNet: netB, exitNet: netA };
+    const frontier = [inputNet];
+    const visitedNets = new Set(frontier);
+    let stageCount = 0;
+
+    while (frontier.length && stageCount < MAX_STAGES) {
+      const net = frontier.shift();
+      const entryBus = busFor(net);
+
+      for (const inst of placed) {
+        if (inst.failed || used.has(inst.instanceId)) continue;
+        const def = ComponentRegistry.getById(inst.defId);
+        if (!def) continue;
+        const pairs = signalLegPairs(inst, def);
+        let entryNet = null, otherNet = null;
+        for (const pair of pairs) {
+          const netA = nets.find(nets.key(pair[0].row, pair[0].col));
+          const netB = nets.find(nets.key(pair[1].row, pair[1].col));
+          if (netA === net && netB !== net) { entryNet = netA; otherNet = netB; break; }
+          if (netB === net && netA !== net) { entryNet = netB; otherNet = netA; break; }
+        }
+        if (otherNet == null) continue; // no matching pair touches the net we're expanding from
+
+        used.add(inst.instanceId);
+        stageCount++;
+
+        const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet);
+        const exitBus = busFor(otherNet);
+        if (built) {
+          entryBus.connect(built.in);
+          allNodes.push(built.in); if (built.out !== built.in) allNodes.push(built.out);
+          built.out.connect(exitBus);
+        } else {
+          // no audio-shaping effect (e.g. a lone series resistor, or an
+          // LED) — signal passes through unchanged onto the far bus.
+          entryBus.connect(exitBus);
+        }
+
+        if (otherNet !== groundNet && !visitedNets.has(otherNet)) { visitedNets.add(otherNet); frontier.push(otherNet); }
+      }
     }
-    return null;
+
+    // Ground still needed a real bus above (so shunt/coupling components had
+    // something valid to connect into) but it should never read back as
+    // audible — it's the reference, not a signal-carrying node. Overriding
+    // the tap to null here means Probe correctly reports silence there,
+    // without needing to special-case every place a component might route
+    // to ground.
+    if (groundNet != null) netTaps.set(groundNet, null);
+
+    return { nets, netTaps, reachedOutput: netTaps.has(outputNet) && netTaps.get(outputNet)!=null, tail: netTaps.get(outputNet) || null, allNodes };
   }
 
-  // Which two legs carry the traced signal, per component type. 2-leg parts
-  // are unambiguous; 3-leg parts pick one default pair (see file header).
-  function signalLegPair(inst, def) {
+  // Which leg-pair(s) can carry the traced signal, per component type.
+  // 2-leg parts are unambiguous. 3-leg parts can have more than one valid
+  // pair — a potentiometer's wiper might be wired to either outer leg
+  // depending on which one the source actually lands on (both are
+  // standard volume-pot wirings, just mirror images of each other), so
+  // both are offered and whichever one's other leg matches the net being
+  // expanded from wins. A transistor's real signal path for a common-
+  // emitter stage is base-in / collector-out (not collector<->emitter,
+  // which was the wrong assumption before this fix) — this assumes the
+  // emitter is at AC ground; no emitter-degeneration modeling.
+  function signalLegPairs(inst, def) {
     switch (def.behavior?.type) {
       case 'resistor': case 'capacitor': case 'diode': case 'led':
-        return inst.legs.length >= 2 ? [inst.legs[0], inst.legs[inst.legs.length-1]] : null;
+        return inst.legs.length >= 2 ? [[inst.legs[0], inst.legs[inst.legs.length-1]]] : [];
       case 'potentiometer':
-        return inst.legs.length >= 3 ? [inst.legs[1], inst.legs[0]] : null; // wiper -> ccw leg
+        return inst.legs.length >= 3 ? [[inst.legs[1], inst.legs[0]], [inst.legs[1], inst.legs[2]]] : []; // wiper <-> either outer leg
       case 'bjt_npn': case 'bjt_pnp': {
-        if (inst.legs.length < 3) return null;
+        if (inst.legs.length < 3) return [];
         const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
         const cIdx = eIdx === 0 ? 2 : 0;
-        return [inst.legs[cIdx], inst.legs[eIdx]]; // collector -> emitter
+        return [[inst.legs[1], inst.legs[cIdx]]]; // base -> collector
       }
-      default: return null;
+      default: return [];
     }
   }
 
@@ -378,16 +436,57 @@ const AudioEngine = (() => {
       }
       case 'bjt_npn': case 'bjt_pnp': {
         const mk  = inst.props.model || (def.behavior.type === 'bjt_pnp' ? '2N3906' : '2N3904');
-        const hfe = parseFloat(inst.props.hfe) || def.model_params?.[mk]?.hfe || 100;
-        const g   = ctx.createGain(); g.gain.value = Utils.clamp(hfe / 100, 0.5, 20);
-        const sh  = ctx.createWaveShaper(); sh.curve = makeClipCurve(0.8);
+        const pm  = def.model_params?.[mk] || {};
+
+        // Real small-signal gain from the DC operating point the electrical
+        // solver already computes (inst._current = Ic, set in
+        // simulation.js's bjt_npn/bjt_pnp case) rather than a flat
+        // hFE-only guess: gm = Ic/Vt (transconductance), and a bare
+        // common-emitter stage's voltage gain is ~gm * Rc, where Rc is
+        // whatever resistor is actually sitting on the collector's net —
+        // its real load, not an assumed value. Emitter degeneration isn't
+        // modeled (that would need a second resistor-on-emitter-net
+        // lookup and a different gain formula) — this assumes a bare
+        // common-emitter stage.
+        const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
+        const cIdx = eIdx === 0 ? 2 : 0;
+        const Ic = Math.max(inst._current || 0, 1e-6); // floor avoids a divide-by-near-zero cliff when barely biased
+        const Vt = 0.026; // thermal voltage at room temperature
+        const collectorLeg = inst.legs[cIdx];
+        const collectorNet = nets.find(nets.key(collectorLeg.row, collectorLeg.col));
+        const Rc = placed.find(p => p.defId==='resistor' && !p.failed &&
+          p.legs.some(l => nets.find(nets.key(l.row, l.col)) === collectorNet));
+        const RcValue = Rc ? (parseFloat(Rc.props.resistance) || 10000) : 10000; // no collector resistor found -> reasonable fallback load
+        const gain = Utils.clamp((Ic / Vt) * RcValue, 0.5, 25);
+
+        const g = ctx.createGain(); g.gain.value = gain;
+
+        // Clip headroom now scales with how hard the stage is actually
+        // biased (Ic against its rated max) instead of one fixed shape for
+        // every transistor regardless of operating point — barely-biased
+        // reads soft/clean, driven-hard reads compressed/clipped sooner.
+        const IcMax = (pm.max_ic_ma || 200) / 1000;
+        const headroom = Utils.clamp(1 - (Ic / IcMax), 0.15, 0.9);
+        const sh = ctx.createWaveShaper(); sh.curve = makeClipCurve(headroom);
         g.connect(sh);
         return { in: g, out: sh };
       }
       case 'diode': {
-        const mk       = inst.props.model || '1N4148';
-        const isGerman = def.model_params?.[mk]?.type === 'germanium';
-        const sh       = ctx.createWaveShaper(); sh.curve = makeClipCurve(isGerman ? 0.3 : 0.65);
+        const mk  = inst.props.model || '1N4148';
+        const pm  = def.model_params?.[mk] || {};
+        const isGerman = pm.type === 'germanium';
+
+        // Clip threshold now follows the diode's actual solved current
+        // (inst._current, from the same DC pass simulation.js's diode case
+        // now tracks) relative to its rated max, instead of one fixed
+        // per-material guess — a diode barely conducting clips softer than
+        // one being driven hard, same physical intuition as the
+        // transistor headroom above.
+        const ImA   = (pm.max_current_ma || (isGerman ? 75 : 200)) / 1000;
+        const drive = Utils.clamp((inst._current || 0) / ImA, 0, 1);
+        const base  = isGerman ? 0.3 : 0.65;
+        const threshold = Utils.clamp(base - drive*0.15, 0.15, 0.9); // harder-driven diode clips a bit sooner
+        const sh = ctx.createWaveShaper(); sh.curve = makeClipCurve(threshold);
         return { in: sh, out: sh };
       }
       case 'capacitor': {
