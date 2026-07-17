@@ -28,6 +28,41 @@ const AudioEngine = (() => {
   let _audioBuffer      = null;
   let _audioFileName    = null;
 
+  // ── Bundled sample clips ─────────────────────────────────────────────────
+  // Fetched once (fire-and-forget, kicked off below) rather than per-panel-
+  // open, since it's static and small. getCachedSamples() is synchronous —
+  // by the time a user could plausibly open the Input panel, this has
+  // almost always already resolved; listSamples() (promise-based) exists
+  // as a fallback for the rare case a caller wants to wait on it instead.
+  let _sampleManifest = [];
+  let _sampleManifestPromise = null;
+  function fetchSampleManifest() {
+    if (_sampleManifestPromise) return _sampleManifestPromise;
+    _sampleManifestPromise = fetch('vendor/audio/manifest.json')
+      .then(res => res.ok ? res.json() : { samples: [] })
+      .then(data => { _sampleManifest = data.samples || []; return _sampleManifest; })
+      .catch(err => { console.error('[Audio] Sample manifest load error:', err); _sampleManifest = []; return _sampleManifest; });
+    return _sampleManifestPromise;
+  }
+  function getCachedSamples() { return _sampleManifest; }
+  function listSamples() { return fetchSampleManifest(); }
+
+  // Fetches a bundled sample and decodes it through the exact same path an
+  // uploaded file already uses — samples aren't a separate audio-loading
+  // system, just a different source for the same "Audio File" playback.
+  async function loadSampleClip(fileName, displayName) {
+    try {
+      const res = await fetch('vendor/audio/' + fileName);
+      if (!res.ok) throw new Error('fetch failed: ' + res.status);
+      const buffer = await res.arrayBuffer();
+      return await loadAudioFile({ name: displayName, buffer });
+    } catch (err) {
+      console.error('[Audio] Sample clip load error:', err);
+      return null;
+    }
+  }
+  fetchSampleManifest(); // warm the cache at module load, well before the Input panel could realistically be opened
+
   // What's currently feeding the analyser/spectrum (and, through the
   // analyser, the speaker) — the normal chain tail, or (while probing) a
   // probe tap, or null (silence). Only one thing is ever routed at a time.
@@ -545,6 +580,7 @@ const AudioEngine = (() => {
     start, stop, loadAudioFile,
     getAnalyser, getSpectrumAnalyser,
     isRunning, getAudioFileName, updatePotWiper, setOutputGain, getSampleRate,
-    probeEnable, probeDisable, probeHover, probeIsAudible
+    probeEnable, probeDisable, probeHover, probeIsAudible,
+    getCachedSamples, listSamples, loadSampleClip
   };
 })();

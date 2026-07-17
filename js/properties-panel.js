@@ -47,7 +47,14 @@ const PropertiesPanel = (() => {
     }
   };
 
-  function init() { _content = document.getElementById('props-content'); }
+  function init() {
+    _content = document.getElementById('props-content');
+    if (typeof AudioEngine !== 'undefined' && AudioEngine.listSamples) {
+      AudioEngine.listSamples().then(() => {
+        if (_currentPermanentKind === 'input') showPermanent('input'); // refresh only if still on the Input panel
+      });
+    }
+  }
 
   function show(inst, wire) {
     _currentInst = inst;
@@ -109,9 +116,38 @@ const PropertiesPanel = (() => {
         const name = await AudioEngine.loadAudioFile(fileData);
         if (!name) return;
         state.audio_file = name;
+        Storage.markDirty(); History.pushDebounced();
+        if (state.waveform !== 'Audio File') {
+          // Uploading only makes sense as a prelude to playing the clip —
+          // auto-switch Source so the load isn't silently inert until the
+          // user separately remembers to flip the dropdown themselves.
+          state.waveform = 'Audio File';
+          showPermanent('input');
+          return;
+        }
         const nameEl = _content.querySelector('.prop-audio-name');
         if (nameEl) nameEl.textContent = name;
         audioBtn.innerHTML = '<i class="fa-solid fa-music"></i> Change Audio File';
+      });
+    }
+
+    const sourceSel = _content.querySelector('.prop-audio-source');
+    if (sourceSel) {
+      sourceSel.addEventListener('change', async () => {
+        const val = sourceSel.value;
+        state.audio_source = val;
+        if (val === 'upload') {
+          showPermanent('input'); // re-render: reveals the upload button/name again, nothing to fetch
+          Storage.markDirty(); History.pushDebounced();
+          return;
+        }
+        const sample = (AudioEngine.getCachedSamples?.() || []).find(s => s.file === val);
+        if (!sample) return;
+        const name = await AudioEngine.loadSampleClip(sample.file, sample.name);
+        if (!name) return;
+        state.audio_file = name; // same "currently loaded" field uploads use — keeps display/save logic uniform
+        if (state.waveform !== 'Audio File') state.waveform = 'Audio File'; // same reasoning as the upload path above
+        showPermanent('input');
         Storage.markDirty(); History.pushDebounced();
       });
     }
@@ -370,16 +406,29 @@ const PropertiesPanel = (() => {
               <span class="prop-range-value" id="rval-${prop.key}">${Math.round(value*100)}%</span>
             </div>
           </div>`;
-      case 'audio_file':
+      case 'audio_file': {
+        const samples = (typeof AudioEngine!=='undefined' && AudioEngine.getCachedSamples) ? AudioEngine.getCachedSamples() : [];
+        const audioSource = (typeof WorkbenchStrip!=='undefined') ? (WorkbenchStrip.getPermanentState().input.audio_source || 'upload') : 'upload';
+        const isUpload = audioSource === 'upload';
+        const sourceOpts = `<option value="upload" ${isUpload?'selected':''}>Your Upload</option>`
+          + samples.map(s => `<option value="${s.file}" ${audioSource===s.file?'selected':''}>${s.name}</option>`).join('');
+        const currentSampleName = !isUpload ? (samples.find(s=>s.file===audioSource)?.name || audioSource) : null;
+
         return `
           <div class="prop-group">
+            <label class="prop-label">Audio Source</label>
+            <select class="prop-input prop-audio-source" data-role="audio-source">${sourceOpts}</select>
+          </div>
+          <div class="prop-group" style="${isUpload?'':'display:none'}">
             <label class="prop-label">${prop.label}</label>
             <button class="prop-audio-btn">
               <i class="fa-solid fa-music"></i>
               ${value?'Change Audio File':'Load Audio File…'}
             </button>
-            <div class="prop-audio-name">${value||''}</div>
-          </div>`;
+            <div class="prop-audio-name">${isUpload?(value||''):''}</div>
+          </div>
+          ${!isUpload ? `<div class="prop-audio-name">${currentSampleName}</div>` : ''}`;
+      }
       default: return '';
     }
   }

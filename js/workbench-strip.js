@@ -14,7 +14,7 @@ const WorkbenchStrip = (() => {
 
   const DEFAULT_PERMANENT_STATE = {
     power:  { voltage: 9, reverse_polarity: false, power_on: true, battery_sag: 0, internal_resistance: 1 },
-    input:  { waveform: 'None', frequency: 440, amplitude: 1.0, dc_offset: 0, phase: 0, looping: true, audio_file: null },
+    input:  { waveform: 'None', frequency: 440, amplitude: 1.0, dc_offset: 0, phase: 0, looping: true, audio_file: null, audio_source: 'upload' },
     output: { volume: 1.0, mute: false },
   };
   let permanentState = cloneState(DEFAULT_PERMANENT_STATE);
@@ -28,11 +28,24 @@ const WorkbenchStrip = (() => {
       output: Object.assign(cloneState(DEFAULT_PERMANENT_STATE).output, saved?.output || {}),
     };
     // The decoded audio buffer only ever lives in memory (AudioEngine's
-    // _audioBuffer) — it's never persisted. Only the filename string was
-    // saved, so on reload it would otherwise show "Change Audio File" with
-    // the old name even though nothing is actually loaded. Clear it so the
-    // UI correctly says "Load Audio File..." again.
-    if (permanentState.input.audio_file) permanentState.input.audio_file = null;
+    // _audioBuffer) — it's never persisted. For an uploaded file there's no
+    // way to get the bytes back, so clear audio_file so the UI correctly
+    // says "Load Audio File..." again rather than showing a stale name with
+    // nothing actually loaded. A bundled sample is different — it's a known
+    // static asset, so it can genuinely be re-fetched — auto-reload it in
+    // the background instead of making the user reselect it every time.
+    const src = permanentState.input.audio_source;
+    if (src && src !== 'upload' && typeof AudioEngine !== 'undefined' && AudioEngine.loadSampleClip) {
+      const wasFile = permanentState.input.audio_file;
+      permanentState.input.audio_file = null; // safe default until the reload actually resolves
+      AudioEngine.loadSampleClip(src, wasFile || src).then(name => {
+        if (permanentState.input.audio_source !== src) return; // user changed source again before this resolved
+        permanentState.input.audio_file = name;
+        render();
+      });
+    } else if (permanentState.input.audio_file) {
+      permanentState.input.audio_file = null;
+    }
     render();
   }
 
@@ -122,12 +135,43 @@ const WorkbenchStrip = (() => {
   // spacing between switch and power that existed before centering (just
   // measured once, from the layout's own column geometry, rather than
   // tied to specific fixed columns).
-  const GROUP_HALF_GAP = (colX(55,0.90) - colX(18,0.29)) / 2;
+  function groupHalfGap(){
+    // Distance between switch and power right after the earlier
+    // position-swap (before centering) — this is the actual gap to
+    // preserve between them.
+    const previousGap = (colX(55,0.90) - colX(18,0.29)) / 2;
+    // Centering the pair symmetrically around one shared midpoint means
+    // each element sits at HALF that gap from center — not the full gap,
+    // which is the mistake the earlier version made (doubling the
+    // switch-to-power spacing instead of preserving it).
+    return previousGap / 2;
+  }
   function groupCenterX(){ return (inputX()+outputX())/2; }
-  function switchX(){ return groupCenterX() - GROUP_HALF_GAP; } // was the power block's position
-  function powerX(){ return groupCenterX() + GROUP_HALF_GAP; }  // was the switch cluster's position
-  function powerMinusX(){ return powerX() - HOLE_PITCH/2; }
-  function powerPlusX(){ return powerX() + HOLE_PITCH/2; }
+  function switchX(){ return groupCenterX() - groupHalfGap(); } // no hole-snapping needed — nothing traces down from the switch to a fixed board column
+  // Finds the real board column whose hole-x is closest to a target pixel
+  // x — used to snap the power block onto actual holes (see below) rather
+  // than an arbitrary continuous position that the fixed trace-overlay
+  // columns could drift away from.
+  function nearestCol(targetX) {
+    const MAX_COL = 62; // must match board.js's COLS-1 (COLS=63) — no export for this, so kept in sync manually
+    let best = 0, bestD = Infinity;
+    for (let c = 0; c <= MAX_COL; c++) {
+      const d = Math.abs(colX(c, 0.5) - targetX);
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    return best;
+  }
+
+  // Power's two leads are real hole columns — the source of truth, same
+  // pattern as the original (pre-swap) code — with powerX derived as their
+  // average, NOT the other way around. Deriving powerX first and offsetting
+  // by a fixed pixel amount (the bug in the swap/centering work) can land
+  // between holes; deriving from actual columns can't.
+  function powerMinusCol(){ return nearestCol(groupCenterX() + groupHalfGap() - HOLE_PITCH/2); }
+  function powerPlusCol(){ return powerMinusCol() + 1; }
+  function powerMinusX(){ return colX(powerMinusCol(), 0.5); }
+  function powerPlusX(){ return colX(powerPlusCol(), 0.5); }
+  function powerX(){ return (powerMinusX()+powerPlusX())/2; }
 
   function drawStrip(w,h){
     ctx.save();
@@ -441,7 +485,7 @@ function fillHalf(active, left) {
     getConnectionPoints: () => ({
       inputX: inputX(), outputX: outputX(),
       powerMinusX: powerMinusX(), powerPlusX: powerPlusX(),
-      inputCol: 55, outputCol: 6, powerMinusCol: 18, powerPlusCol: 19,
+      inputCol: 55, outputCol: 6, powerMinusCol: powerMinusCol(), powerPlusCol: powerPlusCol(),
       // Row index 5 (label 'f') is the row actually adjacent to the top
       // rail — board.js's row-index-to-y mapping is not straightforwardly
       // top-to-bottom (row index 0, label 'a', is near the BOTTOM rail).
