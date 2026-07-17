@@ -122,7 +122,7 @@ const Palette = (() => {
       } else {
         H = Math.max(bh0 + 28, 40);
         vOffset = 0;
-        W = Math.max(bw0+40, 80);
+        W = Math.max(halfLen*2 + 24, 80); // based on the real leg span, not body width — matches actual placement footprint
       }
 
       const cvs  = document.createElement('canvas');

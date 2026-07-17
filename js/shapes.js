@@ -30,9 +30,15 @@ const Shapes = (() => {
     resBands(res||10000).forEach((h,i)=>{ctx.fillStyle=h;ctx.fillRect(-bw/2+6+i*6,-(bh-2)/2,4,bh-2);});
   }
 
-  function drawFilmCap(ctx,bw,bh){
-    ctx.fillStyle='#e8c860';roundRect(ctx,-bw/2,-bh/2,bw,bh,2);ctx.fill();
-    ctx.strokeStyle='#c8a840';ctx.lineWidth=0.5;ctx.stroke();
+  const CAP_COLORS = {
+    Film:       { fill: '#e8c860', stroke: '#c8a840' },
+    Ceramic:    { fill: '#b5502a', stroke: '#8a3a1c' }, // brick-orange
+    Monolithic: { fill: '#e0932a', stroke: '#b5721c' }, // yellow-orange
+  };
+  function drawFilmCap(ctx,bw,bh,capType){
+    const c = CAP_COLORS[capType] || CAP_COLORS.Film;
+    ctx.fillStyle=c.fill;roundRect(ctx,-bw/2,-bh/2,bw,bh,2);ctx.fill();
+    ctx.strokeStyle=c.stroke;ctx.lineWidth=0.5;ctx.stroke();
   }
 
   function drawElectroCap(ctx,color,bw){
@@ -215,7 +221,7 @@ const Shapes = (() => {
     const bw=def.visual?.body_width||28, bh=def.visual?.body_height||14, col=def.visual?.body_color||'#888';
     switch(def.id){
       case 'resistor':              drawResistor(ctx,inst.props.resistance,bw,bh); break;
-      case 'capacitor':             drawFilmCap(ctx,bw,bh); break;
+      case 'capacitor':             drawFilmCap(ctx,bw,bh,inst.props.type); break;
       case 'capacitor_electrolytic':drawElectroCap(ctx,col,bw); break;
       case 'led':{const cm=def.color_map?.[inst.props.color]||{};drawLED(ctx,cm.hex||'#ff2200',bw,bh,inst._brightness||0);break;}
       case 'potentiometer':  drawPot(ctx,col,bw,bh,inst.props.wiper??0.5,halfLen); break;

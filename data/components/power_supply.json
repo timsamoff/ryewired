@@ -30,6 +30,27 @@
       "label": "Reverse Polarity",
       "type": "boolean",
       "default": false
+    },
+    {
+      "key": "power_on",
+      "label": "Power On",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "battery_sag",
+      "label": "Battery Sag",
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "key": "internal_resistance",
+      "label": "Internal Resistance (\u03a9)",
+      "type": "number",
+      "default": 1,
+      "min": 0
     }
   ],
   "behavior": {

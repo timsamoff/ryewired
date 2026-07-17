@@ -39,6 +39,13 @@ const WorkbenchStrip = (() => {
   let _onSelectPermanent = null;
   function onSelectPermanent(fn) { _onSelectPermanent = fn; }
 
+  // Used by Clear Board — resets just the Input device (waveform, and every
+  // other Input property) back to its defaults, leaving Power/Output alone.
+  function resetInput() {
+    permanentState.input = cloneState(DEFAULT_PERMANENT_STATE).input;
+    render();
+  }
+
   function cv(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
   function init(canvasEl) {
@@ -105,12 +112,22 @@ const WorkbenchStrip = (() => {
     return boardWidth()*fallbackFrac;
   }
 
-  function inputX(){ return colX(6, 0.10); }
-  function outputX(){ return colX(55, 0.90); }
-  function powerMinusX(){ return colX(18, 0.29); }
-  function powerPlusX(){ return colX(19, 0.31); }
-  function powerX(){ return (powerMinusX()+powerPlusX())/2; }
-  function switchX(){ return (powerX()+outputX())/2; }
+  function inputX(){ return colX(55, 0.90); }  // In/Out swapped: IN now on the right
+  function outputX(){ return colX(6, 0.10); }  // In/Out swapped: OUT now on the left
+
+  // Bypass Switch/LED group and the permanent Power Source, centered as a
+  // pair on the midpoint between Input and Output — computed from the live
+  // inputX()/outputX() above, so this stays correct regardless of which
+  // side either jack is on. The half-gap preserves the same relative
+  // spacing between switch and power that existed before centering (just
+  // measured once, from the layout's own column geometry, rather than
+  // tied to specific fixed columns).
+  const GROUP_HALF_GAP = (colX(55,0.90) - colX(18,0.29)) / 2;
+  function groupCenterX(){ return (inputX()+outputX())/2; }
+  function switchX(){ return groupCenterX() - GROUP_HALF_GAP; } // was the power block's position
+  function powerX(){ return groupCenterX() + GROUP_HALF_GAP; }  // was the switch cluster's position
+  function powerMinusX(){ return powerX() - HOLE_PITCH/2; }
+  function powerPlusX(){ return powerX() + HOLE_PITCH/2; }
 
   function drawStrip(w,h){
     ctx.save();
@@ -222,8 +239,7 @@ function drawLogo(cx, cy) {
     const p = permanentState.power;
     const bw=40,bh=44,hw=bw/2,hh=bh/2;
     ctx.save();ctx.translate(cx,cy);
-    if (!p.power_on) ctx.globalAlpha = 0.45;
-    
+
     const minusFirst = !p.reverse_polarity;
     ctx.fillStyle='rgba(43,87,154,0.85)'; ctx.fillRect(-hw, minusFirst?-hh:0, bw, bh/2);
     ctx.fillStyle='rgba(176,32,46,0.85)'; ctx.fillRect(-hw, minusFirst?0:-hh, bw, bh/2);
@@ -425,7 +441,7 @@ function fillHalf(active, left) {
     getConnectionPoints: () => ({
       inputX: inputX(), outputX: outputX(),
       powerMinusX: powerMinusX(), powerPlusX: powerPlusX(),
-      inputCol: 6, outputCol: 55, powerMinusCol: 18, powerPlusCol: 19,
+      inputCol: 55, outputCol: 6, powerMinusCol: 18, powerPlusCol: 19,
       // Row index 5 (label 'f') is the row actually adjacent to the top
       // rail — board.js's row-index-to-y mapping is not straightforwardly
       // top-to-bottom (row index 0, label 'a', is near the BOTTOM rail).

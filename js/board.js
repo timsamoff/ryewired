@@ -11,6 +11,7 @@ const Board = (() => {
   const HOLE_R       = 3.2;
   const RAIL_BREAK   = 31;
   const ROW_LABELS   = ['a','b','c','d','e','f','g','h','i','j'];
+  const ROW_LABELS_DISPLAY = [...ROW_LABELS].reverse(); // cosmetic only — matches other breadboards' visual convention; internal row indices are untouched
   const ML=52, MR=52, MT=14, MB=14;
   const RAIL_PAD_V   = 10;
   const RAIL_STRIP_H = 2*HOLE_PITCH+RAIL_PAD_V*2;
@@ -270,11 +271,17 @@ const Board = (() => {
     const bx1=holeX(RAIL_BREAK-1)+HOLE_PITCH/2+4, bx2=holeX(RAIL_BREAK)-HOLE_PITCH/2-4;
     const lx1=holeX(0)-HOLE_PITCH/2+2, lx2=holeX(COLS-1)+HOLE_PITCH/2-2;
     ctx.lineWidth=1.5;
-    ctx.strokeStyle=c.railBlue; brokenLine(mY,lx1,bx1,bx2,lx2);
-    ctx.strokeStyle=c.railRed;  brokenLine(pY,lx1,bx1,bx2,lx2);
+    // Only the top rail is fed by the permanent supply — the bottom rail
+    // stays user-controlled (per the workbench doc) and is never dimmed
+    // here, regardless of the permanent supply's state.
+    const permOff = isTop && typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.getPermanentState().power.power_on===false;
+    const traceBlue = permOff ? 'rgba(130,130,120,0.45)' : c.railBlue;
+    const traceRed  = permOff ? 'rgba(130,130,120,0.45)' : c.railRed;
+    ctx.strokeStyle=traceBlue; brokenLine(mY,lx1,bx1,bx2,lx2);
+    ctx.strokeStyle=traceRed;  brokenLine(pY,lx1,bx1,bx2,lx2);
     ctx.font='bold 11px IBM Plex Mono,monospace'; ctx.textAlign='center';
-    ctx.fillStyle=c.railBlue; ctx.fillText('–',ML/2,mY+4); ctx.fillText('–',W-MR/2,mY+4);
-    ctx.fillStyle=c.railRed;  ctx.fillText('+',ML/2,pY+4); ctx.fillText('+',W-MR/2,pY+4);
+    ctx.fillStyle=traceBlue; ctx.fillText('–',ML/2,mY+4); ctx.fillText('–',W-MR/2,mY+4);
+    ctx.fillStyle=traceRed;  ctx.fillText('+',ML/2,pY+4); ctx.fillText('+',W-MR/2,pY+4);
     for(let col=0;col<COLS;col++) {
       if(col===RAIL_BREAK) continue;
       drawRailHole(col,mY,c,'blue',isTop?'rtm':'rbm');
@@ -297,13 +304,14 @@ const Board = (() => {
   function drawMainGrid(c){
     const L=_layout,W=boardWidth();
     ctx.font='10px IBM Plex Mono,monospace';ctx.fillStyle=c.label;
-    for(let r=0;r<=9;r++){const y=L.rowY[r];ctx.textAlign='right';ctx.fillText(ROW_LABELS[r],ML-LABEL_PAD,y+3.5);ctx.textAlign='left';ctx.fillText(ROW_LABELS[r],W-MR+LABEL_PAD,y+3.5);}
+    for(let r=0;r<=9;r++){const y=L.rowY[r];ctx.textAlign='right';ctx.fillText(ROW_LABELS_DISPLAY[r],ML-LABEL_PAD,y+3.5);ctx.textAlign='left';ctx.fillText(ROW_LABELS_DISPLAY[r],W-MR+LABEL_PAD,y+3.5);}
     ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';
     for(let col=0;col<COLS;col++){
       if((col+1)%5!==0&&col!==0) continue;
       const x=holeX(col);
-      ctx.fillText(col+1,x,L.rowY[5]-HOLE_PITCH/2-2);
-      ctx.fillText(col+1,x,L.rowY[0]+HOLE_PITCH/2+9);
+      const displayNum = COLS - col;
+      ctx.fillText(displayNum,x,L.rowY[5]-HOLE_PITCH/2-2);
+      ctx.fillText(displayNum,x,L.rowY[0]+HOLE_PITCH/2+9);
     }
     for(let r=0;r<=9;r++) for(let col=0;col<COLS;col++) drawMainHole(r,col,c);
   }
@@ -570,7 +578,7 @@ const Board = (() => {
     if(_dragMode==='leg-dragging'&&_dragInst&&_hoverHole) updateLegDrag();
     if(_dragMode==='wire-dragging'&&_dragWire&&_hoverHole) updateWireDrag();
     const coordEl=document.getElementById('status-coords');
-    if(coordEl) coordEl.textContent=_hoverHole?(typeof _hoverHole.row==='number'?ROW_LABELS[_hoverHole.row]:_hoverHole.row)+(_hoverHole.col+1):'';
+    if(coordEl) coordEl.textContent=_hoverHole?(typeof _hoverHole.row==='number'?ROW_LABELS_DISPLAY[_hoverHole.row]:_hoverHole.row)+(COLS-_hoverHole.col):'';
     render(x,y);
   }
 
@@ -732,14 +740,24 @@ const Board = (() => {
       if (other) {
         const railPol = row => (row==='rtp'||row==='rbp') ? '+' : (row==='rtm'||row==='rbm') ? '-' : null;
         const origPol = railPol(orig.row), otherPol = railPol(other.row);
-        if (origPol==='+' || otherPol==='-') {
-          inst.legs = [other, orig]; // orig is the + one -> leg 1
-        } else if (origPol==='-' || otherPol==='+') {
-          inst.legs = [orig, other]; // orig is the – one -> leg 0
-        } else {
-          const {y:oy} = holeToXY(other.row, other.col);
-          inst.legs = (oy < y0) ? [other, orig] : [orig, other];
+        if (origPol!=null || otherPol!=null) {
+          // Only reassign legs when this placement is actually near a rail —
+          // otherwise `other` is just some hole two rows away in the same
+          // ordinary row-group, which is already one net on a real
+          // breadboard. Reassigning legs there would put both of the
+          // supply's own terminals on the same net — a self-short, not a
+          // conflict with anything else on the board.
+          if (origPol==='+' || otherPol==='-') {
+            inst.legs = [other, orig]; // orig is the + one -> leg 1
+          } else if (origPol==='-' || otherPol==='+') {
+            inst.legs = [orig, other]; // orig is the – one -> leg 0
+          } else {
+            const {y:oy} = holeToXY(other.row, other.col);
+            inst.legs = (oy < y0) ? [other, orig] : [orig, other];
+          }
         }
+        // else: not near a rail — keep createInstance's default horizontal
+        // 2-hole layout (already two genuinely distinct nets/columns).
       }
       // else: leave the default horizontal 2-hole layout — better than an
       // invalid placement.

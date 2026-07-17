@@ -91,13 +91,33 @@ const Simulation = (() => {
     const placedSupplies = [];
     for (const inst of placed) {
       if (inst.failed || inst.defId !== 'power_supply' || inst.legs.length < 2) continue;
-      const v = parseFloat(inst.props.voltage) || 9;
+      if (inst.props.power_on === false) continue; // off — contributes nothing, same gate as the permanent supply
+
+      if (!inst._battery) inst._battery = { effectiveV: null, lastCurrent: 0, posNet: null, virtualPos: null, Rint: 0 };
+      const nominalV = parseFloat(inst.props.voltage) || 9;
       const reversed = !!inst.props.reverse_polarity;
       const posLeg = reversed ? inst.legs[0] : inst.legs[1];
       const negLeg = reversed ? inst.legs[1] : inst.legs[0];
       const pNet = nets.find(nets.key(posLeg.row, posLeg.col));
       const nNet = nets.find(nets.key(negLeg.row, negLeg.col));
-      placedSupplies.push({ pNet, nNet, v });
+
+      const sag = Utils.clamp(parseFloat(inst.props.battery_sag) || 0, 0, 1);
+      let v;
+      if (sag > 0) {
+        if (inst._battery.effectiveV == null) inst._battery.effectiveV = nominalV;
+        const sagVolts = sag * nominalV * Utils.clamp(inst._battery.lastCurrent / 0.5, 0, 1);
+        const target = nominalV - sagVolts;
+        inst._battery.effectiveV += (target - inst._battery.effectiveV) * 0.05;
+        v = inst._battery.effectiveV;
+      } else {
+        inst._battery.effectiveV = nominalV;
+        v = nominalV;
+      }
+
+      const Rint = Math.max(0, parseFloat(inst.props.internal_resistance) || 0);
+      const effectiveRint = sag > 0 ? Math.max(Rint, 0.1) : Rint; // same floor reasoning as the permanent supply — sag needs some Rint to actually show up as a drop
+
+      placedSupplies.push({ inst, pNet, nNet, v, effectiveRint });
       if (pNet) intendedFixed.push({ net: pNet, voltage: v });
       if (nNet) intendedFixed.push({ net: nNet, voltage: 0 });
     }
@@ -138,9 +158,17 @@ const Simulation = (() => {
         _battery.posNet = null; _battery.virtualPos = null;
       }
     }
-    for (const { pNet, nNet, v } of placedSupplies) {
-      if (pNet) fixedNodes.push({ net: pNet, voltage: v });
+    for (const { inst, pNet, nNet, v, effectiveRint } of placedSupplies) {
       if (nNet) fixedNodes.push({ net: nNet, voltage: 0 });
+      if (pNet && effectiveRint > 0) {
+        const virtualPos = '__dc_supply_pos_' + inst.instanceId + '__';
+        fixedNodes.push({ net: virtualPos, voltage: v });
+        extraResistorEdges.push({ a: virtualPos, b: pNet, R: effectiveRint });
+        inst._battery.posNet = pNet; inst._battery.virtualPos = virtualPos; inst._battery.Rint = effectiveRint;
+      } else {
+        if (pNet) fixedNodes.push({ net: pNet, voltage: v });
+        inst._battery.posNet = null; inst._battery.virtualPos = null;
+      }
     }
 
     const { netVoltage, diodeCurrents } = solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges);
@@ -154,6 +182,16 @@ const Simulation = (() => {
       _battery.lastCurrent = (vVirt != null && vReal != null) ? Math.abs(vVirt - vReal) / _battery.Rint : 0;
     } else {
       _battery.lastCurrent = 0;
+    }
+    // Same, per-instance, for each draggable supply with its own sag/Rint.
+    for (const { inst } of placedSupplies) {
+      if (inst._battery.virtualPos) {
+        const vVirt = netVoltage.get(inst._battery.virtualPos);
+        const vReal = netVoltage.get(inst._battery.posNet);
+        inst._battery.lastCurrent = (vVirt != null && vReal != null) ? Math.abs(vVirt - vReal) / inst._battery.Rint : 0;
+      } else {
+        inst._battery.lastCurrent = 0;
+      }
     }
 
     // 4. Solve each component

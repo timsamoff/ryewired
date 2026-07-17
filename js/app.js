@@ -414,7 +414,7 @@ function onKeyDown(e) {
 
   if (e.ctrlKey||e.metaKey) {
     if (e.key==='z'&&!e.shiftKey) { e.preventDefault(); History.undo(); }
-    if (e.key==='z'&&e.shiftKey)  { e.preventDefault(); History.redo(); }
+    if (e.code==='KeyZ'&&e.shiftKey)  { e.preventDefault(); History.redo(); }
     if (e.key==='y')               { e.preventDefault(); History.redo(); }
     if (e.key==='n') { e.preventDefault(); newLayout(); }
     if (e.key==='o') { e.preventDefault(); openLayout(); }
@@ -436,6 +436,7 @@ async function confirmClear() {
   if (ok) {
     if (Simulation.isRunning()) stopSim();
     Board.clear(); PropertiesPanel.hide(); updateComponentCount();
+    if (typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.resetInput) WorkbenchStrip.resetInput();
     History.clear(); History.init(); AutoSave.clear();
     setStatus('Board cleared');
   }
