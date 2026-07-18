@@ -28,7 +28,7 @@ const PropertiesPanel = (() => {
     input: {
       label: 'Input', symbol: 'IN',
       properties: [
-        { key:'waveform', label:'Source', type:'select', default:'None',
+        { key:'waveform', label:'Audio Source', type:'select', default:'None',
           options:['None','Sine','Square','Triangle','Sawtooth','White Noise','Pink Noise','Audio File'] },
         { key:'frequency', label:'Frequency (Hz)', type:'number', default:440, min:1, max:20000 },
         { key:'amplitude', label:'Amplitude (V)', type:'number', default:1.0, min:0.01, max:12 },
@@ -426,7 +426,7 @@ const PropertiesPanel = (() => {
 
         return `
           <div class="prop-group">
-            <label class="prop-label">Audio Source</label>
+            <label class="prop-label">Audio File</label>
             <select class="prop-input prop-audio-source" data-role="audio-source">${opts}</select>
           </div>`;
       }

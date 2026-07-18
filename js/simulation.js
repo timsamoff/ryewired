@@ -294,7 +294,8 @@ const Simulation = (() => {
 
       case 'potentiometer': {
         const Rt  = parseFloat(inst.props.resistance) || 100000;
-        const w   = parseFloat(inst.props.wiper) || 0.5;
+        const parsedW = parseFloat(inst.props.wiper);
+        const w   = Number.isNaN(parsedW) ? 0.5 : parsedW; // NOT `|| 0.5` — a real, valid wiper of exactly 0 is not "missing"
         const pos = (inst.props.taper||'').includes('Audio') ? Math.pow(w,2) : w;
         inst._rLow=Rt*pos; inst._rHigh=Rt*(1-pos);
         const [vA] = legVoltages(inst, nets, netVoltage);

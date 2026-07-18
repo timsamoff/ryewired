@@ -337,11 +337,18 @@ const AudioEngine = (() => {
     // content OUT of the signal path to the reference, not to make it
     // newly audible AT the reference). Mirrors simulation.js's own
     // permPosNet/permNegNet polarity check.
+    //
+    // Uses the power block's REAL connection columns (from
+    // getConnectionPoints, which reflects wherever it's actually snapped to
+    // on the board) rather than a hardcoded column — the top rail has a
+    // physical break partway across the board, splitting it into two
+    // independent segments; hardcoding column 0 only identifies ONE of
+    // those segments, silently missing ground entirely for any circuit
+    // built on the other side of the break.
     const power    = (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getPermanentState().power : null;
     const reversed = !!power?.reverse_polarity;
-    const topPlusNet  = nets.find(nets.key('rtp', 0));
-    const topMinusNet = nets.find(nets.key('rtm', 0));
-    const groundNet   = reversed ? topPlusNet : topMinusNet;
+    const minusRow = reversed ? 'rtp' : 'rtm'; // reverse_polarity changes which physical rail row the minus LEAD lands on, not which lead is ground
+    const groundNet = (cp.powerMinusCol!=null) ? nets.find(nets.key(minusRow, cp.powerMinusCol)) : null;
 
     const netTaps  = new Map(); // net -> bus GainNode, doubles as the Audio Probe tap
     const allNodes = [];
@@ -365,6 +372,7 @@ const AudioEngine = (() => {
 
     while (frontier.length && stageCount < MAX_STAGES) {
       const net = frontier.shift();
+      if (net === groundNet) continue; // ground is a valid destination, never a valid source of further hops — see note above traceSignalPath
       const entryBus = busFor(net);
 
       for (const inst of placed) {
@@ -463,7 +471,8 @@ const AudioEngine = (() => {
         return { in: f, out: f };
       }
       case 'potentiometer': {
-        const wiper = parseFloat(inst.props.wiper) || 0.5;
+        const parsedWiper = parseFloat(inst.props.wiper);
+        const wiper = Number.isNaN(parsedWiper) ? 0.5 : parsedWiper; // NOT `|| 0.5` — that treats a real, valid wiper of exactly 0 as missing and silently substitutes 0.5
         const pos   = (inst.props.taper||'').includes('Audio') ? Math.pow(wiper,2) : wiper;
         const g     = ctx.createGain(); g.gain.value = pos;
         inst._audioNode = g;
@@ -565,7 +574,8 @@ const AudioEngine = (() => {
 
   function updatePotWiper(inst) {
     if (!inst._audioNode || !_ctx) return;
-    const wiper = parseFloat(inst.props.wiper) || 0.5;
+    const parsedWiper = parseFloat(inst.props.wiper);
+    const wiper = Number.isNaN(parsedWiper) ? 0.5 : parsedWiper; // see the same fix/comment in buildAudioStage's potentiometer case
     const pos   = (inst.props.taper||'').includes('Audio') ? Math.pow(wiper,2) : wiper;
     inst._audioNode.gain.setTargetAtTime(pos, _ctx.currentTime, 0.01);
   }
