@@ -66,8 +66,18 @@ const Board = (() => {
   let _onSelect=null, _onPlace=null;
 
   // ── Geometry ──────────────────────────────────────────────────────────────────
+  // Group-gap boundaries count from the RIGHT edge, not the left — this
+  // puts the short, 3-hole partial group on the left (cols 0-2) and lets
+  // the full 5-hole groups end cleanly at the right edge (col 62), matching
+  // both the requested layout and the numbering direction above. Boundary
+  // columns are 3,8,13,...,58 (12 of them); extraGroups(col) counts how
+  // many of those a given column sits at-or-past, same total gap count and
+  // board width as the original left-counting version, just repositioned.
+  function extraGroups(col) {
+    return col < 3 ? 0 : Math.floor((col-3)/5) + 1;
+  }
   function holeX(col) {
-    return ML + col*HOLE_PITCH + Math.floor(col/5)*GROUP_GAP + HOLE_PITCH/2;
+    return ML + col*HOLE_PITCH + extraGroups(col)*GROUP_GAP + HOLE_PITCH/2;
   }
 
   function buildLayout() {
@@ -255,7 +265,8 @@ const Board = (() => {
     const W=boardWidth(),H=boardHeight(),L=_layout;
     ctx.fillStyle=c.boardBg; Shapes.roundRect(ctx,0,0,W,H,10); ctx.fill();
     ctx.fillStyle=c.stripe;
-    for(let g=1;g<Math.ceil(COLS/5);g++) ctx.fillRect(holeX(g*5)-HOLE_PITCH/2-GROUP_GAP/2-0.5,L.gridTopY,1,10*HOLE_PITCH+DIP_GAP);
+    const BOUNDARY_COLS = [3,8,13,18,23,28,33,38,43,48,53,58]; // must match holeX()'s extraGroups() boundaries
+    for (const bc of BOUNDARY_COLS) ctx.fillRect(holeX(bc)-HOLE_PITCH/2-GROUP_GAP/2-0.5,L.gridTopY,1,10*HOLE_PITCH+DIP_GAP);
     ctx.fillStyle=c.label; ctx.font='bold 9px IBM Plex Mono,monospace'; ctx.textAlign='center';
     ctx.fillText('DIP',ML/2,L.dipGapCenterY+3); ctx.fillText('DIP',W-MR/2,L.dipGapCenterY+3);
     drawRailStrip(c,'top'); drawRailStrip(c,'bot'); drawMainGrid(c);
@@ -307,7 +318,13 @@ const Board = (() => {
     for(let r=0;r<=9;r++){const y=L.rowY[r];ctx.textAlign='right';ctx.fillText(ROW_LABELS_DISPLAY[r],ML-LABEL_PAD,y+3.5);ctx.textAlign='left';ctx.fillText(ROW_LABELS_DISPLAY[r],W-MR+LABEL_PAD,y+3.5);}
     ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';
     for(let col=0;col<COLS;col++){
-      if((col+1)%5!==0&&col!==0) continue;
+      // Labels ascend right-to-left (the 1-5 group sits at the right edge,
+      // up to 60 near the left, 3 unlabeled trailing holes at the far
+      // left) — the special "hole 1" edge label lives at the LAST column
+      // (COLS-1), and the every-5 markers are spaced 4 columns from that
+      // edge then every 5 after (matching real breadboard hole counting:
+      // 1,2,3,4,5 are 5 holes, so "5" is only 4 positions from "1").
+      if(col%5!==3 && col!==COLS-1) continue;
       const x=holeX(col);
       const displayNum = COLS - col;
       ctx.fillText(displayNum,x,L.rowY[5]-HOLE_PITCH/2-2);
