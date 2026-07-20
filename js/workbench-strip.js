@@ -458,6 +458,7 @@ function fillHalf(active, left) {
     if (hit === 'switch') {
       bypassOn = !bypassOn; render();
       if (typeof Simulation !== 'undefined' && Simulation.isRunning() && typeof AudioEngine !== 'undefined') {
+        Simulation.tick(); // same reasoning as runSim() in app.js — guarantee inst._current etc. are fresh before AudioEngine rebuilds from them
         AudioEngine.stop(); AudioEngine.start();
       }
       return;

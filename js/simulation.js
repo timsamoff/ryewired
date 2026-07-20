@@ -60,8 +60,21 @@ const Simulation = (() => {
     if (power && power.power_on) {
       const nominalV = parseFloat(power.voltage) || 9;
       const reversed = !!power.reverse_polarity;
-      const topPlusNet  = nets.find(nets.key('rtp', 0));
-      const topMinusNet = nets.find(nets.key('rtm', 0));
+      // Use the power block's REAL connection columns (dynamically
+      // hole-snapped, from WorkbenchStrip.getConnectionPoints) instead of
+      // hardcoded column 0 — the top rail has a physical break partway
+      // across the board, splitting it into two independent segments;
+      // hardcoding column 0 only ever fixes ONE of those segments,
+      // silently leaving the permanent supply's real connection point
+      // (which commonly lands in the OTHER segment) completely unpowered
+      // in the actual electrical solve, regardless of what the visual
+      // traces show. This is the same class of bug already fixed in
+      // audio-engine.js's groundNet — missed here until now.
+      const cp = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getConnectionPoints) ? WorkbenchStrip.getConnectionPoints() : null;
+      const plusCol  = cp?.powerPlusCol  ?? 0;
+      const minusCol = cp?.powerMinusCol ?? 0;
+      const topPlusNet  = nets.find(nets.key('rtp', plusCol));
+      const topMinusNet = nets.find(nets.key('rtm', minusCol));
       permPosNet = reversed ? topMinusNet : topPlusNet;
       permNegNet = reversed ? topPlusNet : topMinusNet;
 

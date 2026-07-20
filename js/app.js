@@ -166,7 +166,9 @@ function runSim() {
   // permanent Input/Output form a clean passthrough (AudioEngine.start()
   // handles bypass-off/no-circuit on its own), so Run must always be able
   // to start — an empty board is a valid, fully-functional state.
-  Simulation.start(); AudioEngine.start(); Oscilloscope.start();
+  Simulation.start();
+  Simulation.tick(); // force one synchronous DC solve NOW — start() only schedules future ticks (setInterval), so without this, anything AudioEngine reads that depends on a completed solve (e.g. a transistor's inst._current, driving its gain) would still hold a stale/zero value from before this Play press, for the entire session, since the audio graph is only built once here
+  AudioEngine.start(); Oscilloscope.start();
   setSimState('running'); setStatus('Simulation running');
 }
 
@@ -400,8 +402,9 @@ function onKeyDown(e) {
   if (typing) return;
 
   if (e.code==='Space') { e.preventDefault(); Simulation.isRunning()?stopSim():runSim(); }
-  if (e.code==='KeyW')  { setTool('jumper'); }
-  if (e.code==='KeyV')  { setTool('voltmeter'); }
+  if (e.code==='KeyJ')  { setTool('jumper'); }
+  if (e.code==='KeyV')  { setTool('select'); }
+  if (e.code==='KeyM')  { setTool('voltmeter'); }
   if (e.code==='KeyP')  { setTool('probe'); }
   if (e.code==='Delete'||e.code==='Backspace') {
     Board.deleteSelected(); PropertiesPanel.hide();
