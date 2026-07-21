@@ -74,6 +74,12 @@ const AudioEngine = (() => {
   let _netTaps   = null;
   let _probeActive = false;
 
+  // Remembered from the last start()'s walk, so toggling bypass can
+  // recompute _chainTail (see _refreshBypassRouting below) without
+  // re-walking the net graph or rebuilding _source.
+  let _walkReachedOutput = false;
+  let _walkTail          = null;
+
   function getContext() {
     if (!_ctx) {
       _ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
@@ -125,6 +131,8 @@ const AudioEngine = (() => {
       _probeNets      = walk.nets;
       _netTaps        = walk.netTaps;
       _allChainNodes  = walk.allNodes;
+      _walkReachedOutput = walk.reachedOutput;
+      _walkTail          = walk.tail;
 
       // Bypass OFF: Input -> Output directly (clean signal, no user circuit).
       // Bypass ON:  Input -> user circuit -> Output, using the same walk
@@ -156,6 +164,7 @@ const AudioEngine = (() => {
     } catch (err) { console.warn('[Audio] Stop error:', err); }
     _running = false;
     _routedNode = null; _chainTail = null; _probeNets = null; _netTaps = null;
+    _walkReachedOutput = false; _walkTail = null;
   }
 
   // Live-updates Output's volume/mute while running, without rebuilding the
@@ -164,6 +173,18 @@ const AudioEngine = (() => {
     if (!_gainOut || !_ctx) return;
     const target = mute ? 0 : Utils.clamp(volume ?? 0.7, 0, 1);
     _gainOut.gain.setTargetAtTime(target, _ctx.currentTime, 0.01);
+  }
+
+  // Called when the bypass footswitch toggles. The walked chain (built in
+  // start(), regardless of bypass state — see the comment there) and _source
+  // itself are both already live; only which one feeds the analyser/speaker
+  // needs to change. Reuses the exact same _chainTail logic as start(), just
+  // without rebuilding _source/_sourceStartable — so playback (an oscillator
+  // or a playing sample) is never interrupted by flipping the switch.
+  function refreshBypassRouting() {
+    if (!_running) return;
+    _chainTail = bypassOn() ? (_walkReachedOutput ? _walkTail : null) : _source;
+    _routeToOutput(_probeActive ? null : _chainTail);
   }
 
   // ── Routing ───────────────────────────────────────────────────────────────
@@ -591,6 +612,7 @@ const AudioEngine = (() => {
     getAnalyser, getSpectrumAnalyser,
     isRunning, getAudioFileName, updatePotWiper, setOutputGain, getSampleRate,
     probeEnable, probeDisable, probeHover, probeIsAudible,
-    getCachedSamples, listSamples, loadSampleClip
+    getCachedSamples, listSamples, loadSampleClip,
+    refreshBypassRouting
   };
 })();

@@ -739,7 +739,25 @@ const Board = (() => {
     e.preventDefault();
     const defId=e.dataTransfer.getData('text/plain');if(!defId) return;
     const {x,y}=eventToCanvas(e);
-    const hole=xyToHole(x,y,DROP_SNAP_RADIUS);if(!hole) return;
+    // The ghost (drawPaletteGhost) renders centered on the cursor — legs at
+    // -halfLen/+halfLen either side of (mx,gy) — but createInstance()/
+    // buildLegs() always anchors leg[0] (the left-most leg) at whatever hole
+    // is passed in. Snapping directly on the raw cursor position therefore
+    // places leg[0] under the cursor instead of the component's center,
+    // shifting the whole part right by halfLen from where the ghost showed
+    // it. Snap from a point shifted left by halfLen instead, so the final
+    // placement matches the ghost's visual center. power_supply is excluded:
+    // its own leg-reassignment logic below already re-anchors to whichever
+    // leg lands on a rail, independent of this offset.
+    let snapX=x;
+    if(defId!=='power_supply'){
+      const def=ComponentRegistry.getById(defId);
+      if(def){
+        const span=def.leg_span||1;
+        snapX=x-(span*HOLE_PITCH/2);
+      }
+    }
+    const hole=xyToHole(snapX,y,DROP_SNAP_RADIUS);if(!hole) return;
     finalizePlacement(defId, hole, null);
   }
 
@@ -811,9 +829,20 @@ const Board = (() => {
     render();
   }
   function confirmPaste(x,y){
-    const hole=xyToHole(x,y,DROP_SNAP_RADIUS);
-    if(!hole) return; // missed a valid hole — stay in paste mode, let them try again
+    // Same cursor-is-center vs leg[0]-is-anchor mismatch as onDrop — see the
+    // comment there. clipboardProps has no bearing on leg_span, so this
+    // looks up the definition the same way.
     const {defId, clipboardProps} = _paletteGhost;
+    let snapX=x;
+    if(defId!=='power_supply'){
+      const def=ComponentRegistry.getById(defId);
+      if(def){
+        const span=def.leg_span||1;
+        snapX=x-(span*HOLE_PITCH/2);
+      }
+    }
+    const hole=xyToHole(snapX,y,DROP_SNAP_RADIUS);
+    if(!hole) return; // missed a valid hole — stay in paste mode, let them try again
     _pasteActive=false;
     _paletteGhost=null;
     finalizePlacement(defId, hole, clipboardProps);
