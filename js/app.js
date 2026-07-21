@@ -276,14 +276,28 @@ let _clipboard = null;
 
 function copySelected() {
   const inst = Board.getSelected();
-  if (!inst) { setStatus('Nothing selected to copy'); return; }
-  _clipboard = { defId: inst.defId, props: {...inst.props} };
-  setStatus(`Copied ${ComponentRegistry.getById(inst.defId)?.label || inst.defId}`);
+  if (inst) {
+    _clipboard = { kind:'component', defId: inst.defId, props: {...inst.props} };
+    setStatus(`Copied ${ComponentRegistry.getById(inst.defId)?.label || inst.defId}`);
+    return;
+  }
+  const wire = Board.getSelectedWireObj ? Board.getSelectedWireObj() : null;
+  if (wire) {
+    _clipboard = { kind:'wire', r1:wire.r1, c1:wire.c1, r2:wire.r2, c2:wire.c2, color:wire.color };
+    setStatus('Copied jumper wire');
+    return;
+  }
+  setStatus('Nothing selected to copy');
 }
 
 function pasteFromClipboard() {
   if (!_clipboard) { setStatus('Nothing to paste'); return; }
   if (_currentTool !== 'select') exitToolToSelect(); // pasting wants normal board interaction, same as picking from the palette
+  if (_clipboard.kind === 'wire') {
+    Board.beginPasteWire(_clipboard);
+    setStatus('Click to place wire — Esc to cancel');
+    return;
+  }
   Board.beginPaste(_clipboard.defId, _clipboard.props);
   setStatus('Click to place — Esc to cancel');
 }
@@ -394,6 +408,7 @@ function onKeyDown(e) {
     if (document.querySelector('.menu-item.open')) {
       document.querySelectorAll('.menu-item').forEach(m=>m.classList.remove('open')); return;
     }
+    if (Board.cancelActivePaste && Board.cancelActivePaste()) { setStatus('Paste cancelled'); return; }
     if (_currentTool !== 'select') { exitToolToSelect(); return; }
     if (Wire.hasStart()) { Wire.cancelCurrent(); return; }
     if (Simulation.isRunning()) { stopSim(); return; }

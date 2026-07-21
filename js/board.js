@@ -65,6 +65,12 @@ const Board = (() => {
   let _dragInst=null, _dragLegIdx=-1, _dragAnchorLeg=null;
   let _pressedSwitchInst=null; // momentary switch currently held down, if any
   let _dragWire=null, _dragWireEnd=-1, _savedWireEnds=null; // wire endpoint currently being dragged, if any
+  // Whole-wire body drag (Select tool, click-drag the wire's body rather than
+  // an endpoint) — column-only, since a wire's endpoints can be a numeric row
+  // and a string rail-key at once, so there's no single "row delta" that
+  // applies to both. Row/rail-key of each endpoint never changes; only c1/c2
+  // shift together.
+  let _dragWireMove=null, _savedWireMoveEnds=null, _wireMoveStartCol=0;
   let _dragStartX=0, _dragStartY=0, _dragOffsetX=0, _dragOffsetY=0;
   let _savedLegs=null;
 
@@ -83,6 +89,18 @@ const Board = (() => {
   }
   function holeX(col) {
     return ML + col*HOLE_PITCH + extraGroups(col)*GROUP_GAP + HOLE_PITCH/2;
+  }
+
+  // Inverse of holeX — column spacing isn't uniform (extraGroups() adds gaps
+  // every few columns), so this is a linear search rather than a closed-form
+  // inverse. COLS is only 63, so this is cheap even on every mousemove.
+  function colFromX(px) {
+    let best=0, bestD=Infinity;
+    for (let c=0; c<COLS; c++) {
+      const d=Math.abs(holeX(c)-px);
+      if (d<bestD) { bestD=d; best=c; }
+    }
+    return best;
   }
 
   function buildLayout() {
@@ -200,7 +218,7 @@ const Board = (() => {
   function hitTestWire(x,y) {
     for(const w of _wires) {
       const a=holeToXY(w.r1,w.c1),b=holeToXY(w.r2,w.c2);
-      if(distSeg(x,y,a.x,a.y,b.x,b.y)<WIRE_HIT_W) return w;
+      if(distToWirePath(x,y,a.x,a.y,b.x,b.y)<WIRE_HIT_W) return w;
     }
     return null;
   }
@@ -210,6 +228,29 @@ const Board = (() => {
     if(!l2) return Math.hypot(px-ax,py-ay);
     const t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/l2));
     return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
+  }
+
+  // Curved wires (endpoints on different rows) are rendered by drawWires as
+  // a cubic bezier bulging up to 18px away from the straight a->b line — see
+  // drawWires' bezierCurveTo(a.x,a.y-18, b.x,b.y-18, b.x,b.y) — so a plain
+  // straight-segment distance check misses clicks on the visible curve body
+  // almost everywhere except right at the endpoints. This mirrors that exact
+  // curve (same control points, same <4px straight-line threshold) and
+  // measures distance to the nearest sampled point on it instead.
+  function distToWirePath(px,py,ax,ay,bx,by) {
+    if (Math.abs(by-ay) < 4) return distSeg(px,py,ax,ay,bx,by);
+    const c1x=ax, c1y=ay-18, c2x=bx, c2y=by-18;
+    const STEPS=16;
+    let prevX=ax, prevY=ay, best=Infinity;
+    for (let i=1; i<=STEPS; i++) {
+      const t=i/STEPS, mt=1-t;
+      const x = mt*mt*mt*ax + 3*mt*mt*t*c1x + 3*mt*t*t*c2x + t*t*t*bx;
+      const y = mt*mt*mt*ay + 3*mt*mt*t*c1y + 3*mt*t*t*c2y + t*t*t*by;
+      const d = distSeg(px,py,prevX,prevY,x,y);
+      if (d<best) best=d;
+      prevX=x; prevY=y;
+    }
+    return best;
   }
 
   // ── Canvas init (DPR-aware) ───────────────────────────────────────────────────
@@ -368,6 +409,15 @@ const Board = (() => {
       const a=holeToXY(_dragAnchorLeg.row,_dragAnchorLeg.col),b=holeToXY(_hoverHole.row,_hoverHole.col);
       ctx.lineWidth=1.5;ctx.strokeStyle='rgba(43,87,154,0.45)';
       ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);
+    }
+    if(_pasteWireActive&&_pasteWireData){
+      const c1raw=colFromX(_mouseX), c2raw=c1raw+_pasteWireData.dc;
+      const {c1,c2}=clampWirePasteCols(c1raw,c2raw);
+      const a=holeToXY(_pasteWireData.r1,c1),b=holeToXY(_pasteWireData.r2,c2);
+      ctx.globalAlpha=0.65;ctx.lineWidth=2.5;ctx.strokeStyle=_pasteWireData.color||'#ff9900';ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(a.x,a.y);
+      Math.abs(b.y-a.y)<4?ctx.lineTo(b.x,b.y):ctx.bezierCurveTo(a.x,a.y-18,b.x,b.y-18,b.x,b.y);
+      ctx.stroke();ctx.globalAlpha=1;
     }
   }
 
@@ -597,6 +647,8 @@ const Board = (() => {
     if(Wire.isWiring()){render(x,y);return;}
     if(_dragMode==='comp-pending'){if(Math.hypot(x-_dragStartX,y-_dragStartY)>DRAG_THRESHOLD){_dragMode='comp-dragging';document.body.classList.add('dragging');}}
     if(_dragMode==='comp-dragging'){_dragOffsetX=x-_dragStartX;_dragOffsetY=y-_dragStartY;}
+    if(_dragMode==='wire-pending'){if(Math.hypot(x-_dragStartX,y-_dragStartY)>DRAG_THRESHOLD){_dragMode='wire-moving';document.body.classList.add('dragging');}}
+    if(_dragMode==='wire-moving'&&_dragWireMove) updateWireMove(x);
     if(_dragMode==='leg-dragging'&&_dragInst&&_hoverHole) updateLegDrag();
     if(_dragMode==='wire-dragging'&&_dragWire&&_hoverHole) updateWireDrag();
     const coordEl=document.getElementById('status-coords');
@@ -619,6 +671,13 @@ const Board = (() => {
     }
   }
 
+  function updateWireMove(x){
+    if(!_dragWireMove||!_savedWireMoveEnds) return;
+    const delta=colFromX(x)-_wireMoveStartCol;
+    const {c1,c2}=clampWirePasteCols(_savedWireMoveEnds.c1+delta, _savedWireMoveEnds.c2+delta);
+    _dragWireMove.c1=c1; _dragWireMove.c2=c2;
+  }
+
   function updateWireDrag(){
     if(!_dragWire||_dragWireEnd<0||!_hoverHole) return;
     const other = _dragWireEnd===1 ? {row:_dragWire.r2,col:_dragWire.c2} : {row:_dragWire.r1,col:_dragWire.c1};
@@ -632,6 +691,7 @@ const Board = (() => {
     const {x,y}=eventToCanvas(e);
     if(Wire.isWiring()){const h=xyToHole(x,y);if(h) Wire.startOrFinish(h);return;}
     if(_pasteActive){confirmPaste(x,y);return;}
+    if(_pasteWireActive){confirmPasteWire(x,y);return;}
     if(typeof isMeasuring==='function' && isMeasuring()) return; // Voltmeter/Probe are hover-only, per the doc
     const legHit=hitTestLeg(x,y);
     if(legHit){
@@ -658,7 +718,15 @@ const Board = (() => {
       setSelected(inst.instanceId,null);return;
     }
     const wire=hitTestWire(x,y);
-    if(wire){setSelected(null,wire.id);return;}
+    if(wire){
+      if(typeof currentTool==='function' && currentTool()==='select'){
+        _dragMode='wire-pending';_dragWireMove=wire;
+        _savedWireMoveEnds={r1:wire.r1,c1:wire.c1,r2:wire.r2,c2:wire.c2};
+        _wireMoveStartCol=colFromX(x);
+        _dragStartX=x;_dragStartY=y;
+      }
+      setSelected(null,wire.id);return;
+    }
     setSelected(null,null);
   }
 
@@ -667,6 +735,8 @@ const Board = (() => {
     if(_pressedSwitchInst){_pressedSwitchInst._pressed=false;Simulation.notifyStateChange(_pressedSwitchInst);render();_pressedSwitchInst=null;}
     if(_dragMode==='leg-dragging'){_dragMode='idle';_dragInst=null;_dragAnchorLeg=null;_dragLegIdx=-1;Storage.markDirty();History.push();render();return;}
     if(_dragMode==='wire-dragging'){_dragMode='idle';_dragWire=null;_dragWireEnd=-1;_savedWireEnds=null;Storage.markDirty();History.push();render();return;}
+    if(_dragMode==='wire-moving'){_dragMode='idle';_dragWireMove=null;_savedWireMoveEnds=null;document.body.classList.remove('dragging');Storage.markDirty();History.push();render();return;}
+    if(_dragMode==='wire-pending'){_dragMode='idle';_dragWireMove=null;_savedWireMoveEnds=null;}
     if(_dragMode==='comp-dragging'){
       if(_dragInst&&_savedLegs){
         const ref=_savedLegs[0];
@@ -706,6 +776,11 @@ const Board = (() => {
       if(_dragWire&&_savedWireEnds) Object.assign(_dragWire,_savedWireEnds);
       _dragMode='idle';_dragWire=null;_dragWireEnd=-1;_savedWireEnds=null;render();
     }
+    if(_dragMode==='wire-moving'){
+      if(_dragWireMove&&_savedWireMoveEnds) Object.assign(_dragWireMove,_savedWireMoveEnds);
+      _dragMode='idle';document.body.classList.remove('dragging');_dragWireMove=null;_savedWireMoveEnds=null;render();
+    }
+    if(_dragMode==='wire-pending'){_dragMode='idle';_dragWireMove=null;_savedWireMoveEnds=null;}
     if(_dragMode==='comp-pending'){_dragMode='idle';_dragInst=null;}
   }
 
@@ -719,6 +794,10 @@ const Board = (() => {
     if(e.code==='Escape'&&_dragMode==='wire-dragging'){
       if(_dragWire&&_savedWireEnds) Object.assign(_dragWire,_savedWireEnds);
       _dragMode='idle';_dragWire=null;_dragWireEnd=-1;_savedWireEnds=null;render();
+    }
+    if(e.code==='Escape'&&_dragMode==='wire-moving'){
+      if(_dragWireMove&&_savedWireMoveEnds) Object.assign(_dragWireMove,_savedWireMoveEnds);
+      _dragMode='idle';document.body.classList.remove('dragging');_dragWireMove=null;_savedWireMoveEnds=null;render();
     }
   }
 
@@ -849,6 +928,54 @@ const Board = (() => {
     if (typeof exitToolToSelect==='function') exitToolToSelect(); // one paste, then back to Select — same as a normal placement
   }
 
+  // ── Wire copy/paste ─────────────────────────────────────────────────────
+  // Same column-only philosophy as whole-wire dragging (see the note by
+  // _dragWireMove above): a pasted wire keeps its original r1/r2 (numeric
+  // row or rail-key, unchanged) and is placed at a new column, tracking the
+  // cursor. dc (=c2-c1) is preserved exactly.
+  let _pasteWireActive=false, _pasteWireData=null;
+
+  // Shared by the paste-wire preview (drawWires) and confirmPasteWire —
+  // keeps both ends in-bounds by shifting rather than clipping one end, so
+  // dc (and therefore the wire's shape) is always preserved exactly.
+  function clampWirePasteCols(c1,c2){
+    if(c1<0){c2-=c1;c1=0;} else if(c1>COLS-1){c2-=(c1-(COLS-1));c1=COLS-1;}
+    if(c2<0){c1-=c2;c2=0;} else if(c2>COLS-1){c1-=(c2-(COLS-1));c2=COLS-1;}
+    return {c1:Math.max(0,Math.min(COLS-1,c1)), c2:Math.max(0,Math.min(COLS-1,c2))};
+  }
+
+  function beginPasteWire(wire){
+    _pasteWireActive=true;
+    _pasteWireData={r1:wire.r1,r2:wire.r2,dc:wire.c2-wire.c1,color:wire.color};
+    render(_mouseX,_mouseY);
+  }
+  function cancelPasteWire(){
+    if(!_pasteWireActive) return;
+    _pasteWireActive=false;
+    _pasteWireData=null;
+    render();
+  }
+  function confirmPasteWire(x,_y){
+    if(!_pasteWireData) return;
+    const c1raw=colFromX(x), c2raw=c1raw+_pasteWireData.dc;
+    const {c1,c2}=clampWirePasteCols(c1raw,c2raw);
+    addWire({id:Utils.uid('W'), r1:_pasteWireData.r1, c1, r2:_pasteWireData.r2, c2, color:_pasteWireData.color});
+    _pasteWireActive=false;
+    _pasteWireData=null;
+    Storage.markDirty();History.push();
+    if (typeof exitToolToSelect==='function') exitToolToSelect(); // one paste, then back to Select — same as a normal placement
+  }
+  function isPastingWire(){ return _pasteWireActive; }
+
+  // Called from app.js's Escape handling — cancels whichever paste mode (if
+  // any) is currently active, returning true if it did so, so the caller
+  // knows not to fall through to other Escape behaviors.
+  function cancelActivePaste(){
+    if(_pasteActive){cancelPaste();return true;}
+    if(_pasteWireActive){cancelPasteWire();return true;}
+    return false;
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────────
   const WIRE_COLORS=['#ff9900','#ff3333','#3399ff','#33cc66','#cc33ff','#ffee33','#ffffff','#ff6699'];
   let _wireColorIdx=0;
@@ -868,6 +995,7 @@ const Board = (() => {
     render();
   }
   function getSelected(){return _placed.find(p=>p.instanceId===_selectedComp)||null;}
+  function getSelectedWireObj(){return _wires.find(w=>w.id===_selectedWire)||null;}
   function deleteSelected(){
     if(_selectedComp){_placed=_placed.filter(p=>p.instanceId!==_selectedComp);setSelected(null,null);return;}
     if(_selectedWire){_wires=_wires.filter(w=>w.id!==_selectedWire);setSelected(null,null);return;}
@@ -895,7 +1023,7 @@ const Board = (() => {
   }
 
   return{init,render,clear,loadLayout,getLayoutData,getPlaced,getWires,addWire,nextWireColor,
-    setDragGhost,setStartWire,clearWire,setSelected,getSelected,deleteSelected,
+    setDragGhost,setStartWire,clearWire,setSelected,getSelected,getSelectedWireObj,deleteSelected,
     onSelect,onPlace,holeToXY,xyToHole,redraw,setZoom,getBoardWidth:boardWidth,
-    beginPaste,cancelPaste};
+    beginPaste,cancelPaste,beginPasteWire,cancelPasteWire,isPastingWire,cancelActivePaste};
 })();
