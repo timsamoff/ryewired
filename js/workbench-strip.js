@@ -59,6 +59,13 @@ const WorkbenchStrip = (() => {
     render();
   }
 
+  // Used by Clear Board alongside resetInput — resets Output (volume/mute)
+  // back to its defaults, leaving Power alone.
+  function resetOutput() {
+    permanentState.output = cloneState(DEFAULT_PERMANENT_STATE).output;
+    render();
+  }
+
   function cv(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
   function init(canvasEl) {
@@ -454,6 +461,13 @@ function fillHalf(active, left) {
   function onClick(e){
     const {x,y} = eventToCanvasXY(e);
     const hit = hitTest(x,y);
+    if (!hit) return;
+
+    // Clicking any Workbench Panel interactable (switch, power, input,
+    // output) should drop whatever's currently selected on the board —
+    // otherwise a placed component can stay visually "selected" while the
+    // user is now interacting with the permanent workbench controls.
+    if (typeof Board !== 'undefined') Board.setSelected(null, null);
 
     if (hit === 'switch') {
       bypassOn = !bypassOn; render();
@@ -494,6 +508,7 @@ function fillHalf(active, left) {
       firstRow: 5,
     }),
     getPermanentState, setPermanentState, onSelectPermanent,
+    resetInput, resetOutput,
     isBypassOn: () => bypassOn,
   };
 })();

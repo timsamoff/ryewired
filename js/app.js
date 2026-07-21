@@ -440,6 +440,7 @@ async function confirmClear() {
     if (Simulation.isRunning()) stopSim();
     Board.clear(); PropertiesPanel.hide(); updateComponentCount();
     if (typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.resetInput) WorkbenchStrip.resetInput();
+    if (typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.resetOutput) WorkbenchStrip.resetOutput();
     History.clear(); History.init(); AutoSave.clear();
     setStatus('Board cleared');
   }

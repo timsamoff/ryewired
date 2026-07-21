@@ -88,6 +88,18 @@ input, select, textarea { font-family: var(--font-ui); }
 
 .menu-item.open .dropdown { display: block; }
 
+.menu-item-link {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px; font-size: 12px; font-weight: 500;
+  color: var(--text-secondary); border-radius: var(--radius-sm);
+  text-decoration: none; cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.menu-item-link:hover { background: var(--accent-subtle); color: var(--text-primary); }
+
+.menu-item-link i { color: var(--rw-red); }
+
 .dd-item {
   display: flex; align-items: center; gap: 10px;
   width: 100%; padding: 7px 10px; background: none; border: none;
@@ -616,6 +628,9 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
   border-radius: 3px; padding: 2px 6px; color: var(--text-primary);
 }
 
+.kbd-pair { display: flex; align-items: center; gap: 4px; }
+.kbd-sep  { font-size: 10px; color: var(--text-secondary); }
+
 #help-footer {
   padding: 14px 24px 18px;
   display: flex;
@@ -790,31 +805,23 @@ body.dragging  #board-canvas { cursor: grabbing; }
 .prop-vu-value { flex: 1; min-width: 0; }
 .prop-vu-unit  { flex: 0 0 62px; text-align: center; }
 
-/* ── Help modal support/copyright footer ─────────────────────────────────── */
+/* ── Help modal copyright footer ─────────────────────────────────────────── */
 
-#help-support,
 #help-copyright {
   font-size: 11px;
   text-align: center;
   margin-bottom: 6px;
 }
 
-#help-support a,
 #help-copyright a {
   color: var(--text-primary);
   text-decoration: none;
   transition: color var(--t-fast);
 }
 
-#help-support a:hover,
 #help-copyright a:hover {
   color: var(--text-primary);
   text-decoration: underline;
-}
-
-#help-support i {
-  color: var(--rw-red);
-  margin-right: 3px;
 }
 
 #help-copyright {

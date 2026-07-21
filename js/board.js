@@ -11,7 +11,12 @@ const Board = (() => {
   const HOLE_R       = 3.2;
   const RAIL_BREAK   = 31;
   const ROW_LABELS   = ['a','b','c','d','e','f','g','h','i','j'];
-  const ROW_LABELS_DISPLAY = [...ROW_LABELS].reverse(); // cosmetic only — matches other breadboards' visual convention; internal row indices are untouched
+  const ROW_LABELS_DISPLAY = [...ROW_LABELS].reverse(); // bottom-half (rows 0-4) display order, top-to-bottom: f,g,h,i,j — cosmetic only, internal row indices are untouched
+  // Top half (rows 5-9) reads top-to-bottom as row index increases (row5 is
+  // physically topmost, row9 sits just above the center gap — see rowY()),
+  // so it needs a-e in that same increasing direction, NOT the reversed
+  // array used for the bottom half.
+  function rowDisplayLabel(r){ return r>=5 ? ROW_LABELS[r-5] : ROW_LABELS_DISPLAY[r]; }
   const ML=52, MR=52, MT=14, MB=14;
   const RAIL_PAD_V   = 10;
   const RAIL_STRIP_H = 2*HOLE_PITCH+RAIL_PAD_V*2;
@@ -315,7 +320,7 @@ const Board = (() => {
   function drawMainGrid(c){
     const L=_layout,W=boardWidth();
     ctx.font='10px IBM Plex Mono,monospace';ctx.fillStyle=c.label;
-    for(let r=0;r<=9;r++){const y=L.rowY[r];ctx.textAlign='right';ctx.fillText(ROW_LABELS_DISPLAY[r],ML-LABEL_PAD,y+3.5);ctx.textAlign='left';ctx.fillText(ROW_LABELS_DISPLAY[r],W-MR+LABEL_PAD,y+3.5);}
+    for(let r=0;r<=9;r++){const y=L.rowY[r];const lbl=rowDisplayLabel(r);ctx.textAlign='right';ctx.fillText(lbl,ML-LABEL_PAD,y+3.5);ctx.textAlign='left';ctx.fillText(lbl,W-MR+LABEL_PAD,y+3.5);}
     ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';
     for(let col=0;col<COLS;col++){
       // Labels ascend right-to-left (the 1-5 group sits at the right edge,
@@ -595,7 +600,7 @@ const Board = (() => {
     if(_dragMode==='leg-dragging'&&_dragInst&&_hoverHole) updateLegDrag();
     if(_dragMode==='wire-dragging'&&_dragWire&&_hoverHole) updateWireDrag();
     const coordEl=document.getElementById('status-coords');
-    if(coordEl) coordEl.textContent=_hoverHole?(typeof _hoverHole.row==='number'?ROW_LABELS_DISPLAY[_hoverHole.row]:_hoverHole.row)+(COLS-_hoverHole.col):'';
+    if(coordEl) coordEl.textContent=_hoverHole?(typeof _hoverHole.row==='number'?rowDisplayLabel(_hoverHole.row):_hoverHole.row)+(COLS-_hoverHole.col):'';
     render(x,y);
   }
 
