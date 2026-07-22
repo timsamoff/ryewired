@@ -13,6 +13,10 @@ const Wire = (() => {
 
   function startOrFinish(hole) {
     if (!_start) {
+      if (typeof Board!=='undefined' && Board.holeOccupied && Board.holeOccupied(hole.row,hole.col,null,null)) {
+        setStatus('That hole is already occupied — click a different one to start a wire');
+        return;
+      }
       _start = hole;
       Board.setStartWire(hole);
       const lbl = rowLabel(hole.row);
@@ -21,6 +25,10 @@ const Wire = (() => {
       if (_start.row===hole.row && _start.col===hole.col) {
         _start=null; Board.clearWire();
         setStatus('Wire cancelled — click a hole to start again, or press W to exit jumper mode');
+        return;
+      }
+      if (typeof Board!=='undefined' && Board.holeOccupied && Board.holeOccupied(hole.row,hole.col,null,null)) {
+        setStatus('That hole is already occupied — click a different one to finish the wire');
         return;
       }
       Board.addWire({

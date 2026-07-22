@@ -738,12 +738,13 @@ const Board = (() => {
           const b0=holeToXY(_savedWireMoveEnds.r2,_savedWireMoveEnds.c2);
           const snappedB=xyToHole(b0.x+pdx, b0.y+pdy, DROP_SNAP_RADIUS);
           const wouldCollapse = snappedB && snappedB.row===snappedA.row && snappedB.col===snappedA.col;
-          const wouldOverlap  = snappedB && !wouldCollapse && wireExistsAt(snappedA.row,snappedA.col,snappedB.row,snappedB.col,_dragWireMove);
+          const wouldOverlap  = snappedB && !wouldCollapse &&
+            (holeOccupied(snappedA.row,snappedA.col,null,_dragWireMove) || holeOccupied(snappedB.row,snappedB.col,null,_dragWireMove));
           if(snappedB && !wouldCollapse && !wouldOverlap){
             _dragWireMove.r1=snappedA.row; _dragWireMove.c1=snappedA.col;
             _dragWireMove.r2=snappedB.row; _dragWireMove.c2=snappedB.col;
           } else if(wouldOverlap && typeof setStatus==='function') {
-            setStatus('Can\u2019t place there — a wire already connects those holes');
+            setStatus('Can\u2019t place there — a hole is already occupied');
           } // else: no valid spot for the other end, or it'd collapse to zero length — leave the wire at its original position
         } // no hole nearby the reference endpoint: leave the wire at its original position
       }
@@ -769,9 +770,9 @@ const Board = (() => {
             if(!h){ok=false;break;}
             newLegs.push(h);
           }
-          if(ok && compExistsAt(newLegs,_dragInst.instanceId)){
+          if(ok && newLegs.some(l => holeOccupied(l.row,l.col,_dragInst.instanceId,null))){
             ok=false;
-            if (typeof setStatus==='function') setStatus('Can\u2019t place there — a component already occupies that exact spot');
+            if (typeof setStatus==='function') setStatus('Can\u2019t place there — a hole is already occupied');
           }
           if(ok) _dragInst.legs=newLegs;
         } // no hole nearby the reference leg: leave the part at its original position
@@ -901,8 +902,8 @@ const Board = (() => {
       // invalid placement.
     }
 
-    if (compExistsAt(inst.legs, null)) {
-      if (typeof setStatus==='function') setStatus('Can\u2019t place there — a component already occupies that exact spot');
+    if (inst.legs.some(l => holeOccupied(l.row, l.col, null, null))) {
+      if (typeof setStatus==='function') setStatus('Can\u2019t place there — a hole is already occupied');
       return null;
     }
 
@@ -983,6 +984,10 @@ const Board = (() => {
     const holeB=xyToHole(x+_pasteWireData.dxB,y+_pasteWireData.dyB,DROP_SNAP_RADIUS);
     if(!holeA||!holeB) return; // missed a valid hole for one end — stay in paste mode, let them try again
     if(holeA.row===holeB.row&&holeA.col===holeB.col) return; // would collapse to zero length — same, try again
+    if(holeOccupied(holeA.row,holeA.col,null,null) || holeOccupied(holeB.row,holeB.col,null,null)){
+      if (typeof setStatus==='function') setStatus('Can\u2019t place there — a hole is already occupied');
+      return; // stay in paste mode, let them try elsewhere
+    }
     addWire({id:Utils.uid('W'), r1:holeA.row, c1:holeA.col, r2:holeB.row, c2:holeB.col, color:_pasteWireData.color});
     _pasteWireActive=false;
     _pasteWireData=null;
@@ -1022,20 +1027,22 @@ const Board = (() => {
   function getSelectedWireObj(){return _wires.find(w=>w.id===_selectedWire)||null;}
 
   // ── Overlap prevention ──────────────────────────────────────────────────
-  // Two wires "overlap" if they connect the exact same pair of holes
-  // (direction doesn't matter). Two components "overlap" if their leg sets
-  // are exactly identical (same holes, any order) — sharing ONE leg with
-  // another part is normal breadboard wiring and must not be flagged; only
-  // an exact full match counts.
-  function wireExistsAt(r1,c1,r2,c2,excludeWire){
-    return _wires.some(w => w!==excludeWire &&
-      ((w.r1===r1&&w.c1===c1&&w.r2===r2&&w.c2===c2) ||
-       (w.r1===r2&&w.c1===c2&&w.r2===r1&&w.c2===c1)));
-  }
-  function legsKey(legs){ return legs.map(l=>`${l.row}:${l.col}`).sort().join('|'); }
-  function compExistsAt(legs,excludeInstanceId){
-    const key=legsKey(legs);
-    return _placed.some(p => p.instanceId!==excludeInstanceId && legsKey(p.legs)===key);
+  // No component leg or wire endpoint may land on a hole already occupied by
+  // any other leg/endpoint (component or wire) — flat rule, no exceptions.
+  // This costs nothing electrically: same-column holes are already bonded
+  // (see buildNetMap in simulation.js), so connecting to an occupied node
+  // just means using a different, free hole in that same column — exactly
+  // how this works on a real breadboard.
+  function holeOccupied(row,col,excludeInstanceId,excludeWire){
+    for(const p of _placed){
+      if(p.instanceId===excludeInstanceId) continue;
+      for(const l of p.legs) if(l.row===row&&l.col===col) return true;
+    }
+    for(const w of _wires){
+      if(w===excludeWire) continue;
+      if((w.r1===row&&w.c1===col)||(w.r2===row&&w.c2===col)) return true;
+    }
+    return false;
   }
   function deleteSelected(){
     if(_selectedComp){_placed=_placed.filter(p=>p.instanceId!==_selectedComp);setSelected(null,null);return;}
@@ -1066,5 +1073,6 @@ const Board = (() => {
   return{init,render,clear,loadLayout,getLayoutData,getPlaced,getWires,addWire,nextWireColor,
     setDragGhost,setStartWire,clearWire,setSelected,getSelected,getSelectedWireObj,deleteSelected,
     onSelect,onPlace,holeToXY,xyToHole,redraw,setZoom,getBoardWidth:boardWidth,
-    beginPaste,cancelPaste,beginPasteWire,cancelPasteWire,isPastingWire,cancelActivePaste};
+    beginPaste,cancelPaste,beginPasteWire,cancelPasteWire,isPastingWire,cancelActivePaste,
+    holeOccupied};
 })();
