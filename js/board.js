@@ -66,11 +66,15 @@ const Board = (() => {
   let _pressedSwitchInst=null; // momentary switch currently held down, if any
   let _dragWire=null, _dragWireEnd=-1, _savedWireEnds=null; // wire endpoint currently being dragged, if any
   // Whole-wire body drag (Select tool, click-drag the wire's body rather than
-  // an endpoint) — column-only, since a wire's endpoints can be a numeric row
-  // and a string rail-key at once, so there's no single "row delta" that
-  // applies to both. Row/rail-key of each endpoint never changes; only c1/c2
-  // shift together.
-  let _dragWireMove=null, _savedWireMoveEnds=null, _wireMoveStartCol=0;
+  // an endpoint) — free 2D movement, same technique as whole-component
+  // dragging: track a raw pixel offset while dragging (pure visual, no
+  // snapping), then on release snap one endpoint to its nearest hole, work
+  // out the exact pixel correction that snap introduced, and apply that same
+  // correction to the other endpoint (independently snapped too). xyToHole
+  // doesn't care whether a hole is a numeric row or a rail, so this needs no
+  // special-casing for the row/rail-key duality that motivated an earlier,
+  // more conservative column-only version of this.
+  let _dragWireMove=null, _savedWireMoveEnds=null;
   let _dragStartX=0, _dragStartY=0, _dragOffsetX=0, _dragOffsetY=0;
   let _savedLegs=null;
 
@@ -89,18 +93,6 @@ const Board = (() => {
   }
   function holeX(col) {
     return ML + col*HOLE_PITCH + extraGroups(col)*GROUP_GAP + HOLE_PITCH/2;
-  }
-
-  // Inverse of holeX — column spacing isn't uniform (extraGroups() adds gaps
-  // every few columns), so this is a linear search rather than a closed-form
-  // inverse. COLS is only 63, so this is cheap even on every mousemove.
-  function colFromX(px) {
-    let best=0, bestD=Infinity;
-    for (let c=0; c<COLS; c++) {
-      const d=Math.abs(holeX(c)-px);
-      if (d<bestD) { bestD=d; best=c; }
-    }
-    return best;
   }
 
   function buildLayout() {
@@ -389,16 +381,25 @@ const Board = (() => {
   }
 
   // ── Wires ─────────────────────────────────────────────────────────────────────
+  function strokeWirePath(ax,ay,bx,by){
+    ctx.beginPath();ctx.moveTo(ax,ay);
+    Math.abs(by-ay)<4?ctx.lineTo(bx,by):ctx.bezierCurveTo(ax,ay-18,bx,by-18,bx,by);
+    ctx.stroke();
+  }
+
   function drawWires(c){
     for(const w of _wires){
-      const a=holeToXY(w.r1,w.c1),b=holeToXY(w.r2,w.c2);
+      const isDragging=(_dragMode==='wire-moving'&&w===_dragWireMove);
+      let a=holeToXY(w.r1,w.c1),b=holeToXY(w.r2,w.c2);
+      if(isDragging){ a={x:a.x+_dragOffsetX,y:a.y+_dragOffsetY}; b={x:b.x+_dragOffsetX,y:b.y+_dragOffsetY}; }
       const isSel=w.id===_selectedWire;
       ctx.lineWidth=isSel?4:2.5;ctx.strokeStyle=w.color||'#ff9900';ctx.lineCap='round';
       if(isSel){ctx.shadowColor=c.warning;ctx.shadowBlur=6;}
-      ctx.beginPath();ctx.moveTo(a.x,a.y);
-      Math.abs(b.y-a.y)<4?ctx.lineTo(b.x,b.y):ctx.bezierCurveTo(a.x,a.y-18,b.x,b.y-18,b.x,b.y);
-      ctx.stroke();ctx.shadowBlur=0;
+      if(isDragging) ctx.globalAlpha=0.45;
+      strokeWirePath(a.x,a.y,b.x,b.y);
+      ctx.shadowBlur=0;
       for(const pt of [a,b]){ctx.beginPath();ctx.arc(pt.x,pt.y,3,0,Math.PI*2);ctx.fillStyle=w.color||'#ff9900';ctx.fill();}
+      if(isDragging) ctx.globalAlpha=1;
     }
     if(_wiringStart&&_hoverHole){
       const a=holeToXY(_wiringStart.row,_wiringStart.col),b=holeToXY(_hoverHole.row,_hoverHole.col);
@@ -411,13 +412,13 @@ const Board = (() => {
       ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);
     }
     if(_pasteWireActive&&_pasteWireData){
-      const c1raw=colFromX(_mouseX), c2raw=c1raw+_pasteWireData.dc;
-      const {c1,c2}=clampWirePasteCols(c1raw,c2raw);
-      const a=holeToXY(_pasteWireData.r1,c1),b=holeToXY(_pasteWireData.r2,c2);
+      // Cursor is the shape's midpoint, same anchor convention as the
+      // component ghost fix (drawPaletteGhost centers on the cursor too).
+      const a={x:_mouseX+_pasteWireData.dxA,y:_mouseY+_pasteWireData.dyA};
+      const b={x:_mouseX+_pasteWireData.dxB,y:_mouseY+_pasteWireData.dyB};
       ctx.globalAlpha=0.65;ctx.lineWidth=2.5;ctx.strokeStyle=_pasteWireData.color||'#ff9900';ctx.lineCap='round';
-      ctx.beginPath();ctx.moveTo(a.x,a.y);
-      Math.abs(b.y-a.y)<4?ctx.lineTo(b.x,b.y):ctx.bezierCurveTo(a.x,a.y-18,b.x,b.y-18,b.x,b.y);
-      ctx.stroke();ctx.globalAlpha=1;
+      strokeWirePath(a.x,a.y,b.x,b.y);
+      ctx.globalAlpha=1;
     }
   }
 
@@ -648,7 +649,7 @@ const Board = (() => {
     if(_dragMode==='comp-pending'){if(Math.hypot(x-_dragStartX,y-_dragStartY)>DRAG_THRESHOLD){_dragMode='comp-dragging';document.body.classList.add('dragging');}}
     if(_dragMode==='comp-dragging'){_dragOffsetX=x-_dragStartX;_dragOffsetY=y-_dragStartY;}
     if(_dragMode==='wire-pending'){if(Math.hypot(x-_dragStartX,y-_dragStartY)>DRAG_THRESHOLD){_dragMode='wire-moving';document.body.classList.add('dragging');}}
-    if(_dragMode==='wire-moving'&&_dragWireMove) updateWireMove(x);
+    if(_dragMode==='wire-moving'){_dragOffsetX=x-_dragStartX;_dragOffsetY=y-_dragStartY;}
     if(_dragMode==='leg-dragging'&&_dragInst&&_hoverHole) updateLegDrag();
     if(_dragMode==='wire-dragging'&&_dragWire&&_hoverHole) updateWireDrag();
     const coordEl=document.getElementById('status-coords');
@@ -669,13 +670,6 @@ const Board = (() => {
       const mid=xyToHole((a.x+b.x)/2,(a.y+b.y)/2,HOLE_PITCH);
       if(mid) _dragInst.legs[1]=mid;
     }
-  }
-
-  function updateWireMove(x){
-    if(!_dragWireMove||!_savedWireMoveEnds) return;
-    const delta=colFromX(x)-_wireMoveStartCol;
-    const {c1,c2}=clampWirePasteCols(_savedWireMoveEnds.c1+delta, _savedWireMoveEnds.c2+delta);
-    _dragWireMove.c1=c1; _dragWireMove.c2=c2;
   }
 
   function updateWireDrag(){
@@ -722,8 +716,7 @@ const Board = (() => {
       if(typeof currentTool==='function' && currentTool()==='select'){
         _dragMode='wire-pending';_dragWireMove=wire;
         _savedWireMoveEnds={r1:wire.r1,c1:wire.c1,r2:wire.r2,c2:wire.c2};
-        _wireMoveStartCol=colFromX(x);
-        _dragStartX=x;_dragStartY=y;
+        _dragStartX=x;_dragStartY=y;_dragOffsetX=0;_dragOffsetY=0;
       }
       setSelected(null,wire.id);return;
     }
@@ -735,7 +728,29 @@ const Board = (() => {
     if(_pressedSwitchInst){_pressedSwitchInst._pressed=false;Simulation.notifyStateChange(_pressedSwitchInst);render();_pressedSwitchInst=null;}
     if(_dragMode==='leg-dragging'){_dragMode='idle';_dragInst=null;_dragAnchorLeg=null;_dragLegIdx=-1;Storage.markDirty();History.push();render();return;}
     if(_dragMode==='wire-dragging'){_dragMode='idle';_dragWire=null;_dragWireEnd=-1;_savedWireEnds=null;Storage.markDirty();History.push();render();return;}
-    if(_dragMode==='wire-moving'){_dragMode='idle';_dragWireMove=null;_savedWireMoveEnds=null;document.body.classList.remove('dragging');Storage.markDirty();History.push();render();return;}
+    if(_dragMode==='wire-moving'){
+      if(_dragWireMove&&_savedWireMoveEnds){
+        const a0=holeToXY(_savedWireMoveEnds.r1,_savedWireMoveEnds.c1);
+        const snappedA=xyToHole(a0.x+_dragOffsetX, a0.y+_dragOffsetY, DROP_SNAP_RADIUS);
+        if(snappedA){
+          const aNew=holeToXY(snappedA.row,snappedA.col);
+          const pdx=aNew.x-a0.x, pdy=aNew.y-a0.y;
+          const b0=holeToXY(_savedWireMoveEnds.r2,_savedWireMoveEnds.c2);
+          const snappedB=xyToHole(b0.x+pdx, b0.y+pdy, DROP_SNAP_RADIUS);
+          const wouldCollapse = snappedB && snappedB.row===snappedA.row && snappedB.col===snappedA.col;
+          const wouldOverlap  = snappedB && !wouldCollapse && wireExistsAt(snappedA.row,snappedA.col,snappedB.row,snappedB.col,_dragWireMove);
+          if(snappedB && !wouldCollapse && !wouldOverlap){
+            _dragWireMove.r1=snappedA.row; _dragWireMove.c1=snappedA.col;
+            _dragWireMove.r2=snappedB.row; _dragWireMove.c2=snappedB.col;
+          } else if(wouldOverlap && typeof setStatus==='function') {
+            setStatus('Can\u2019t place there — a wire already connects those holes');
+          } // else: no valid spot for the other end, or it'd collapse to zero length — leave the wire at its original position
+        } // no hole nearby the reference endpoint: leave the wire at its original position
+      }
+      _dragMode='idle';_dragWireMove=null;_savedWireMoveEnds=null;_dragOffsetX=0;_dragOffsetY=0;
+      document.body.classList.remove('dragging');
+      Storage.markDirty();History.push();render();return;
+    }
     if(_dragMode==='wire-pending'){_dragMode='idle';_dragWireMove=null;_savedWireMoveEnds=null;}
     if(_dragMode==='comp-dragging'){
       if(_dragInst&&_savedLegs){
@@ -753,6 +768,10 @@ const Board = (() => {
             const h=xyToHole(lx+pdx,ly+pdy,DROP_SNAP_RADIUS);
             if(!h){ok=false;break;}
             newLegs.push(h);
+          }
+          if(ok && compExistsAt(newLegs,_dragInst.instanceId)){
+            ok=false;
+            if (typeof setStatus==='function') setStatus('Can\u2019t place there — a component already occupies that exact spot');
           }
           if(ok) _dragInst.legs=newLegs;
         } // no hole nearby the reference leg: leave the part at its original position
@@ -882,6 +901,11 @@ const Board = (() => {
       // invalid placement.
     }
 
+    if (compExistsAt(inst.legs, null)) {
+      if (typeof setStatus==='function') setStatus('Can\u2019t place there — a component already occupies that exact spot');
+      return null;
+    }
+
     _placed.push(inst);setSelected(inst.instanceId,null);
     if(_onPlace) _onPlace(inst);
     History.push();render();
@@ -922,31 +946,29 @@ const Board = (() => {
     }
     const hole=xyToHole(snapX,y,DROP_SNAP_RADIUS);
     if(!hole) return; // missed a valid hole — stay in paste mode, let them try again
+    const placed=finalizePlacement(defId, hole, clipboardProps);
+    if(!placed) return; // collided with an existing component — stay in paste mode, let them try elsewhere
     _pasteActive=false;
     _paletteGhost=null;
-    finalizePlacement(defId, hole, clipboardProps);
     if (typeof exitToolToSelect==='function') exitToolToSelect(); // one paste, then back to Select — same as a normal placement
   }
 
   // ── Wire copy/paste ─────────────────────────────────────────────────────
   // Same column-only philosophy as whole-wire dragging (see the note by
-  // _dragWireMove above): a pasted wire keeps its original r1/r2 (numeric
-  // row or rail-key, unchanged) and is placed at a new column, tracking the
-  // cursor. dc (=c2-c1) is preserved exactly.
+  // _dragWireMove above): a pasted wire keeps its exact original shape (both
+  // endpoints' relative position, in pixels, from the shape's own midpoint —
+  // same idea as a component's legs being fixed relative to its body) and
+  // is positioned freely, cursor-as-midpoint (matching the component ghost's
+  // cursor-is-center convention). Each endpoint snaps independently via
+  // xyToHole on confirm, so numeric rows and rail-keys both fall out
+  // naturally with no special-casing.
   let _pasteWireActive=false, _pasteWireData=null;
-
-  // Shared by the paste-wire preview (drawWires) and confirmPasteWire —
-  // keeps both ends in-bounds by shifting rather than clipping one end, so
-  // dc (and therefore the wire's shape) is always preserved exactly.
-  function clampWirePasteCols(c1,c2){
-    if(c1<0){c2-=c1;c1=0;} else if(c1>COLS-1){c2-=(c1-(COLS-1));c1=COLS-1;}
-    if(c2<0){c1-=c2;c2=0;} else if(c2>COLS-1){c1-=(c2-(COLS-1));c2=COLS-1;}
-    return {c1:Math.max(0,Math.min(COLS-1,c1)), c2:Math.max(0,Math.min(COLS-1,c2))};
-  }
 
   function beginPasteWire(wire){
     _pasteWireActive=true;
-    _pasteWireData={r1:wire.r1,r2:wire.r2,dc:wire.c2-wire.c1,color:wire.color};
+    const a=holeToXY(wire.r1,wire.c1), b=holeToXY(wire.r2,wire.c2);
+    const midX=(a.x+b.x)/2, midY=(a.y+b.y)/2;
+    _pasteWireData={dxA:a.x-midX,dyA:a.y-midY,dxB:b.x-midX,dyB:b.y-midY,color:wire.color};
     render(_mouseX,_mouseY);
   }
   function cancelPasteWire(){
@@ -955,11 +977,13 @@ const Board = (() => {
     _pasteWireData=null;
     render();
   }
-  function confirmPasteWire(x,_y){
+  function confirmPasteWire(x,y){
     if(!_pasteWireData) return;
-    const c1raw=colFromX(x), c2raw=c1raw+_pasteWireData.dc;
-    const {c1,c2}=clampWirePasteCols(c1raw,c2raw);
-    addWire({id:Utils.uid('W'), r1:_pasteWireData.r1, c1, r2:_pasteWireData.r2, c2, color:_pasteWireData.color});
+    const holeA=xyToHole(x+_pasteWireData.dxA,y+_pasteWireData.dyA,DROP_SNAP_RADIUS);
+    const holeB=xyToHole(x+_pasteWireData.dxB,y+_pasteWireData.dyB,DROP_SNAP_RADIUS);
+    if(!holeA||!holeB) return; // missed a valid hole for one end — stay in paste mode, let them try again
+    if(holeA.row===holeB.row&&holeA.col===holeB.col) return; // would collapse to zero length — same, try again
+    addWire({id:Utils.uid('W'), r1:holeA.row, c1:holeA.col, r2:holeB.row, c2:holeB.col, color:_pasteWireData.color});
     _pasteWireActive=false;
     _pasteWireData=null;
     Storage.markDirty();History.push();
@@ -996,6 +1020,23 @@ const Board = (() => {
   }
   function getSelected(){return _placed.find(p=>p.instanceId===_selectedComp)||null;}
   function getSelectedWireObj(){return _wires.find(w=>w.id===_selectedWire)||null;}
+
+  // ── Overlap prevention ──────────────────────────────────────────────────
+  // Two wires "overlap" if they connect the exact same pair of holes
+  // (direction doesn't matter). Two components "overlap" if their leg sets
+  // are exactly identical (same holes, any order) — sharing ONE leg with
+  // another part is normal breadboard wiring and must not be flagged; only
+  // an exact full match counts.
+  function wireExistsAt(r1,c1,r2,c2,excludeWire){
+    return _wires.some(w => w!==excludeWire &&
+      ((w.r1===r1&&w.c1===c1&&w.r2===r2&&w.c2===c2) ||
+       (w.r1===r2&&w.c1===c2&&w.r2===r1&&w.c2===c1)));
+  }
+  function legsKey(legs){ return legs.map(l=>`${l.row}:${l.col}`).sort().join('|'); }
+  function compExistsAt(legs,excludeInstanceId){
+    const key=legsKey(legs);
+    return _placed.some(p => p.instanceId!==excludeInstanceId && legsKey(p.legs)===key);
+  }
   function deleteSelected(){
     if(_selectedComp){_placed=_placed.filter(p=>p.instanceId!==_selectedComp);setSelected(null,null);return;}
     if(_selectedWire){_wires=_wires.filter(w=>w.id!==_selectedWire);setSelected(null,null);return;}

@@ -1,0 +1,262 @@
+{
+  "components": [
+    {
+      "instanceId": "CAXWSB",
+      "defId": "capacitor",
+      "legs": [
+        {
+          "row": 6,
+          "col": 55
+        },
+        {
+          "row": 6,
+          "col": 53
+        }
+      ],
+      "props": {
+        "capacitance": 1.0000000000000001e-7,
+        "voltage_rating": "50V",
+        "type": "Film",
+        "capacitance__unit": "nF"
+      },
+      "failed": false,
+      "failureType": null
+    },
+    {
+      "instanceId": "R6414P",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 52
+        },
+        {
+          "row": "rtm",
+          "col": 52
+        }
+      ],
+      "props": {
+        "resistance": 42000,
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "resistance__unit": "kΩ"
+      },
+      "failed": false,
+      "failureType": null
+    },
+    {
+      "instanceId": "RMX6EY",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 51
+        },
+        {
+          "row": "rtp",
+          "col": 51
+        }
+      ],
+      "props": {
+        "resistance": 430000,
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "resistance__unit": "kΩ"
+      },
+      "failed": false,
+      "failureType": null
+    },
+    {
+      "instanceId": "Q63N1M",
+      "defId": "transistor_npn",
+      "legs": [
+        {
+          "row": 7,
+          "col": 45
+        },
+        {
+          "row": 7,
+          "col": 46
+        },
+        {
+          "row": 7,
+          "col": 47
+        }
+      ],
+      "props": {
+        "model": "2N5088",
+        "hfe": 100,
+        "pinout": "CBE",
+        "leakage": ""
+      },
+      "failed": false,
+      "failureType": null
+    },
+    {
+      "instanceId": "R3XX80",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 47
+        },
+        {
+          "row": "rtm",
+          "col": 47
+        }
+      ],
+      "props": {
+        "resistance": 390,
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "resistance__unit": "Ω"
+      },
+      "failed": false,
+      "failureType": null
+    },
+    {
+      "instanceId": "C77LCO",
+      "defId": "capacitor",
+      "legs": [
+        {
+          "row": 8,
+          "col": 45
+        },
+        {
+          "row": 8,
+          "col": 43
+        }
+      ],
+      "props": {
+        "capacitance": 1e-7,
+        "voltage_rating": "50V",
+        "type": "Film",
+        "capacitance__unit": "µF"
+      },
+      "failed": false,
+      "failureType": null
+    },
+    {
+      "instanceId": "RFUW1P",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 45
+        },
+        {
+          "row": "rtp",
+          "col": 45
+        }
+      ],
+      "props": {
+        "resistance": 10000,
+        "power_rating": "0.25W",
+        "tolerance": "5%"
+      },
+      "failed": false,
+      "failureType": null
+    },
+    {
+      "instanceId": "RVCPYRJ",
+      "defId": "potentiometer",
+      "legs": [
+        {
+          "row": 7,
+          "col": 34
+        },
+        {
+          "row": 7,
+          "col": 35
+        },
+        {
+          "row": 7,
+          "col": 36
+        }
+      ],
+      "props": {
+        "resistance": 100000,
+        "taper": "Linear (B)",
+        "wiper": 0.59,
+        "resistance__unit": "kΩ"
+      },
+      "failed": false,
+      "failureType": null,
+      "_rLow": 59000,
+      "_rHigh": 41000
+    }
+  ],
+  "wires": [
+    {
+      "id": "WV2YXP",
+      "r1": 7,
+      "c1": 53,
+      "r2": 7,
+      "c2": 52,
+      "color": "#ff9900"
+    },
+    {
+      "id": "WU28XG",
+      "r1": 8,
+      "c1": 51,
+      "r2": 8,
+      "c2": 46,
+      "color": "#ff3333"
+    },
+    {
+      "id": "W2MJQ9",
+      "r1": 9,
+      "c1": 43,
+      "r2": 9,
+      "c2": 36,
+      "color": "#8033cc"
+    },
+    {
+      "id": "WBW01L",
+      "r1": 5,
+      "c1": 34,
+      "r2": "rtm",
+      "c2": 34,
+      "color": "#cc33ff"
+    },
+    {
+      "id": "WHZLXE",
+      "r1": 8,
+      "c1": 35,
+      "r2": 8,
+      "c2": 6,
+      "color": "#15b21f"
+    },
+    {
+      "id": "WADD6H",
+      "r1": 6,
+      "c1": 51,
+      "r2": 6,
+      "c2": 52,
+      "color": "#1100ff"
+    }
+  ],
+  "permanentDevices": {
+    "power": {
+      "voltage": 9,
+      "reverse_polarity": false,
+      "power_on": true,
+      "battery_sag": 0,
+      "internal_resistance": 1
+    },
+    "input": {
+      "waveform": "Audio File",
+      "frequency": 440,
+      "amplitude": 1,
+      "dc_offset": 0,
+      "phase": 0,
+      "looping": true,
+      "audio_file": "Electric Guitar Sample",
+      "audio_source": "electric_guitar_sample.wav"
+    },
+    "output": {
+      "volume": 0.33,
+      "mute": false
+    }
+  }
+}
