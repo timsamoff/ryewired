@@ -13,7 +13,7 @@ const WorkbenchStrip = (() => {
   let _hoverTarget = null; // 'input' | 'output' | 'power' | 'switch' | null — drives the hover highlight
 
   const DEFAULT_PERMANENT_STATE = {
-    power:  { voltage: 9, reverse_polarity: false, power_on: true, battery_sag: 0, internal_resistance: 1 },
+    power:  { voltage: 9, current_limit_ma: 500, reverse_polarity: false, power_on: true, battery_sag: 0, internal_resistance: 1 },
     input:  { waveform: 'None', frequency: 440, amplitude: 1.0, dc_offset: 0, phase: 0, looping: true, audio_file: null, audio_source: 'upload' },
     output: { volume: 1.0, mute: false },
   };

@@ -19,6 +19,7 @@ const PropertiesPanel = (() => {
       label: 'Power Supply', symbol: '9V',
       properties: [
         { key:'voltage', label:'Voltage (V)', type:'number', default:9, min:1, max:24 },
+        { key:'current_limit_ma', label:'Current Limit (mA)', type:'number', default:500 },
         { key:'reverse_polarity', label:'Reverse Polarity', type:'boolean', default:false },
         { key:'power_on', label:'Power On', type:'boolean', default:true },
         { key:'battery_sag', label:'Battery Sag', type:'range', min:0, max:1, step:0.01, default:0 },
