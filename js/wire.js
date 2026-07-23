@@ -61,9 +61,10 @@ const Wire = (() => {
     return typeof row==='number'?(L[row]||row):row;
   }
 
-  function setStatus(msg) {
-    const el=document.getElementById('status-msg'); if(el) el.textContent=msg;
-  }
+  // setStatus is a shared global function defined in app.js (not wrapped in
+  // its own module), so it's used directly here rather than duplicated —
+  // this also means Wire's status messages participate in app.js's
+  // generation-tracked auto-clear (see scheduleStatusClear in app.js).
 
   return { startOrFinish, cancelCurrent, enter, exit, isWiring, hasStart };
 })();

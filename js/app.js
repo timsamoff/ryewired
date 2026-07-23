@@ -8,6 +8,7 @@ const ZOOM_MAX  = 2.0;
 const ZOOM_STEP = 0.1;
 
 let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
+let _statusGen = 0;
 
 (async function initApp() {
 
@@ -75,6 +76,8 @@ let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
   initPan();
 
   document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('click', scheduleStatusClear, true);
+  document.addEventListener('keydown', scheduleStatusClear, true);
 
   // History — init AFTER board is ready
   History.init();
@@ -96,6 +99,7 @@ function handleAction(action) {
   switch (action) {
     case 'new':      newLayout();           break;
     case 'open':     openLayout();          break;
+    case 'load-sample-circuit': loadSampleCircuit(); break;
     case 'save':     saveLayout(false);     break;
     case 'save-as':  saveLayout(true);      break;
     case 'undo':     History.undo();        break;
@@ -199,6 +203,27 @@ async function openLayout() {
   Board.loadLayout(layout); PropertiesPanel.hide();
   History.clear(); History.init(); AutoSave.clear();
   updateComponentCount(); setStatus(`Loaded — ${layout.components?.length||0} components`);
+}
+
+async function loadSampleCircuit() {
+  const circuits = await Storage.listCircuits();
+  const picked = await Modal.pickList(
+    circuits.map(c => ({ label: c.name, value: c })),
+    { title: 'Load Sample Circuit', emptyLabel: 'No sample circuits available' }
+  );
+  if (!picked) return;
+
+  if (Board.getPlaced().length>0 || Board.getWires().length>0) {
+    const ok = await Modal.confirm('Load this sample circuit? Unsaved changes will be lost.', {title:'Load Sample Circuit', okLabel:'Load', danger:true});
+    if (!ok) return;
+  }
+  if (Simulation.isRunning()) stopSim();
+
+  const layout = await Storage.loadBundledCircuit(picked.file, picked.name);
+  if (!layout) { setStatus('Could not load sample circuit'); return; }
+  Board.loadLayout(layout); PropertiesPanel.hide();
+  History.clear(); History.init(); AutoSave.clear();
+  updateComponentCount(); setStatus(`Loaded ${picked.name} — ${layout.components?.length||0} components`);
 }
 
 async function saveLayout(forceDialog=false) {
@@ -477,7 +502,21 @@ function setSimState(state) {
 }
 
 function setStatus(msg) {
+  _statusGen++;
   const el=document.getElementById('status-msg'); if(el) el.textContent=msg;
+}
+
+// Status messages are one-off notices ("Copied", "Board cleared", "Wire
+// started at f12 — click another hole to finish", etc.) describing what
+// JUST happened or the current mode. Once the user does something else,
+// the old message stops making sense and should clear rather than linger.
+// Capturing every click/keydown and checking on the next animation frame
+// means: if that same interaction already called setStatus() with a fresh
+// message (bumping _statusGen synchronously, before this check runs), we
+// leave it alone; otherwise the stale message clears.
+function scheduleStatusClear() {
+  const gen = _statusGen;
+  requestAnimationFrame(() => { if (_statusGen === gen) setStatus(''); });
 }
 
 function updateComponentCount() {
