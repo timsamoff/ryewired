@@ -138,6 +138,48 @@ const Storage = (() => {
     } catch { return null; }
   }
 
+  // ── Bundled sample circuits ──────────────────────────────────────────────────
+  // Same pattern as AudioEngine's bundled sample clips: fetched once, cached,
+  // warmed at module load. The manifest just maps a display name to a .rw
+  // filename in vendor/circuits/ — add a new circuit by dropping the file
+  // there and adding one line to manifest.json, no code changes needed.
+  const CIRCUITS_MANIFEST_PATH = 'vendor/circuits/manifest.json';
+  const CIRCUITS_BASE          = 'vendor/circuits/';
+  let _circuitManifest = [];
+  let _circuitManifestPromise = null;
+  function fetchCircuitManifest() {
+    if (_circuitManifestPromise) return _circuitManifestPromise;
+    _circuitManifestPromise = fetch(CIRCUITS_MANIFEST_PATH)
+      .then(res => res.ok ? res.json() : { circuits: [] })
+      .then(data => { _circuitManifest = data.circuits || []; return _circuitManifest; })
+      .catch(err => { console.error('[Storage] Circuit manifest load error:', err); _circuitManifest = []; return _circuitManifest; });
+    return _circuitManifestPromise;
+  }
+  function getCachedCircuits() { return _circuitManifest; }
+  function listCircuits() { return fetchCircuitManifest(); }
+
+  // Fetches a bundled sample circuit and runs it through the exact same
+  // parse/migrate path a user-opened .rw file already uses. Also resets the
+  // file-identity state the same way newLayout() does — a bundled circuit
+  // isn't tied to a writable file handle, so Save should prompt Save As
+  // rather than silently trying to overwrite the vendor asset.
+  async function loadBundledCircuit(fileName, displayName) {
+    try {
+      const res = await fetch(CIRCUITS_BASE + fileName);
+      if (!res.ok) throw new Error('fetch failed: ' + res.status);
+      const raw = await res.text();
+      const layout = migrateLayout(JSON.parse(raw));
+      _fileHandle = null;
+      _fileName   = displayName || fileName.replace(/\.[^.]+$/, '');
+      updateTitle(false);
+      return layout;
+    } catch (err) {
+      console.error('[Storage] Sample circuit load error:', err);
+      return null;
+    }
+  }
+  fetchCircuitManifest(); // warm the cache at module load, well before File menu could realistically be opened
+
   // ── Audio ───────────────────────────────────────────────────────────────────
   async function openAudioFile() {
     if (supportsFilePicker) {
@@ -183,6 +225,7 @@ const Storage = (() => {
 
   return {
     loadAllComponents, newLayout, saveLayout, openLayout, openAudioFile,
-    markDirty, getFileName, getVersion, updateTitle
+    markDirty, getFileName, getVersion, updateTitle,
+    getCachedCircuits, listCircuits, loadBundledCircuit
   };
 })();

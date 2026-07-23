@@ -26,6 +26,7 @@
         <div class="dropdown">
           <button class="dd-item" data-action="new"><i class="fa-regular fa-file"></i>New Layout<span class="shortcut">Ctrl+N</span></button>
           <button class="dd-item" data-action="open"><i class="fa-regular fa-folder-open"></i>Open Layout…<span class="shortcut">Ctrl+O</span></button>
+          <button class="dd-item" data-action="load-sample-circuit"><i class="fa-solid fa-diagram-project"></i>Load Sample Circuit…</button>
           <div class="dd-sep"></div>
           <button class="dd-item" data-action="save"><i class="fa-regular fa-floppy-disk"></i>Save<span class="shortcut">Ctrl+S</span></button>
           <button class="dd-item" data-action="save-as"><i class="fa-solid fa-floppy-disk"></i>Save As…<span class="shortcut">Ctrl+Shift+S</span></button>
@@ -287,6 +288,7 @@
       </div>
       <div id="confirm-body">
         <p id="confirm-message"></p>
+        <div id="confirm-list" class="hidden"></div>
       </div>
       <div id="confirm-footer">
         <button id="confirm-cancel-btn" class="confirm-btn confirm-btn-cancel">Cancel</button>
