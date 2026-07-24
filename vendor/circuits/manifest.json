@@ -1,5 +1,12 @@
 {
   "circuits": [
+    { "name": "EHX LPB-1", "file": "EHX-LPB-1.rw" },
+    { "name": "EHX LPB-1", "file": "EHX-LPB-1.rw" },
+    { "name": "EHX LPB-1", "file": "EHX-LPB-1.rw" },
+    { "name": "EHX LPB-1", "file": "EHX-LPB-1.rw" },
+    { "name": "EHX LPB-1", "file": "EHX-LPB-1.rw" },
+    { "name": "EHX LPB-1", "file": "EHX-LPB-1.rw" },
+    { "name": "EHX LPB-1", "file": "EHX-LPB-1.rw" },
     { "name": "EHX LPB-1", "file": "EHX-LPB-1.rw" }
   ]
 }

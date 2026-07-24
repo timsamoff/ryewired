@@ -109,33 +109,34 @@ const PropertiesPanel = (() => {
       el.addEventListener('change', onPermanentPropChange);
     });
 
-    const sourceSel = _content.querySelector('.prop-audio-source');
-    if (sourceSel) {
-      sourceSel.addEventListener('change', async () => {
-        const val = sourceSel.value;
-
-        if (val === '__upload_trigger__') {
-          const fileData = await Storage.openAudioFile();
-          if (!fileData) { showPermanent('input'); return; } // cancelled — revert dropdown to whatever was actually selected before
-          const name = await AudioEngine.loadAudioFile(fileData);
-          if (!name) { showPermanent('input'); return; }
-          state.audio_source = 'upload';
-          state.audio_file = name;
-          if (state.waveform !== 'Audio File') state.waveform = 'Audio File'; // loading only makes sense as a prelude to playing it
-          showPermanent('input');
-          Storage.markDirty(); History.pushDebounced();
-          return;
-        }
-
-        if (val === '__current_upload__') return; // already the active selection — nothing to do
-
-        // Otherwise val is a bundled sample's filename.
-        const sample = (AudioEngine.getCachedSamples?.() || []).find(s => s.file === val);
-        if (!sample) return;
-        const name = await AudioEngine.loadSampleClip(sample.file, sample.name);
+    const loadSampleBtn = _content.querySelector('[data-role="load-sample-audio"]');
+    if (loadSampleBtn) {
+      loadSampleBtn.addEventListener('click', async () => {
+        const samples = (typeof AudioEngine!=='undefined' && AudioEngine.getCachedSamples) ? AudioEngine.getCachedSamples() : [];
+        const picked = await Modal.pickList(
+          samples.map(s => ({ label: s.name, value: s })),
+          { title: 'Load Sample Audio', emptyLabel: 'No sample audio available' }
+        );
+        if (!picked) return;
+        const name = await AudioEngine.loadSampleClip(picked.file, picked.name);
         if (!name) return;
-        state.audio_source = val;
-        state.audio_file = name; // same "currently loaded" field uploads use — keeps display/save logic uniform
+        state.audio_source = picked.file;
+        state.audio_file = name;
+        if (state.waveform !== 'Audio File') state.waveform = 'Audio File'; // loading only makes sense as a prelude to playing it
+        showPermanent('input');
+        Storage.markDirty(); History.pushDebounced();
+      });
+    }
+
+    const loadCustomBtn = _content.querySelector('[data-role="load-custom-audio"]');
+    if (loadCustomBtn) {
+      loadCustomBtn.addEventListener('click', async () => {
+        const fileData = await Storage.openAudioFile();
+        if (!fileData) return; // cancelled
+        const name = await AudioEngine.loadAudioFile(fileData);
+        if (!name) return;
+        state.audio_source = 'upload';
+        state.audio_file = name; // same "currently loaded" field bundled samples use — keeps display/save logic uniform
         if (state.waveform !== 'Audio File') state.waveform = 'Audio File';
         showPermanent('input');
         Storage.markDirty(); History.pushDebounced();
@@ -411,24 +412,23 @@ const PropertiesPanel = (() => {
             <div class="prop-audio-name">${value||''}</div>
           </div>`;
       case 'permanent_audio_source': {
-        const samples = (typeof AudioEngine!=='undefined' && AudioEngine.getCachedSamples) ? AudioEngine.getCachedSamples() : [];
         const audioSource = (typeof WorkbenchStrip!=='undefined') ? (WorkbenchStrip.getPermanentState().input.audio_source || 'upload') : 'upload';
         const isUpload = audioSource === 'upload';
-        const hasUpload = isUpload && !!value; // value is audio_file's current name — only meaningful when audio_source is 'upload'
-
-        let opts = samples.map(s => `<option value="${s.file}" ${audioSource===s.file?'selected':''}>${s.name}</option>`).join('');
-        opts += `<option disabled>──────────</option>`;
-        if (hasUpload) opts += `<option value="__current_upload__" selected>${value}</option>`;
-        // Always present, regardless of state — selecting it opens the file
-        // picker; it's an action trigger, not a persisted selection. Default-
-        // selected only when nothing else legitimately is (upload mode, but
-        // nothing uploaded yet).
-        opts += `<option value="__upload_trigger__" ${isUpload && !hasUpload ? 'selected':''}>Upload Audio…</option>`;
+        const samples = (typeof AudioEngine!=='undefined' && AudioEngine.getCachedSamples) ? AudioEngine.getCachedSamples() : [];
+        // value is audio_file's current display name; when source isn't
+        // 'upload' it's a bundled sample, so look up its own name rather
+        // than trusting value (kept in sync anyway, but this is the source
+        // of truth for what's actually loaded).
+        const currentLabel = !value ? null : (isUpload ? value : (samples.find(s => s.file === audioSource)?.name || value));
 
         return `
           <div class="prop-group">
             <label class="prop-label">Audio File</label>
-            <select class="prop-input prop-audio-source" data-role="audio-source">${opts}</select>
+            <div class="prop-audio-source-buttons">
+              <button class="prop-audio-btn" data-role="load-sample-audio"><i class="fa-solid fa-list"></i> Load Sample Audio</button>
+              <button class="prop-audio-btn" data-role="load-custom-audio"><i class="fa-solid fa-upload"></i> Load Custom Audio</button>
+            </div>
+            ${currentLabel ? `<div class="prop-audio-name">${currentLabel}</div>` : ''}
           </div>`;
       }
       default: return '';

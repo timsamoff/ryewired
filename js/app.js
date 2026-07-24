@@ -214,13 +214,14 @@ async function loadSampleCircuit() {
   if (!picked) return;
 
   if (Board.getPlaced().length>0 || Board.getWires().length>0) {
-    const ok = await Modal.confirm('Load this sample circuit? Unsaved changes will be lost.', {title:'Load Sample Circuit', okLabel:'Load', danger:true});
+    const ok = await Modal.confirm(`Load "${picked.name}"? Unsaved changes will be lost.`, {title:'Load Sample Circuit', okLabel:'Load', danger:true});
     if (!ok) return;
   }
   if (Simulation.isRunning()) stopSim();
 
+  setStatus(`Loading ${picked.name}…`);
   const layout = await Storage.loadBundledCircuit(picked.file, picked.name);
-  if (!layout) { setStatus('Could not load sample circuit'); return; }
+  if (!layout) { setStatus(`Could not load "${picked.name}" — see console for details`); return; }
   Board.loadLayout(layout); PropertiesPanel.hide();
   History.clear(); History.init(); AutoSave.clear();
   updateComponentCount(); setStatus(`Loaded ${picked.name} — ${layout.components?.length||0} components`);

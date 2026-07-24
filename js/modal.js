@@ -35,7 +35,7 @@ const Modal = (() => {
     overlay().classList.remove('hidden');
     titleEl().textContent = opts.title || 'Choose';
     if (opts.message) { msgEl().textContent = opts.message; msgEl().classList.remove('hidden'); }
-    else msgEl().classList.add('hidden');
+    else { msgEl().textContent = ''; msgEl().classList.add('hidden'); }
     okBtn().style.display = 'none';
     cancelBtn().textContent = opts.cancelLabel || 'Cancel';
     cancelBtn().style.display = '';
