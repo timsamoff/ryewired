@@ -184,7 +184,7 @@ const Simulation = (() => {
       }
     }
 
-    const { netVoltage, diodeCurrents } = solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges);
+    const { netVoltage, diodeCurrents, bjtCurrents } = solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges);
     _lastNets = nets; _lastNetVoltage = netVoltage;
 
     // Current actually drawn from the permanent supply, remembered for next
@@ -212,7 +212,7 @@ const Simulation = (() => {
       if (inst.failed) continue;
       const def = ComponentRegistry.getById(inst.defId);
       if (!def) continue;
-      try { solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents); }
+      try { solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, bjtCurrents); }
       catch(e) { console.warn('[Sim]', e.message); }
     }
 
@@ -221,7 +221,7 @@ const Simulation = (() => {
   }
 
   // ── Component solver ─────────────────────────────────────────────────────────
-  function solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents) {
+  function solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, bjtCurrents) {
     const btype = def.behavior?.type;
 
     switch(btype) {
@@ -319,16 +319,9 @@ const Simulation = (() => {
       case 'bjt_npn': {
         const mk  = inst.props.model || '2N3904';
         const pm  = def.model_params?.[mk] || {};
-        const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
-        const vbe = pm.vbe || 0.65;
-        const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
-        const vB  = legVoltage(inst, 1, nets, netVoltage);
-        const vE  = legVoltage(inst, eIdx, nets, netVoltage);
-        const Vbe = (vB ?? 0) - (vE ?? 0);
-        if (Vbe < vbe) { inst._current=0; break; }
-        const Ib  = (Vbe - vbe) / 10000;
-        const Ic  = hfe * Ib;
         const IcMax = (pm.max_ic_ma || 200) / 1000;
+        const c = bjtCurrents?.get(inst);
+        const Ic = c?.Ic || 0;
         inst._current = Ic;
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
@@ -337,16 +330,9 @@ const Simulation = (() => {
       case 'bjt_pnp': {
         const mk  = inst.props.model || '2N3906';
         const pm  = def.model_params?.[mk] || {};
-        const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
-        const vbe = pm.vbe || 0.65; // magnitude of the Veb turn-on threshold
-        const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
-        const vB  = legVoltage(inst, 1, nets, netVoltage);
-        const vE  = legVoltage(inst, eIdx, nets, netVoltage);
-        const Veb = (vE ?? 0) - (vB ?? 0);
-        if (Veb < vbe) { inst._current=0; break; }
-        const Ib  = (Veb - vbe) / 10000;
-        const Ic  = hfe * Ib;
         const IcMax = (pm.max_ic_ma || 200) / 1000;
+        const c = bjtCurrents?.get(inst);
+        const Ic = c?.Ic || 0;
         inst._current = Ic;
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
@@ -389,13 +375,29 @@ const Simulation = (() => {
   // "off" resistance otherwise. Diode on/off states are guessed, solved,
   // checked against the result, and re-solved until stable (a handful of
   // iterations is always enough for the size of circuits this board can
-  // hold). Transistors and capacitors are intentionally not added as edges
-  // here — transistor legs still just read the voltages this solve produces
-  // for them, same as before, and capacitors correctly stay isolated from
-  // each other in this DC-only model (a cap really does block DC).
-  const RON  = 1;     // ohms — small "on" resistance for a conducting diode/LED
-  const ROFF = 1e9;   // ohms — effectively open for a non-conducting diode/LED
-  const EPS  = 1e-12; // tiny leak-to-ground on every net so isolated islands don't produce a singular matrix
+  // hold). Transistors' base-emitter junctions are modeled the same way (see
+  // bjtEdges below). Collector current (Ic = hFE*Ib) is a linear function of
+  // the same B-E junction voltage once the junction's on/off state is
+  // decided for an iteration, so it's stamped directly into the same matrix
+  // solve rather than lagged — lagging it by an iteration was tried first
+  // and found to diverge (Ic is too steep a function of Vbe for that to stay
+  // stable). Saturation is modeled as a second binary state per transistor,
+  // on the same relaxation loop: if the active-region math would drive Vce
+  // below a realistic floor (~0.2V), the collector-emitter path switches
+  // from "current source" to "small clamp resistance pinning Vce near that
+  // floor" instead, and whatever current the external circuit (Rc, supply
+  // voltage) can actually push through that clamp becomes Ic — reverting
+  // back to active mode once that current would exceed what hFE*Ib allows
+  // (the standard "check which constraint is violated, enforce the other"
+  // piecewise treatment). Capacitors are intentionally not added as edges
+  // here — a cap really does block DC, so it correctly stays isolated from
+  // the rest of the net in this DC-only model.
+  const RON    = 1;     // ohms — small "on" resistance for a conducting diode/LED
+  const ROFF   = 1e9;   // ohms — effectively open for a non-conducting diode/LED
+  const RBE    = 10000; // ohms — effective "on" resistance of a transistor's base-emitter junction past Vbe (same figure the old per-instance-only approximation used)
+  const RSAT   = 1;     // ohms — small "on" resistance of the saturation clamp (collector-emitter, once saturated)
+  const VCESAT = 0.2;   // volts — realistic floor for Vce (or Vec for PNP) once a transistor saturates
+  const EPS    = 1e-12; // tiny leak-to-ground on every net so isolated islands don't produce a singular matrix
 
   function solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges) {
     extraResistorEdges = extraResistorEdges || [];
@@ -406,6 +408,7 @@ const Simulation = (() => {
 
     const resistorEdges = [...extraResistorEdges]; // {a,b,R}
     const diodeEdges    = []; // {a,b,Vf,inst}  a=anode net, b=cathode net
+    const bjtEdges      = []; // {a,b,Vf,inst,hfe,collector,pnp}  a/b = B-E junction's anode/cathode nets (base/emitter for NPN, emitter/base for PNP)
 
     for (const inst of placed) {
       if (inst.failed) continue;
@@ -434,6 +437,29 @@ const Simulation = (() => {
         const a  = netOf(inst.legs[0].row, inst.legs[0].col);              // anode
         const b  = netOf(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col); // cathode
         diodeEdges.push({ a, b, Vf, inst });
+
+      } else if (btype === 'bjt_npn' || btype === 'bjt_pnp') {
+        const pnp = btype === 'bjt_pnp';
+        const mk  = inst.props.model || (pnp ? '2N3906' : '2N3904');
+        const pm  = def.model_params?.[mk] || {};
+        const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
+        const Vf  = pm.vbe || 0.65; // magnitude of the turn-on threshold, whichever junction direction applies
+        const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
+        const cIdx = eIdx === 0 ? 2 : 0;
+        const baseNet = netOf(inst.legs[1].row, inst.legs[1].col);
+        const emitterNet = netOf(inst.legs[eIdx].row, inst.legs[eIdx].col);
+        const collectorNet = netOf(inst.legs[cIdx].row, inst.legs[cIdx].col);
+        // NPN: junction conducts base→emitter (anode=base, cathode=emitter),
+        // and collector current is injected at the emitter / extracted from
+        // the collector (external current flows in at collector, out at
+        // emitter). PNP mirrors both: junction conducts emitter→base, and
+        // collector current is injected at the collector / extracted from
+        // the emitter.
+        const a = pnp ? emitterNet : baseNet;
+        const b = pnp ? baseNet : emitterNet;
+        const icSrc  = pnp ? collectorNet : emitterNet;  // where Ic is injected
+        const icSink = pnp ? emitterNet   : collectorNet; // where Ic is extracted from
+        bjtEdges.push({ a, b, Vf, inst, gm: hfe/RBE, icSrc, icSink, pnp });
       }
     }
 
@@ -441,11 +467,13 @@ const Simulation = (() => {
     const register = net => { if (net!=null && !fixed.has(net) && !netIndex.has(net)) netIndex.set(net, netIndex.size); };
     resistorEdges.forEach(e => { register(e.a); register(e.b); });
     diodeEdges.forEach(e => { register(e.a); register(e.b); });
+    bjtEdges.forEach(e => { register(e.a); register(e.b); register(e.icSrc); register(e.icSink); });
 
     const N = netIndex.size;
     const netVoltage = new Map(fixed);
     const diodeCurrents = new Map();
-    if (N === 0) return { netVoltage, diodeCurrents };
+    const bjtCurrents = new Map(); // inst -> { Ib, Ic }
+    if (N === 0) return { netVoltage, diodeCurrents, bjtCurrents };
 
     function stampConductance(G, I, a, b, g) {
       const ai = netIndex.has(a) ? netIndex.get(a) : -1;
@@ -462,11 +490,40 @@ const Simulation = (() => {
       if (ai>=0) I[ai]+=amount;
       if (bi>=0) I[bi]-=amount;
     }
+    // Dependent collector current source: Ic = gm*(Va-Vb) - gm*Vf, where a/b
+    // are the B-E junction's own anode/cathode (so this reuses exactly the
+    // same junction voltage the B-E stamp above is keyed on), injected at
+    // e.icSrc and extracted at e.icSink. This is linear in the node voltages
+    // (gm = hFE/RBE is a fixed number once the junction's on/off state is
+    // decided for this iteration), so — unlike the B-E on/off state itself —
+    // it needs no relaxation: it's stamped directly into the same matrix and
+    // solved in one shot, staying exactly consistent with whatever Ib the
+    // solve converges to.
+    function stampBjtIc(G, I, e, gm) {
+      const pIdx = netIndex.has(e.a) ? netIndex.get(e.a) : -1;
+      const qIdx = netIndex.has(e.b) ? netIndex.get(e.b) : -1;
+      const pFixed = fixed.has(e.a), qFixed = fixed.has(e.b);
+      const srcIdx  = netIndex.has(e.icSrc)  ? netIndex.get(e.icSrc)  : -1;
+      const sinkIdx = netIndex.has(e.icSink) ? netIndex.get(e.icSink) : -1;
+
+      if (srcIdx >= 0) {
+        if (pIdx>=0) G[srcIdx][pIdx] -= gm; else if (pFixed) I[srcIdx] += gm*fixed.get(e.a);
+        if (qIdx>=0) G[srcIdx][qIdx] += gm; else if (qFixed) I[srcIdx] -= gm*fixed.get(e.b);
+        I[srcIdx] -= gm*e.Vf;
+      }
+      if (sinkIdx >= 0) {
+        if (pIdx>=0) G[sinkIdx][pIdx] += gm; else if (pFixed) I[sinkIdx] -= gm*fixed.get(e.a);
+        if (qIdx>=0) G[sinkIdx][qIdx] -= gm; else if (qFixed) I[sinkIdx] += gm*fixed.get(e.b);
+        I[sinkIdx] += gm*e.Vf;
+      }
+    }
 
     let states = diodeEdges.map(() => false);
+    let bjtStates = bjtEdges.map(() => false);
+    let satStates = bjtEdges.map(() => false); // true once a bjt is clamped into saturation
     let V = new Array(N).fill(0);
 
-    for (let iter=0; iter<8; iter++) {
+    for (let iter=0; iter<15; iter++) {
       const G = Array.from({length:N}, () => new Array(N).fill(0));
       const I = new Array(N).fill(0);
       for (let i=0;i<N;i++) G[i][i]+=EPS;
@@ -482,6 +539,27 @@ const Simulation = (() => {
         stampConductance(G, I, e.a, e.b, g);
         if (on) stampCurrentSource(I, e.a, e.b, g*e.Vf);
       });
+      bjtEdges.forEach((e, idx) => {
+        if (e.a==null || e.b==null || e.a===e.b) return;
+        const on = bjtStates[idx];
+        const g = 1/(on ? RBE : ROFF);
+        stampConductance(G, I, e.a, e.b, g);
+        if (on) {
+          stampCurrentSource(I, e.a, e.b, g*e.Vf);
+          if (satStates[idx]) {
+            // Saturated: collector-emitter (or emitter-collector for PNP —
+            // e.icSink/e.icSrc are already oriented per polarity) behaves
+            // like a small clamp resistance pinning Vce near VCESAT, rather
+            // than a current source. Whatever current the external circuit
+            // can actually push through that clamp becomes Ic.
+            const gs = 1/RSAT;
+            stampConductance(G, I, e.icSink, e.icSrc, gs);
+            stampCurrentSource(I, e.icSink, e.icSrc, gs*VCESAT);
+          } else {
+            stampBjtIc(G, I, e, e.gm);
+          }
+        }
+      });
 
       V = gaussianSolve(G, I);
 
@@ -492,6 +570,35 @@ const Simulation = (() => {
         const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
         const shouldBeOn = (va - vb) > e.Vf * 0.5;
         if (shouldBeOn !== states[idx]) { states[idx] = shouldBeOn; changed = true; }
+      });
+      bjtEdges.forEach((e, idx) => {
+        if (e.a==null || e.b==null) return;
+        const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
+        const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
+        const shouldBeOn = (va - vb) > e.Vf * 0.5;
+        if (shouldBeOn !== bjtStates[idx]) { bjtStates[idx] = shouldBeOn; changed = true; }
+        if (!shouldBeOn) {
+          if (satStates[idx]) { satStates[idx] = false; changed = true; } // saturation only means anything while conducting
+          return;
+        }
+
+        const vSink = netIndex.has(e.icSink) ? V[netIndex.get(e.icSink)] : fixed.get(e.icSink);
+        const vSrc  = netIndex.has(e.icSrc)  ? V[netIndex.get(e.icSrc)]  : fixed.get(e.icSrc);
+
+        if (!satStates[idx]) {
+          // Active: if this operating point would require Vce below the
+          // realistic floor, the external circuit can't actually sustain it —
+          // switch to the clamp for the next iteration.
+          const vce = vSink - vSrc;
+          if (vce < VCESAT * 0.9) { satStates[idx] = true; changed = true; }
+        } else {
+          // Saturated: if the clamp is passing MORE current than hFE*Ib would
+          // even allow, the transistor's own gain — not the external circuit —
+          // is now the binding constraint, so revert to active mode.
+          const IcActiveWouldBe = Math.max(0, e.gm*((va-vb) - e.Vf));
+          const IcSatActual = Math.max(0, (1/RSAT)*((vSink-vSrc) - VCESAT));
+          if (IcSatActual > IcActiveWouldBe) { satStates[idx] = false; changed = true; }
+        }
       });
       if (!changed) break;
     }
@@ -505,8 +612,27 @@ const Simulation = (() => {
       const g = 1/(on ? RON : ROFF);
       diodeCurrents.set(e.inst, on ? Math.max(0, g*((va-vb) - e.Vf)) : 0);
     });
+    bjtEdges.forEach((e, idx) => {
+      if (e.a==null || e.b==null) { bjtCurrents.set(e.inst, { Ib:0, Ic:0 }); return; }
+      const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
+      const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
+      const on = bjtStates[idx];
+      const g = 1/(on ? RBE : ROFF);
+      const Ib = on ? Math.max(0, g*((va-vb) - e.Vf)) : 0;
+      let Ic = 0;
+      if (on) {
+        if (satStates[idx]) {
+          const vSink = netIndex.has(e.icSink) ? V[netIndex.get(e.icSink)] : fixed.get(e.icSink);
+          const vSrc  = netIndex.has(e.icSrc)  ? V[netIndex.get(e.icSrc)]  : fixed.get(e.icSrc);
+          Ic = Math.max(0, (1/RSAT)*((vSink-vSrc) - VCESAT));
+        } else {
+          Ic = Math.max(0, e.gm*((va-vb) - e.Vf));
+        }
+      }
+      bjtCurrents.set(e.inst, { Ib, Ic, saturated: satStates[idx] && on });
+    });
 
-    return { netVoltage, diodeCurrents };
+    return { netVoltage, diodeCurrents, bjtCurrents };
   }
 
   // Small Gaussian-elimination solver for G·V = I (dense, fine at breadboard scale)

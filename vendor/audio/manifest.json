@@ -1,5 +1,6 @@
 {
   "samples": [
-    { "name": "Electric Guitar Sample", "file": "electric_guitar_sample.wav" }
+    { "name": "Electric Guitar Sample", "file": "electric_guitar_sample.wav" },
+    { "name": "Electronic Drum Sample", "file": "electronic_drum_sample.wav" }
   ]
 }
