@@ -55,7 +55,7 @@ const ComponentRegistry = (() => {
     // (to correctly handle drops directly onto a rail) that this module,
     // which only deals in row/col numbers, doesn't have access to.
 
-    return {
+    const inst = {
       instanceId:  Utils.uid(def.symbol||'C'),
       defId,
       legs,
@@ -64,6 +64,28 @@ const ComponentRegistry = (() => {
       failureType: null,
       _voltage:    0, _current: 0, _audioNode: null
     };
+    applyModelDefaults(inst);
+    return inst;
+  }
+
+  // Syncs the model-derived fields (hfe, leakage) to whichever model is
+  // currently selected on this instance — called once at placement (so a
+  // freshly-dropped part starts with its actual rated values, not a generic
+  // schema default) and again whenever the model dropdown changes (so
+  // switching models always shows and uses that model's real numbers,
+  // overwriting any prior custom value — a custom hfe/leakage belongs to the
+  // model it was set under, not to whatever gets picked next).
+  function applyModelDefaults(inst) {
+    const def = getById(inst.defId);
+    const pm  = def?.model_params?.[inst.props.model];
+    if (!pm) return;
+    if ((def.properties||[]).some(p => p.key==='hfe') && pm.hfe != null) {
+      inst.props.hfe = pm.hfe;
+    }
+    if ((def.properties||[]).some(p => p.key==='leakage')) {
+      const leak = pm.icbo_na ?? pm.leakage_ua;
+      if (leak != null) inst.props.leakage = leak;
+    }
   }
 
   function buildLegs(count, span, row, col) {
@@ -93,5 +115,5 @@ const ComponentRegistry = (() => {
 
   function clampCol(col) { return Math.max(0, Math.min(62, col)); }
 
-  return { load, getAll, getById, search, createInstance, CATEGORY_LABELS };
+  return { load, getAll, getById, search, createInstance, applyModelDefaults, CATEGORY_LABELS };
 })();

@@ -223,6 +223,10 @@ const PropertiesPanel = (() => {
         const pm = def.model_params?.[inst.props.model];
         if (pm) placeholder = pm.icbo_na ?? pm.leakage_ua;
       }
+      if (prop.key==='hfe') {
+        const pm = def.model_params?.[inst.props.model];
+        if (pm) placeholder = pm.hfe;
+      }
       if (prop.type==='value_unit') {
         unitLabel = inst.props[prop.key+'__unit'] || prop.default_unit || (prop.units&&prop.units[0]?.label);
       }
@@ -480,6 +484,16 @@ const PropertiesPanel = (() => {
     }
 
     Board.redraw(); Storage.markDirty(); History.pushDebounced();
+
+    if (key==='model') {
+      // A custom hfe/leakage belongs to the model it was set under — switching
+      // models resets both to the newly-selected model's real rated values.
+      ComponentRegistry.applyModelDefaults(_currentInst);
+      // Re-render so the now-updated hfe/leakage fields (and any placeholder
+      // depending on them) show immediately, rather than staying stale until
+      // the panel is closed and reopened.
+      show(_currentInst);
+    }
   }
 
   function hide() {

@@ -522,16 +522,39 @@ const AudioEngine = (() => {
         const Rc = placed.find(p => p.defId==='resistor' && !p.failed &&
           p.legs.some(l => nets.find(nets.key(l.row, l.col)) === collectorNet));
         const RcValue = Rc ? (parseFloat(Rc.props.resistance) || 10000) : 10000; // no collector resistor found -> reasonable fallback load
-        const gain = Utils.clamp((Ic / Vt) * RcValue, 0.5, 25);
+        const rawGain = (Ic / Vt) * RcValue;
+
+        // A bare common-emitter stage's raw gm*Rc easily lands in the tens
+        // to hundreds for realistic bias points and Rc values — a hard clamp
+        // made every model whose raw gain cleared ~25 sound identical, which
+        // in practice was most of them. A soft knee keeps the range
+        // differentiated instead of flatlining past one threshold — but the
+        // first calibration (knee=15) was tuned against a hypothetical
+        // circuit and turned out too low once checked against a real one
+        // (Rc=10k): raw gains there land around 20-800+, almost entirely
+        // past where that knee still differentiates, compressing a real
+        // ~2.8x Ic swing across a model lineup down to under 2dB of audible
+        // difference. Recalibrated against that actual measurement: rawGain
+        // 40 -> ~14x, 110 -> ~20x, 200 -> ~24x, 800 -> ~31x — the same 2.8x
+        // Ic swing now spans about 5dB instead of under 2.
+        const maxGain = 35, kneePoint = 80;
+        const gain = maxGain * rawGain / (rawGain + kneePoint);
 
         const g = ctx.createGain(); g.gain.value = gain;
 
-        // Clip headroom now scales with how hard the stage is actually
-        // biased (Ic against its rated max) instead of one fixed shape for
-        // every transistor regardless of operating point — barely-biased
-        // reads soft/clean, driven-hard reads compressed/clipped sooner.
-        const IcMax = (pm.max_ic_ma || 200) / 1000;
-        const headroom = Utils.clamp(1 - (Ic / IcMax), 0.15, 0.9);
+        // Clip headroom now follows how close the actual DC operating point
+        // sits to saturation (inst._vceHeadroom, from simulation.js — 0 at
+        // the saturation floor, 1 comfortably clear of it) instead of Ic
+        // against the device's absolute rated max. That ratio stayed
+        // pinned near its ceiling for virtually any realistic signal-stage
+        // current, since rated max is typically 2-3 orders of magnitude
+        // above what a small-signal stage actually draws — so headroom
+        // barely varied between models even when gain did. Saturation
+        // proximity is a real, model-sensitive quantity: a higher-hFE
+        // model pulls more Ic for the same Ib, sagging Vce further toward
+        // the floor through the same Rc.
+        const vceHeadroom = inst._vceHeadroom ?? 1;
+        const headroom = Utils.clamp(0.15 + (0.9 - 0.15) * vceHeadroom, 0.15, 0.9);
         const sh = ctx.createWaveShaper(); sh.curve = makeClipCurve(headroom);
         g.connect(sh);
         return { in: g, out: sh };

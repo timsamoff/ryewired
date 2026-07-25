@@ -29,9 +29,9 @@
     },
     {
       "key": "hfe",
-      "label": "hFE (gain)",
+      "label": "hFE (gain) \u2014 optional, overrides model's rating",
       "type": "number",
-      "default": 100
+      "default": ""
     },
     {
       "key": "pinout",

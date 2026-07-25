@@ -323,6 +323,11 @@ const Simulation = (() => {
         const c = bjtCurrents?.get(inst);
         const Ic = c?.Ic || 0;
         inst._current = Ic;
+        inst._saturated = !!c?.saturated;
+        // 0 = sitting right at the saturation floor, 1 = comfortably clear
+        // of it (3V+ of Vce margin — a reasonable reference for the supply
+        // voltages these circuits typically run at).
+        inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - 0.2) / 3, 0, 1);
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
       }
@@ -334,6 +339,8 @@ const Simulation = (() => {
         const c = bjtCurrents?.get(inst);
         const Ic = c?.Ic || 0;
         inst._current = Ic;
+        inst._saturated = !!c?.saturated;
+        inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - 0.2) / 3, 0, 1);
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
       }
@@ -613,23 +620,24 @@ const Simulation = (() => {
       diodeCurrents.set(e.inst, on ? Math.max(0, g*((va-vb) - e.Vf)) : 0);
     });
     bjtEdges.forEach((e, idx) => {
-      if (e.a==null || e.b==null) { bjtCurrents.set(e.inst, { Ib:0, Ic:0 }); return; }
+      if (e.a==null || e.b==null) { bjtCurrents.set(e.inst, { Ib:0, Ic:0, vce:0, saturated:false }); return; }
       const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
       const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
       const on = bjtStates[idx];
       const g = 1/(on ? RBE : ROFF);
       const Ib = on ? Math.max(0, g*((va-vb) - e.Vf)) : 0;
+      const vSink = netIndex.has(e.icSink) ? V[netIndex.get(e.icSink)] : fixed.get(e.icSink);
+      const vSrc  = netIndex.has(e.icSrc)  ? V[netIndex.get(e.icSrc)]  : fixed.get(e.icSrc);
+      const vce = vSink - vSrc; // Vce for NPN, Vec for PNP (icSink/icSrc already oriented per polarity)
       let Ic = 0;
       if (on) {
         if (satStates[idx]) {
-          const vSink = netIndex.has(e.icSink) ? V[netIndex.get(e.icSink)] : fixed.get(e.icSink);
-          const vSrc  = netIndex.has(e.icSrc)  ? V[netIndex.get(e.icSrc)]  : fixed.get(e.icSrc);
-          Ic = Math.max(0, (1/RSAT)*((vSink-vSrc) - VCESAT));
+          Ic = Math.max(0, (1/RSAT)*(vce - VCESAT));
         } else {
           Ic = Math.max(0, e.gm*((va-vb) - e.Vf));
         }
       }
-      bjtCurrents.set(e.inst, { Ib, Ic, saturated: satStates[idx] && on });
+      bjtCurrents.set(e.inst, { Ib, Ic, vce, saturated: satStates[idx] && on });
     });
 
     return { netVoltage, diodeCurrents, bjtCurrents };
