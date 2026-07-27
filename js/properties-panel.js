@@ -91,11 +91,16 @@ const PropertiesPanel = (() => {
     // devices are fixed, non-draggable parts of the workbench, per the doc.
 
     // Input's properties don't take effect live (unlike Output's volume/mute,
-    // which do) — changing them mid-run silently wouldn't do anything, so
-    // gray them out and say why instead.
-    const isLocked = kind === 'input' && typeof Simulation !== 'undefined' && Simulation.isRunning();
+    // which do), and Power Supply represents the physical battery/voltage —
+    // neither is a "turn the knob" action, so both lock while the circuit is
+    // actually engaged (running and not bypassed), same condition as regular
+    // components.
+    const isLocked = (kind === 'input' || kind === 'power') &&
+      typeof isCircuitEngaged === 'function' && isCircuitEngaged();
     if (isLocked) {
-      html = `<div class="prop-locked-note"><i class="fa-solid fa-lock"></i> Stop the simulation to change Input settings</div>` + html;
+      const msg = kind === 'input' ? 'Stop the simulation or bypass the pedal to change Input settings'
+                                    : 'Stop the simulation or bypass the pedal to change Power settings';
+      html = `<div class="prop-locked-note"><i class="fa-solid fa-lock"></i> ${msg}</div>` + html;
     }
 
     _content.innerHTML = html;
@@ -177,7 +182,9 @@ const PropertiesPanel = (() => {
 
   // ── Wire ────────────────────────────────────────────────────────────────────
   function showWire(wire) {
+    const engaged = typeof isCircuitEngaged === 'function' && isCircuitEngaged();
     _content.innerHTML = `
+      ${engaged ? '<div class="prop-locked-note"><i class="fa-solid fa-lock"></i> Stop the simulation or bypass the pedal to remove a jumper.</div>' : ''}
       <div class="prop-component-header">
         <div class="prop-component-symbol"
           style="background:${wire.color||'#ff9900'};border-color:${wire.color||'#ff9900'}">⌇</div>
@@ -190,7 +197,7 @@ const PropertiesPanel = (() => {
         <label class="prop-label">Color</label>
         <input class="prop-input" type="color" id="wire-color-pick" value="${wire.color||'#ff9900'}">
       </div>
-      <button class="prop-delete-btn" id="prop-delete-btn">
+      <button class="prop-delete-btn" id="prop-delete-btn" ${engaged ? 'disabled' : ''}>
         <i class="fa-solid fa-trash-can"></i> Remove Jumper
       </button>`;
 
@@ -208,7 +215,16 @@ const PropertiesPanel = (() => {
     const def = ComponentRegistry.getById(inst.defId);
     if (!def) return;
 
-    let html = `
+    const engaged = typeof isCircuitEngaged === 'function' && isCircuitEngaged();
+
+    let html = ``;
+    if (engaged) {
+      const wiperNote = def.behavior?.type === 'potentiometer'
+        ? 'Wiper stays adjustable while engaged — everything else is locked.'
+        : 'Stop the simulation or bypass the pedal to edit this component.';
+      html += `<div class="prop-locked-note"><i class="fa-solid fa-lock"></i> ${wiperNote}</div>`;
+    }
+    html += `
       <div class="prop-component-header">
         <div class="prop-component-symbol">${def.symbol||'?'}</div>
         <div class="prop-component-info">
@@ -286,6 +302,21 @@ const PropertiesPanel = (() => {
       </button>`;
 
     _content.innerHTML = html;
+
+    if (engaged) {
+      _content.querySelectorAll('input, select, textarea, button').forEach(el => {
+        const key = el.dataset.key;
+        const prop = key ? def.properties?.find(p => p.key === key) : null;
+        const isLive = prop?.live === true || el.dataset.meta === 'true';
+        if (!isLive) el.disabled = true;
+      });
+      // Rotate/Remove are structural (repositioning or pulling the part
+      // entirely) — always locked while engaged, no live exception even for
+      // a potentiometer's own buttons.
+      document.getElementById('prop-rotate-cw')?.setAttribute('disabled', 'true');
+      document.getElementById('prop-rotate-ccw')?.setAttribute('disabled', 'true');
+      document.getElementById('prop-delete-btn')?.setAttribute('disabled', 'true');
+    }
 
     // Rotate CW/CCW — moves outer leg positions by 90° around the body center
     document.getElementById('prop-rotate-cw')?.addEventListener('click', () => {

@@ -683,12 +683,17 @@ const Board = (() => {
   function onMouseDown(e){
     if(e.button!==0) return;
     const {x,y}=eventToCanvas(e);
-    if(Wire.isWiring()){const h=xyToHole(x,y);if(h) Wire.startOrFinish(h);return;}
-    if(_pasteActive){confirmPaste(x,y);return;}
-    if(_pasteWireActive){confirmPasteWire(x,y);return;}
+    const engaged = typeof isCircuitEngaged==='function' && isCircuitEngaged();
+    if(Wire.isWiring()){
+      if(engaged) return; // can't start/finish a wire while the circuit's actually engaged
+      const h=xyToHole(x,y);if(h) Wire.startOrFinish(h);return;
+    }
+    if(_pasteActive){if(!engaged) confirmPaste(x,y);return;}
+    if(_pasteWireActive){if(!engaged) confirmPasteWire(x,y);return;}
     if(typeof isMeasuring==='function' && isMeasuring()) return; // Voltmeter/Probe are hover-only, per the doc
     const legHit=hitTestLeg(x,y);
     if(legHit){
+      if(engaged) return; // dragging a leg is a rewiring action, locked while engaged
       _dragMode='leg-dragging';_dragInst=legHit.inst;_dragLegIdx=legHit.legIdx;
       _savedLegs=legHit.inst.legs.map(l=>({...l}));
       _dragAnchorLeg=legHit.inst.legs.length===2?legHit.inst.legs[legHit.legIdx===0?1:0]:legHit.inst.legs[legHit.legIdx===0?2:0];
@@ -696,24 +701,30 @@ const Board = (() => {
     }
     const wireEndHit=hitTestWireEnd(x,y);
     if(wireEndHit){
-      _dragMode='wire-dragging';_dragWire=wireEndHit.wire;_dragWireEnd=wireEndHit.end;
-      _savedWireEnds={r1:wireEndHit.wire.r1,c1:wireEndHit.wire.c1,r2:wireEndHit.wire.r2,c2:wireEndHit.wire.c2};
-      setSelected(null,wireEndHit.wire.id);return;
+      if(!engaged){
+        _dragMode='wire-dragging';_dragWire=wireEndHit.wire;_dragWireEnd=wireEndHit.end;
+        _savedWireEnds={r1:wireEndHit.wire.r1,c1:wireEndHit.wire.c1,r2:wireEndHit.wire.r2,c2:wireEndHit.wire.c2};
+      }
+      setSelected(null,wireEndHit.wire.id);return; // selecting/viewing stays available while engaged, only the drag is locked
     }
     const inst=hitTestComp(x,y);
     if(inst){
       const def=ComponentRegistry.getById(inst.defId);
       if(def?.behavior?.type==='switch_spst' && (inst.props.type==='Momentary (NO)'||inst.props.type==='Momentary (NC)')){
+        // A momentary footswitch is a real-time stompbox press, not a
+        // component swap — stays live regardless of engaged state.
         _pressedSwitchInst=inst;inst._pressed=true;Simulation.notifyStateChange(inst);render();
       }
-      _dragMode='comp-pending';_dragInst=inst;
-      _dragStartX=x;_dragStartY=y;_dragOffsetX=0;_dragOffsetY=0;
-      _savedLegs=inst.legs.map(l=>({...l}));
+      if(!engaged){
+        _dragMode='comp-pending';_dragInst=inst;
+        _dragStartX=x;_dragStartY=y;_dragOffsetX=0;_dragOffsetY=0;
+        _savedLegs=inst.legs.map(l=>({...l}));
+      }
       setSelected(inst.instanceId,null);return;
     }
     const wire=hitTestWire(x,y);
     if(wire){
-      if(typeof currentTool==='function' && currentTool()==='select'){
+      if(!engaged && typeof currentTool==='function' && currentTool()==='select'){
         _dragMode='wire-pending';_dragWireMove=wire;
         _savedWireMoveEnds={r1:wire.r1,c1:wire.c1,r2:wire.r2,c2:wire.c2};
         _dragStartX=x;_dragStartY=y;_dragOffsetX=0;_dragOffsetY=0;
@@ -837,6 +848,10 @@ const Board = (() => {
   function onDrop(e){
     e.preventDefault();
     const defId=e.dataTransfer.getData('text/plain');if(!defId) return;
+    if(typeof isCircuitEngaged==='function' && isCircuitEngaged()){
+      if(typeof setStatus==='function') setStatus('Stop the simulation or bypass the pedal to add a new component');
+      return;
+    }
     const {x,y}=eventToCanvas(e);
     // The ghost (drawPaletteGhost) renders centered on the cursor — legs at
     // -halfLen/+halfLen either side of (mx,gy) — but createInstance()/
@@ -1045,6 +1060,10 @@ const Board = (() => {
     return false;
   }
   function deleteSelected(){
+    if(typeof isCircuitEngaged==='function' && isCircuitEngaged()){
+      if(typeof setStatus==='function') setStatus('Stop the simulation or bypass the pedal to remove a component');
+      return;
+    }
     if(_selectedComp){_placed=_placed.filter(p=>p.instanceId!==_selectedComp);setSelected(null,null);return;}
     if(_selectedWire){_wires=_wires.filter(w=>w.id!==_selectedWire);setSelected(null,null);return;}
   }

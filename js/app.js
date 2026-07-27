@@ -258,6 +258,17 @@ function setTool(tool) {
   updateSelectButton();
 }
 
+// Whether the modeled circuit is actually feeding the audio output right now
+// (Play is running AND the pedal isn't bypassed). This is the single lock
+// condition for anything that represents physically swapping/rewiring a
+// part — you can't do that on a real breadboard while it's engaged either.
+// Pot wiper turns and momentary-footswitch presses are real-time on a real
+// pedal too, so they're deliberately NOT gated by this.
+function isCircuitEngaged() {
+  return typeof Simulation !== 'undefined' && Simulation.isRunning() &&
+    !(typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.isBypassOn && WorkbenchStrip.isBypassOn());
+}
+
 function activateTool(tool) {
   const cfg = TOOL_CONFIG[tool];
   if (tool === 'jumper') Wire.enter();
