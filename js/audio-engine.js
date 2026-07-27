@@ -413,7 +413,7 @@ const AudioEngine = (() => {
         used.add(inst.instanceId);
         stageCount++;
 
-        const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet);
+        const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet, groundNet);
         const exitBus = busFor(otherNet);
         if (built) {
           entryBus.connect(built.in);
@@ -470,18 +470,92 @@ const AudioEngine = (() => {
   // the same node for single-stage parts, different nodes for multi-stage
   // ones (e.g. transistor gain->clip), so the walk can chain the *output*
   // of a multi-stage part forward rather than its input.
-  function buildAudioStage(ctx, inst, def, nets, placed, entryNet, exitNet) {
+  // Finds the real, effective (AC) resistance between a transistor's
+  // emitter net and ground, for the gain formula's emitter-degeneration
+  // term. Returns 0 (no degeneration, same as the old gm*Rc-only formula)
+  // if nothing recognizable is on the emitter net — a bare grounded
+  // emitter (no resistor at all) is the common case and correctly falls
+  // through to that same 0.
+  //
+  // Two shapes are handled, the ones that actually show up in pedal
+  // circuits:
+  //  1. A plain resistor from the emitter net to groundNet. If a
+  //     capacitor bridges the SAME two nets (a bypass cap in parallel
+  //     with the whole resistor), it's fully AC-shorted -> Re=0.
+  //     Otherwise the full resistor value degenerates the stage.
+  //  2. A potentiometer with one outer leg on the emitter net and the
+  //     OTHER outer leg on groundNet (e.g. a "fuzz" control wired as a
+  //     rheostat so DC bias stays fixed regardless of wiper position).
+  //     If a capacitor bridges the wiper net to groundNet, only the
+  //     emitter-to-wiper segment stays unbypassed at AC — that's the
+  //     part that actually degenerates the stage, and is what makes the
+  //     knob audible. No such cap -> the whole pot body is in series,
+  //     unbypassed, regardless of wiper (matches real breadboard
+  //     behavior for that wiring).
+  function findEmitterResistance(emitterNet, groundNet, nets, placed) {
+    if (emitterNet == null || groundNet == null) return 0;
+
+    const netOf = (row, col) => nets.find(nets.key(row, col));
+    const bridgesNets = (capInst, netX, netY) => {
+      if (capInst.legs.length < 2) return false;
+      const a = netOf(capInst.legs[0].row, capInst.legs[0].col);
+      const b = netOf(capInst.legs[capInst.legs.length-1].row, capInst.legs[capInst.legs.length-1].col);
+      return (a===netX && b===netY) || (a===netY && b===netX);
+    };
+    const findBypassCap = (netX, netY) => placed.find(p =>
+      (p.defId==='capacitor' || p.defId==='capacitor_electrolytic') && !p.failed && bridgesNets(p, netX, netY));
+
+    for (const p of placed) {
+      if (p.failed) continue;
+
+      if (p.defId === 'resistor' && p.legs.length >= 2) {
+        const a = netOf(p.legs[0].row, p.legs[0].col);
+        const b = netOf(p.legs[p.legs.length-1].row, p.legs[p.legs.length-1].col);
+        const onEmitter = (a===emitterNet) ? b : (b===emitterNet) ? a : null;
+        if (onEmitter === groundNet) {
+          const R = parseFloat(p.props.resistance) || 0;
+          return findBypassCap(emitterNet, groundNet) ? 0 : R;
+        }
+      }
+
+      if (p.defId === 'potentiometer' && p.legs.length >= 3) {
+        const ccwNet = netOf(p.legs[0].row, p.legs[0].col);
+        const wprNet = netOf(p.legs[1].row, p.legs[1].col);
+        const cwNet  = netOf(p.legs[2].row, p.legs[2].col);
+        const onEmitter = (ccwNet===emitterNet) ? 'ccw' : (cwNet===emitterNet) ? 'cw' : null;
+        if (!onEmitter) continue;
+        const farNet = onEmitter==='ccw' ? cwNet : ccwNet;
+        if (farNet !== groundNet) continue; // not the "outer leg to ground" shape we model
+
+        const Rt  = parseFloat(p.props.resistance) || 0;
+        const parsedW = parseFloat(p.props.wiper);
+        const w   = Number.isNaN(parsedW) ? 0.5 : parsedW;
+        const pos = (p.props.taper||'').includes('Audio') ? Math.pow(w,2) : w;
+        const unbypassedR = onEmitter==='ccw' ? Rt*pos : Rt*(1-pos); // emitter-net-to-wiper segment
+
+        return findBypassCap(wprNet, groundNet) ? unbypassedR : Rt;
+      }
+    }
+    return 0;
+  }
+
+  function buildAudioStage(ctx, inst, def, nets, placed, entryNet, exitNet, groundNet) {
     switch (def.behavior?.type) {
       case 'resistor': {
-        // Net-based RC pairing now, not "any capacitor anywhere on the
-        // board": a capacitor shunting either of this resistor's own two
-        // nets forms a real lowpass; anything else isn't this resistor's
-        // partner.
-        const cap = placed.find(p => {
+        // Net-based RC pairing: a capacitor shunting one of this resistor's
+        // own two nets AND going to ground on its other leg forms a real
+        // lowpass. Requiring the ground leg specifically (not just "touches
+        // either net") matters on a busy hub node — e.g. a bias-divider
+        // junction with several other things attached — where an unrelated
+        // capacitor (an input-coupling cap serving a completely different
+        // purpose) could otherwise get mistaken for this resistor's shunt
+        // partner just for sharing that node.
+        const cap = groundNet==null ? null : placed.find(p => {
           if (p.defId !== 'capacitor' || p.failed || p.legs.length < 2) return false;
           const a = nets.find(nets.key(p.legs[0].row, p.legs[0].col));
           const b = nets.find(nets.key(p.legs[p.legs.length-1].row, p.legs[p.legs.length-1].col));
-          return a===entryNet || a===exitNet || b===entryNet || b===exitNet;
+          const aTouches = (a===entryNet || a===exitNet), bTouches = (b===entryNet || b===exitNet);
+          return (aTouches && b===groundNet) || (bTouches && a===groundNet);
         });
         if (!cap) return null; // lone series resistor: no filtering effect, transparent
         const R = parseFloat(inst.props.resistance) || 10000;
@@ -509,20 +583,26 @@ const AudioEngine = (() => {
         // hFE-only guess: gm = Ic/Vt (transconductance), and a bare
         // common-emitter stage's voltage gain is ~gm * Rc, where Rc is
         // whatever resistor is actually sitting on the collector's net —
-        // its real load, not an assumed value. Emitter degeneration isn't
-        // modeled (that would need a second resistor-on-emitter-net
-        // lookup and a different gain formula) — this assumes a bare
-        // common-emitter stage.
+        // its real load, not an assumed value. Emitter degeneration (see
+        // findEmitterResistance below) is folded in as the standard
+        // Rc / (re + Re) form, where re=1/gm — Re=0 collapses back to the
+        // original gm*Rc, so a bare grounded-emitter stage is unaffected.
         const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
         const cIdx = eIdx === 0 ? 2 : 0;
         const Ic = Math.max(inst._current || 0, 1e-6); // floor avoids a divide-by-near-zero cliff when barely biased
         const Vt = 0.026; // thermal voltage at room temperature
+        const emitterLeg = inst.legs[eIdx];
+        const emitterNet = nets.find(nets.key(emitterLeg.row, emitterLeg.col));
+        const Re = findEmitterResistance(emitterNet, groundNet, nets, placed);
         const collectorLeg = inst.legs[cIdx];
         const collectorNet = nets.find(nets.key(collectorLeg.row, collectorLeg.col));
         const Rc = placed.find(p => p.defId==='resistor' && !p.failed &&
           p.legs.some(l => nets.find(nets.key(l.row, l.col)) === collectorNet));
         const RcValue = Rc ? (parseFloat(Rc.props.resistance) || 10000) : 10000; // no collector resistor found -> reasonable fallback load
-        const rawGain = (Ic / Vt) * RcValue;
+        const gm = Ic / Vt;
+        const re = 1 / gm; // transistor's own intrinsic emitter resistance
+        const rawGain = RcValue / (re + Re); // Re=0 (no emitter resistor found) reduces this to the original gm*Rc
+        console.log('[RW-DEBUG]', inst.instanceId, 'Ic=', Ic, 're=', re.toFixed(1), 'Re=', Re, 'RcValue=', RcValue, 'rawGain=', rawGain.toFixed(2));
 
         // A bare common-emitter stage's raw gm*Rc easily lands in the tens
         // to hundreds for realistic bias points and Rc values — a hard clamp

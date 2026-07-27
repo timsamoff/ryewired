@@ -299,9 +299,18 @@ const Simulation = (() => {
       case 'capacitor': {
         const [vA, vB] = legVoltages(inst, nets, netVoltage);
         const vr = parseFloat(inst.props.voltage_rating) || 25;
-        const vAcross = Math.abs((vA??0) - (vB??0));
+        // Signed, not absolute — polarized parts (electrolytic) care which
+        // leg is higher, not just the magnitude across them. leg 0 = '+',
+        // leg[last] = '–', matching leg_labels order in the component JSON.
+        const vSigned = (vA??0) - (vB??0);
+        const vAcross = Math.abs(vSigned);
         inst._voltage = vAcross;
         if (vAcross > vr * 1.1) fail(inst, def, 'over_voltage');
+        // Real electrolytics tolerate a volt or so of reverse bias before
+        // anything bad happens — a strict 0V check would false-positive on
+        // ordinary solver settling at a near-zero bias point. 1V mirrors
+        // that real-world tolerance rather than a textbook-SPICE hard zero.
+        else if (def.polarized && vSigned < -1) fail(inst, def, 'reverse_polarity');
         break;
       }
 
