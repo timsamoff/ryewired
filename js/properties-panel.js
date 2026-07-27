@@ -217,6 +217,18 @@ const PropertiesPanel = (() => {
         </div>
       </div>`;
 
+    // ── Title (optional, all non-jumper/non-permanent components) ───────────
+    // Purely optional metadata, not part of any component's behavior schema —
+    // stored in inst.props.title only once the user actually types something
+    // (see onPropChange), so old saved .rw files with no title never gain a
+    // new key just from being opened and re-saved.
+    html += `
+      <div class="prop-group">
+        <label class="prop-label">Title</label>
+        <input class="prop-input" type="text" data-key="title" data-meta="true"
+          value="${(inst.props.title||'').replace(/"/g,'&quot;')}" placeholder="Optional label">
+      </div>`;
+
     for (const prop of (def.properties||[])) {
       let placeholder, unitLabel;
       if (prop.key==='leakage') {
@@ -260,6 +272,13 @@ const PropertiesPanel = (() => {
           </div>
         </div>`;
     }
+
+    html += `
+      <div class="prop-group">
+        <label class="prop-label">Description</label>
+        <textarea class="prop-input prop-textarea" data-key="description" data-meta="true"
+          rows="4" placeholder="Optional notes">${(inst.props.description||'').replace(/</g,'&lt;')}</textarea>
+      </div>`;
 
     html += `
       <button class="prop-delete-btn" id="prop-delete-btn">
@@ -308,36 +327,38 @@ const PropertiesPanel = (() => {
   function rotateLeg90(inst, dir) {
     if (!inst.legs || inst.legs.length < 2) return;
 
-    // Get current outer leg pixels
-    const L   = inst.legs;
-    const a   = Board.holeToXY(L[0].row, L[0].col);
-    const b   = Board.holeToXY(L[L.length-1].row, L[L.length-1].col);
-    const cx  = (a.x + b.x) / 2;
-    const cy  = (a.y + b.y) / 2;
-    const ang = Math.atan2(b.y - a.y, b.x - a.x);
-    const newAng = ang + dir * (Math.PI / 2);
-    const halfLen = Math.hypot(b.x - a.x, b.y - a.y) / 2;
+    const L = inst.legs;
+    const a = L[0], b = L[L.length-1];
+    // Rail-anchored legs (rtp/rtm/rbp/rbm row strings) aren't part of the
+    // numeric row/col grid this rotation works in — bail rather than rotate
+    // garbage (canRotate already excludes power_supply, but stay defensive).
+    if (typeof a.row !== 'number' || typeof b.row !== 'number') return;
 
-    // Compute new outer leg world positions
-    const newAx = cx - Math.cos(newAng) * halfLen;
-    const newAy = cy - Math.sin(newAng) * halfLen;
-    const newBx = cx + Math.cos(newAng) * halfLen;
-    const newBy = cy + Math.sin(newAng) * halfLen;
+    // Rotate the OUTER-LEG OFFSET in integer row/col grid space, pivoting on
+    // leg[0], rather than in pixel space. Row pitch isn't visually uniform
+    // with column pitch (the center gap between top/bottom halves and the
+    // rail strips break that), so the old approach — rotate a pixel angle,
+    // then snap each new position to its nearest hole — introduced a small
+    // rounding error nearly every time, which compounded across repeated
+    // rotations into the component visibly walking across the board instead
+    // of spinning in place, eventually running out of room. Integer grid
+    // rotation has no such error: it's exact by construction, every time.
+    const dr = b.row - a.row, dc = b.col - a.col;
+    const [ndr, ndc] = dir > 0 ? [dc, -dr] : [-dc, dr]; // CW: (dr,dc)->(dc,-dr); CCW is the inverse
 
-    // Snap to nearest holes
-    const holeA = Board.xyToHole(newAx, newAy, 30);
-    const holeB = Board.xyToHole(newBx, newBy, 30);
-    if (!holeA || !holeB) return;
+    const newB = { row: a.row + ndr, col: a.col + ndc };
+    if (newB.row < 0 || newB.row > 9 || newB.col < 0 || newB.col > 62) return; // would land off-board
 
-    inst.legs[0] = holeA;
-    inst.legs[L.length-1] = holeB;
+    inst.legs[L.length-1] = newB;
 
-    // For 3-leg: recompute center
+    // 3-leg parts (potentiometers, transistors): the middle leg is always
+    // evenly spaced between the outer two on real hardware, so the new
+    // midpoint lands exactly on a hole here too — no snapping needed.
     if (L.length === 3) {
-      const pa = Board.holeToXY(holeA.row, holeA.col);
-      const pb = Board.holeToXY(holeB.row, holeB.col);
-      const mid = Board.xyToHole((pa.x+pb.x)/2, (pa.y+pb.y)/2, 20);
-      if (mid) inst.legs[1] = mid;
+      const midRow = a.row + ndr/2, midCol = a.col + ndc/2;
+      if (Number.isInteger(midRow) && Number.isInteger(midCol)) {
+        inst.legs[1] = { row: midRow, col: midCol };
+      }
     }
 
     Board.redraw(); Storage.markDirty(); History.push();
@@ -444,6 +465,18 @@ const PropertiesPanel = (() => {
     const key = e.target.dataset.key;
     if (!key) return;
     const rawVal = e.target.value;
+
+    if (e.target.dataset.meta === 'true') {
+      // Title/Description are optional metadata, not part of any component's
+      // behavior schema — only add the key when there's real content, and
+      // remove it entirely when cleared, so the .rw format stays backward
+      // compatible (old files never gain a key just from being reopened).
+      if (rawVal.trim() === '') delete _currentInst.props[key];
+      else _currentInst.props[key] = rawVal;
+      Board.redraw(); Storage.markDirty(); History.pushDebounced();
+      return;
+    }
+
     const def    = ComponentRegistry.getById(_currentInst.defId);
     const prop   = def?.properties?.find(p=>p.key===key);
 

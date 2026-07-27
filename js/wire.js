@@ -14,7 +14,11 @@ const Wire = (() => {
   function startOrFinish(hole) {
     if (!_start) {
       if (typeof Board!=='undefined' && Board.holeOccupied && Board.holeOccupied(hole.row,hole.col,null,null)) {
-        setStatus('That hole is already occupied — click a different one to start a wire');
+        // An occupied hole (existing jumper or component leg) can never be a
+        // valid wire start (the collision policy forbids two things sharing
+        // a hole), so staying in Jumper mode here would just dead-end the
+        // user — switch back to Select instead, so the click is useful.
+        if (typeof exitToolToSelect === 'function') exitToolToSelect();
         return;
       }
       _start = hole;
@@ -57,8 +61,7 @@ const Wire = (() => {
   function hasStart() { return _start!==null; }
 
   function rowLabel(row) {
-    const L=['a','b','c','d','e','f','g','h','i','j'];
-    return typeof row==='number'?(L[row]||row):row;
+    return typeof row==='number'?Board.rowDisplayLabel(row):row;
   }
 
   // setStatus is a shared global function defined in app.js (not wrapped in

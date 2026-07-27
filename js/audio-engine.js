@@ -602,7 +602,6 @@ const AudioEngine = (() => {
         const gm = Ic / Vt;
         const re = 1 / gm; // transistor's own intrinsic emitter resistance
         const rawGain = RcValue / (re + Re); // Re=0 (no emitter resistor found) reduces this to the original gm*Rc
-        console.log('[RW-DEBUG]', inst.instanceId, 'Ic=', Ic, 're=', re.toFixed(1), 'Re=', Re, 'RcValue=', RcValue, 'rawGain=', rawGain.toFixed(2));
 
         // A bare common-emitter stage's raw gm*Rc easily lands in the tens
         // to hundreds for realistic bias points and Rc values — a hard clamp

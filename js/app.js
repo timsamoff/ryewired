@@ -192,6 +192,8 @@ async function newLayout() {
     if (!ok) return;
   }
   Board.clear(); PropertiesPanel.hide(); Storage.newLayout();
+  if (typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.resetInput) WorkbenchStrip.resetInput();
+  if (typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.resetOutput) WorkbenchStrip.resetOutput();
   History.clear(); History.init(); AutoSave.clear();
   updateComponentCount(); setStatus('New layout — drop components to get started');
 }

@@ -1074,5 +1074,5 @@ const Board = (() => {
     setDragGhost,setStartWire,clearWire,setSelected,getSelected,getSelectedWireObj,deleteSelected,
     onSelect,onPlace,holeToXY,xyToHole,redraw,setZoom,getBoardWidth:boardWidth,
     beginPaste,cancelPaste,beginPasteWire,cancelPasteWire,isPastingWire,cancelActivePaste,
-    holeOccupied};
+    holeOccupied,rowDisplayLabel};
 })();
