@@ -459,6 +459,16 @@ const Simulation = (() => {
         const mk  = inst.props.model || (pnp ? '2N3906' : '2N3904');
         const pm  = def.model_params?.[mk] || {};
         const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
+        // ICBO (collector-base leakage with the emitter open) gets amplified
+        // by the transistor exactly like base current does — a real
+        // transistor's collector current is approximately
+        // Ic = hFE*Ib + (hFE+1)*ICBO, not just hFE*Ib. This term is what's
+        // missing for germanium especially (icbo_na is 100-500x higher than
+        // silicon in the component data) — it's the actual mechanism behind
+        // "leaky germanium transistor" bias drift/warmth, which some builders
+        // work around by tweaking bias resistor values instead.
+        const icboNa = parseFloat(inst.props.leakage) || pm.icbo_na || 0;
+        const Ileak = (hfe + 1) * (icboNa / 1e9); // nA -> A
         const Vf  = pm.vbe || 0.65; // magnitude of the turn-on threshold, whichever junction direction applies
         const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
         const cIdx = eIdx === 0 ? 2 : 0;
@@ -475,7 +485,7 @@ const Simulation = (() => {
         const b = pnp ? baseNet : emitterNet;
         const icSrc  = pnp ? collectorNet : emitterNet;  // where Ic is injected
         const icSink = pnp ? emitterNet   : collectorNet; // where Ic is extracted from
-        bjtEdges.push({ a, b, Vf, inst, gm: hfe/RBE, icSrc, icSink, pnp });
+        bjtEdges.push({ a, b, Vf, inst, gm: hfe/RBE, icSrc, icSink, pnp, Ileak });
       }
     }
 
@@ -573,7 +583,12 @@ const Simulation = (() => {
             stampCurrentSource(I, e.icSink, e.icSrc, gs*VCESAT);
           } else {
             stampBjtIc(G, I, e, e.gm);
+            if (e.Ileak) stampCurrentSource(I, e.icSrc, e.icSink, e.Ileak);
           }
+        } else if (e.Ileak) {
+          // B-E junction not conducting (Ib=0) doesn't mean Ic=0 for a real
+          // transistor — this is the ICEO-like leakage floor.
+          stampCurrentSource(I, e.icSrc, e.icSink, e.Ileak);
         }
       });
 
@@ -611,7 +626,7 @@ const Simulation = (() => {
           // Saturated: if the clamp is passing MORE current than hFE*Ib would
           // even allow, the transistor's own gain — not the external circuit —
           // is now the binding constraint, so revert to active mode.
-          const IcActiveWouldBe = Math.max(0, e.gm*((va-vb) - e.Vf));
+          const IcActiveWouldBe = Math.max(0, e.gm*((va-vb) - e.Vf) + (e.Ileak||0));
           const IcSatActual = Math.max(0, (1/RSAT)*((vSink-vSrc) - VCESAT));
           if (IcSatActual > IcActiveWouldBe) { satStates[idx] = false; changed = true; }
         }
@@ -643,8 +658,10 @@ const Simulation = (() => {
         if (satStates[idx]) {
           Ic = Math.max(0, (1/RSAT)*(vce - VCESAT));
         } else {
-          Ic = Math.max(0, e.gm*((va-vb) - e.Vf));
+          Ic = Math.max(0, e.gm*((va-vb) - e.Vf) + (e.Ileak||0));
         }
+      } else {
+        Ic = e.Ileak || 0; // leaks even with the junction off
       }
       bjtCurrents.set(e.inst, { Ib, Ic, vce, saturated: satStates[idx] && on });
     });
