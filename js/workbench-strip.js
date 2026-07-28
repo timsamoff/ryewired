@@ -463,19 +463,26 @@ function fillHalf(active, left) {
     const hit = hitTest(x,y);
     if (!hit) return;
 
-    // Clicking any Workbench Panel interactable (switch, power, input,
-    // output) should drop whatever's currently selected on the board —
-    // otherwise a placed component can stay visually "selected" while the
-    // user is now interacting with the permanent workbench controls.
-    if (typeof Board !== 'undefined') Board.setSelected(null, null);
-
+    // The bypass switch doesn't open a different properties panel (it just
+    // toggles routing), so it shouldn't clear whatever's currently selected
+    // on the board — deselecting here just to immediately return was
+    // confusing (a selected transistor would visibly lose its selection
+    // every time you flipped bypass, for no reason tied to what the click
+    // actually did).
     if (hit === 'switch') {
       bypassOn = !bypassOn; render();
       if (typeof AudioEngine !== 'undefined' && AudioEngine.refreshBypassRouting) {
         AudioEngine.refreshBypassRouting();
       }
+      if (typeof PropertiesPanel !== 'undefined' && PropertiesPanel.refresh) PropertiesPanel.refresh();
       return;
     }
+
+    // Clicking Power/Input/Output opens a different properties panel, so
+    // drop whatever's currently selected on the board first — otherwise a
+    // placed component can stay visually "selected" while the user is now
+    // looking at a permanent workbench control's panel instead.
+    if (typeof Board !== 'undefined') Board.setSelected(null, null);
     // Power supply, Input, and Output open their properties — same pattern
     // as clicking a placed component. LED/CLR aren't included: per the doc
     // they're permanent visual indicators only, not editable.

@@ -258,15 +258,33 @@ function setTool(tool) {
   updateSelectButton();
 }
 
-// Whether the modeled circuit is actually feeding the audio output right now
-// (Play is running AND the pedal isn't bypassed). This is the single lock
-// condition for anything that represents physically swapping/rewiring a
-// part — you can't do that on a real breadboard while it's engaged either.
-// Pot wiper turns and momentary-footswitch presses are real-time on a real
-// pedal too, so they're deliberately NOT gated by this.
+// Whether the circuit is physically "patched in" right now — i.e. the
+// bypass switch is in the engaged (LED-lit) position. This is the single
+// lock condition for anything that represents physically swapping/
+// rewiring a part — you can't do that on a real breadboard while it's
+// engaged either. Pot wiper turns and momentary-footswitch presses are
+// real-time on a real pedal too, so they're deliberately NOT gated by
+// this.
+//
+// DELIBERATELY NOT GATED ON Simulation.isRunning(): the switch's position
+// is what matters, not the transport. Stopping playback doesn't un-flip
+// a real footswitch, so leaving the LED lit keeps editing locked even
+// with Play stopped — flip the switch if you want to edit. This also
+// keeps the lock decoupled from playback state, which matters once
+// dynamic re-linearization (block-rate re-solving while playing) lands —
+// "engaged" shouldn't need to be redefined when "playing" stops being a
+// single simple state.
+//
+// NOTE ON POLARITY: despite its name, WorkbenchStrip.isBypassOn() returns
+// TRUE when the effect is engaged (processing) and FALSE when bypassed —
+// confirmed against audio-engine.js's own routing (it uses the processed
+// circuit's tail when isBypassOn() is true, and falls back to the raw dry
+// source when false). An earlier version of this function trusted the name
+// at face value and inverted this, which unlocked editing exactly when the
+// pedal was engaged and locked it exactly when bypassed — backwards. Do not
+// add a "!" here without re-checking that routing code first.
 function isCircuitEngaged() {
-  return typeof Simulation !== 'undefined' && Simulation.isRunning() &&
-    !(typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.isBypassOn && WorkbenchStrip.isBypassOn());
+  return typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.isBypassOn && WorkbenchStrip.isBypassOn();
 }
 
 function activateTool(tool) {

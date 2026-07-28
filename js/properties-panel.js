@@ -570,10 +570,15 @@ const PropertiesPanel = (() => {
   }
 
   // Re-renders whatever's currently shown — used when simulation state
-  // changes (run/stop) so an already-open Input panel grays out/unlocks
-  // immediately, instead of only updating the next time it's opened.
+  // changes (run/stop) or bypass toggles, so an already-open panel
+  // grays out/unlocks immediately, instead of only updating the next
+  // time it's opened (previously this only handled the permanent-device
+  // case, so a component/wire panel left open across Play/Stop/bypass
+  // stayed stale and editable when it should have locked).
   function refresh() {
     if (_currentPermanentKind) showPermanent(_currentPermanentKind);
+    else if (_currentInst) show(_currentInst, null);
+    else if (_currentWire) show(null, _currentWire);
   }
 
   return { init, show, hide, showPermanent, refresh };
