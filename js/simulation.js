@@ -81,7 +81,8 @@ const Simulation = (() => {
       const sag  = Utils.clamp(parseFloat(power.battery_sag) || 0, 0, 1);
       if (sag > 0) {
         if (_battery.effectiveV == null) _battery.effectiveV = nominalV;
-        const sagVolts = sag * nominalV * Utils.clamp(_battery.lastCurrent / 0.5, 0, 1);
+        const sagFactor = Utils.clamp(Utils.clamp(_battery.lastCurrent / 0.5, 0, 1) + signalSagFactor(), 0, 1);
+        const sagVolts = sag * nominalV * sagFactor;
         const target = nominalV - sagVolts;
         _battery.effectiveV += (target - _battery.effectiveV) * 0.05;
         permEmf = _battery.effectiveV;
@@ -118,7 +119,8 @@ const Simulation = (() => {
       let v;
       if (sag > 0) {
         if (inst._battery.effectiveV == null) inst._battery.effectiveV = nominalV;
-        const sagVolts = sag * nominalV * Utils.clamp(inst._battery.lastCurrent / 0.5, 0, 1);
+        const sagFactor = Utils.clamp(Utils.clamp(inst._battery.lastCurrent / 0.5, 0, 1) + signalSagFactor(), 0, 1);
+        const sagVolts = sag * nominalV * sagFactor;
         const target = nominalV - sagVolts;
         inst._battery.effectiveV += (target - inst._battery.effectiveV) * 0.05;
         v = inst._battery.effectiveV;
@@ -231,7 +233,7 @@ const Simulation = (() => {
         break;
 
       case 'resistor': {
-        const R = parseFloat(inst.props.resistance) || 1000;
+        const R = resolvedValue(inst, 'resistance', 1000);
         const rating = parseWatts(inst.props.power_rating || '0.25W');
         const [vA, vB] = legVoltages(inst, nets, netVoltage);
         const vDrop = Math.abs((vA ?? 0) - (vB ?? 0));
@@ -432,7 +434,7 @@ const Simulation = (() => {
       const btype = def?.behavior?.type;
 
       if (btype === 'resistor') {
-        const R = parseFloat(inst.props.resistance) || 1000;
+        const R = resolvedValue(inst, 'resistance', 1000);
         const a = netOf(inst.legs[0].row, inst.legs[0].col);
         const b = netOf(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col);
         resistorEdges.push({ a, b, R });
@@ -695,6 +697,36 @@ const Simulation = (() => {
   }
 
   // ── Net map (union-find) ──────────────────────────────────────────────────────
+  // Prefers a component's tolerance-resolved actual value (see
+  // components-registry.js's applyToleranceRoll) over its nominal one — this
+  // is what makes tolerance actually affect the simulation rather than just
+  // being a label. Falls back to the nominal value for components that
+  // predate the tolerance feature (no `<key>_actual` stored yet), then to
+  // the caller's own fallback if neither is a valid number.
+  function resolvedValue(inst, key, fallback) {
+    const actual = parseFloat(inst.props[key+'_actual']);
+    if (Number.isFinite(actual)) return actual;
+    const nominal = parseFloat(inst.props[key]);
+    return Number.isFinite(nominal) ? nominal : fallback;
+  }
+
+  // Real bias sag isn't purely a DC-current phenomenon — a transistor's
+  // base-emitter junction rectifies a large AC swing, drawing measurably
+  // more average current under a heavy signal than a silent DC solve alone
+  // would ever show. Rather than routing live audio through the netlist's
+  // coupling caps to capture that directly (a much bigger, riskier change
+  // to how capacitors are modeled everywhere), this adds the live input
+  // signal's energy as a second, independent contribution to how hard the
+  // battery's being asked to work, on top of the real measured DC current
+  // below. Returns 0..1, added to the DC-current-based sag factor.
+  // Calibration (the /0.3 divisor) is provisional — needs an ear-tuning
+  // pass once this is actually testable in-browser, same as the audio
+  // gain knee constants were.
+  function signalSagFactor() {
+    if (typeof AudioEngine === 'undefined' || !AudioEngine.isRunning || !AudioEngine.isRunning() || !AudioEngine.getInputRMS) return 0;
+    return Utils.clamp(AudioEngine.getInputRMS() / 0.3, 0, 1);
+  }
+
   function buildNetMap(placed, wires) {
     const parent = {};
 
@@ -752,9 +784,10 @@ const Simulation = (() => {
     inst.failed=true; inst.failureType=mode; inst._brightness=0;
     const fm=def.failure_modes?.[mode];
     const icons={burn:'🔥',explode:'💥',smoke:'💨',silent_fail:'⚫'};
+    const which = inst.props?.title ? `"${inst.props.title}" (${inst.instanceId})` : inst.instanceId;
     if (_onFailure) _onFailure({
       icon: icons[fm?.result]||'💥',
-      title: `${def.label} Failed`,
+      title: `${def.label} Failed — ${which}`,
       message: fm?.message||`Component failure: ${mode}`
     });
     stop(); Board.redraw();

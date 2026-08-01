@@ -55,6 +55,12 @@ let _statusGen = 0;
     document.getElementById('failure-message').textContent = message;
     document.getElementById('failure-overlay').classList.remove('hidden');
   });
+  // Dynamic re-linearization: every tick recomputes the DC operating point
+  // (battery sag, etc.) — this is what actually pushes those fresh values
+  // onto the live audio graph. Without this, sag/leakage/anything else that
+  // moves Ic while playing would update the model but never be audible
+  // until a fresh Stop/Play.
+  Simulation.onUpdate(() => { if (typeof AudioEngine !== 'undefined' && AudioEngine.updateLiveGains) AudioEngine.updateLiveGains(); });
 
   document.getElementById('failure-dismiss').addEventListener('click', () => {
     document.getElementById('failure-overlay').classList.add('hidden');
@@ -172,6 +178,16 @@ function runSim() {
   // to start — an empty board is a valid, fully-functional state.
   Simulation.start();
   Simulation.tick(); // force one synchronous DC solve NOW — start() only schedules future ticks (setInterval), so without this, anything AudioEngine reads that depends on a completed solve (e.g. a transistor's inst._current, driving its gain) would still hold a stale/zero value from before this Play press, for the entire session, since the audio graph is only built once here
+  // That forced tick can itself trigger a failure (fail() calls
+  // Simulation.stop() + the onFailure handler's AudioEngine.stop()/
+  // setSimState('stopped') — but AudioEngine hasn't started yet at that
+  // point, so its stop() is a no-op). Without this check, the code below
+  // would start AudioEngine anyway and setSimState('running') would
+  // overwrite the correct 'stopped' state — leaving a genuinely playing,
+  // orphaned audio graph that nothing can ever reach again, since
+  // Simulation already (correctly) reports not running and every Stop/
+  // Reset path is guarded on that.
+  if (!Simulation.isRunning()) return;
   AudioEngine.start(); Oscilloscope.start();
   setSimState('running'); setStatus('Simulation running');
 }

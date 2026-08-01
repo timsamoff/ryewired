@@ -42,9 +42,11 @@
     },
     {
       "key": "leakage",
-      "label": "Leakage (ICBO, nA) — optional",
-      "type": "number",
-      "default": ""
+      "label": "Leakage (ICBO) — optional",
+      "type": "value_unit",
+      "default": "",
+      "default_unit": "nA",
+      "units": [ {"label":"nA","factor":1}, {"label":"µA","factor":1000} ]
     }
   ],
   "model_params": {
@@ -100,7 +102,7 @@
       "max_ic_ma": 300,
       "max_vce": 25,
       "type": "germanium",
-      "icbo_na": 8000
+      "icbo_na": 100000
     },
     "2N1304": {
       "hfe": 60,
@@ -109,7 +111,7 @@
       "max_ic_ma": 300,
       "max_vce": 25,
       "type": "germanium",
-      "icbo_na": 8500
+      "icbo_na": 100000
     }
   },
   "behavior": {

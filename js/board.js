@@ -1086,7 +1086,7 @@ const Board = (() => {
   function getLayoutData(){
     const permanentDevices = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getPermanentState)
       ? WorkbenchStrip.getPermanentState() : undefined;
-    return{components:_placed.map(inst=>{const c=Utils.clone(inst);delete c._voltage;delete c._current;delete c._audioNode;delete c._brightness;delete c._state;delete c._pressed;return c;}),wires:_wires,permanentDevices};
+    return{components:_placed.map(inst=>{const c=Utils.clone(inst);delete c._voltage;delete c._current;delete c._audioNode;delete c._brightness;delete c._state;delete c._pressed;delete c.failed;delete c.failureType;return c;}),wires:_wires,permanentDevices};
   }
 
   return{init,render,clear,loadLayout,getLayoutData,getPlaced,getWires,addWire,nextWireColor,

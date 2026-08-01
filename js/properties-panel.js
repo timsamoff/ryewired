@@ -257,8 +257,26 @@ const PropertiesPanel = (() => {
       }
       if (prop.type==='value_unit') {
         unitLabel = inst.props[prop.key+'__unit'] || prop.default_unit || (prop.units&&prop.units[0]?.label);
+        // Older saved circuits may have a leakage value (or just a model
+        // hint) but never ran through applyModelDefaults' unit selection —
+        // fall back to the same magnitude heuristic so the display is still
+        // sensible rather than defaulting to nA for a germanium part.
+        if (prop.key==='leakage' && !inst.props[prop.key+'__unit']) {
+          const magnitude = parseFloat(inst.props.leakage) || placeholder;
+          if (magnitude >= 1000) unitLabel = 'µA';
+        }
       }
       html += buildPropField(prop, inst.props[prop.key], placeholder, unitLabel);
+
+      // Tolerance always sits right next to the value it affects — a small
+      // reroll control here, rather than a separate section, keeps "this
+      // is the part that's randomized" visually obvious.
+      if (prop.key === 'tolerance' && (def.properties||[]).some(p => p.type==='value_unit' && p.key!=='tolerance')) {
+        html += `
+          <button class="prop-reroll-btn" id="prop-reroll-tolerance" title="Swap for a different simulated unit of the same nominal part">
+            <i class="fa-solid fa-dice"></i> Reroll actual value
+          </button>`;
+      }
     }
 
     // ── Orientation controls ─────────────────────────────────────────────────
@@ -324,6 +342,13 @@ const PropertiesPanel = (() => {
     });
     document.getElementById('prop-rotate-ccw')?.addEventListener('click', () => {
       rotateLeg90(inst, -1); // counter-clockwise = -90°
+    });
+    document.getElementById('prop-reroll-tolerance')?.addEventListener('click', () => {
+      if (typeof ComponentRegistry !== 'undefined' && ComponentRegistry.rerollTolerance) {
+        ComponentRegistry.rerollTolerance(inst);
+        Storage.markDirty(); History.push();
+        Board.redraw();
+      }
     });
 
     // Property change listeners
@@ -415,12 +440,15 @@ const PropertiesPanel = (() => {
         const unit = units.find(u=>u.label===unitLabel) || units[0] || {label:'',factor:1};
         const raw = parseFloat(value);
         const displayVal = Number.isFinite(raw) ? +(raw/unit.factor).toPrecision(6) : '';
+        const rawPlaceholder = parseFloat(placeholder);
+        const displayPlaceholder = Number.isFinite(rawPlaceholder) ? +(rawPlaceholder/unit.factor).toPrecision(6) : undefined;
         const opts = units.map(u=>`<option value="${u.label}" ${u.label===unit.label?'selected':''}>${u.label}</option>`).join('');
         return `
           <div class="prop-group">
             <label class="prop-label">${prop.label}</label>
             <div class="prop-value-unit-wrap">
-              <input class="prop-input prop-vu-value" type="number" data-key="${prop.key}" data-role="vu-value" value="${displayVal}" step="any">
+              <input class="prop-input prop-vu-value" type="number" data-key="${prop.key}" data-role="vu-value" value="${displayVal}"
+                ${displayPlaceholder!==undefined?`placeholder="${displayPlaceholder}"`:''} step="any">
               <select class="prop-input prop-vu-unit" data-key="${prop.key}" data-role="vu-unit">${opts}</select>
             </div>
           </div>`;

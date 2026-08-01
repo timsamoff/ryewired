@@ -65,6 +65,7 @@ const ComponentRegistry = (() => {
       _voltage:    0, _current: 0, _audioNode: null
     };
     applyModelDefaults(inst);
+    applyToleranceRoll(inst, def);
     return inst;
   }
 
@@ -84,8 +85,55 @@ const ComponentRegistry = (() => {
     }
     if ((def.properties||[]).some(p => p.key==='leakage')) {
       const leak = pm.icbo_na ?? pm.leakage_ua;
-      if (leak != null) inst.props.leakage = leak;
+      if (leak != null) {
+        inst.props.leakage = leak;
+        // Silicon's leakage is naturally tiny (tens of nA) and reads fine
+        // in nA; germanium's is orders of magnitude larger and is what
+        // pedal builders actually discuss in µA — default the display
+        // unit to whichever keeps the number in a sane, familiar range.
+        inst.props.leakage__unit = leak >= 1000 ? 'µA' : 'nA';
+      }
     }
+  }
+
+  // Resolves a component's real, simulated value from its nominal value +
+  // tolerance class, once, the same way a real part's actual value is fixed
+  // the moment it's manufactured — not re-rolled every time the circuit is
+  // powered on. Generalizes to any component whose schema has both a
+  // 'tolerance' select and a value_unit property (currently resistor,
+  // capacitor, capacitor_electrolytic) rather than hardcoding those keys by
+  // name, so a future tolerant part type just needs the same two fields.
+  //
+  // The resolved value is stored as `<key>_actual` — a plain prop, NOT
+  // listed in the component's own `properties` schema, so the properties
+  // panel never renders an input for it (kept deliberately hidden — real
+  // component tolerance means you'd need a multimeter to know the true
+  // value, you don't get to just read it off the part) but still an
+  // ordinary part of inst.props, so it saves/loads with the rest of the
+  // circuit like any other value — a saved build stays the same build.
+  //
+  // v1 uses a uniform random distribution within ±tolerance% (matches what
+  // the spec literally promises); real parts cluster nearer nominal than a
+  // uniform draw would, a bell-curve distribution is a reasonable future
+  // refinement, not needed to be right immediately.
+  function applyToleranceRoll(inst, def) {
+    if (!(def.properties||[]).some(p => p.key==='tolerance')) return;
+    const valueProp = (def.properties||[]).find(p => p.type==='value_unit' && p.key!=='tolerance');
+    if (!valueProp) return;
+    const nominal = parseFloat(inst.props[valueProp.key]);
+    if (!Number.isFinite(nominal)) return;
+    const tolPct = parseFloat(inst.props.tolerance) || 5;
+    const factor = 1 + (Math.random()*2 - 1) * (tolPct/100);
+    inst.props[valueProp.key+'_actual'] = nominal * factor;
+  }
+
+  // Re-rolls a component's resolved value against its CURRENT nominal value
+  // and tolerance class — the "swap this part for another one out of the
+  // same batch" action, exposed as a small reroll control in the properties
+  // panel next to the Tolerance field.
+  function rerollTolerance(inst) {
+    const def = getById(inst.defId);
+    if (def) applyToleranceRoll(inst, def);
   }
 
   function buildLegs(count, span, row, col) {
@@ -115,5 +163,5 @@ const ComponentRegistry = (() => {
 
   function clampCol(col) { return Math.max(0, Math.min(62, col)); }
 
-  return { load, getAll, getById, search, createInstance, applyModelDefaults, CATEGORY_LABELS };
+  return { load, getAll, getById, search, createInstance, applyModelDefaults, rerollTolerance, CATEGORY_LABELS };
 })();

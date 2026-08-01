@@ -23,6 +23,7 @@ const AudioEngine = (() => {
   let _allChainNodes    = [];     // every raw AudioNode created while walking, for disconnect-on-stop
   let _analyser         = null;
   let _analyserSpectrum = null;
+  let _inputAnalyser    = null; // tapped on raw input, for signal-driven battery sag
   let _gainOut          = null;
   let _running          = false;
   let _audioBuffer      = null;
@@ -78,6 +79,12 @@ const AudioEngine = (() => {
   // recompute _chainTail (see _refreshBypassRouting below) without
   // re-walking the net graph or rebuilding _source.
   let _walkReachedOutput = false;
+  // Built once per Play (alongside the audio graph itself) by buildAudioStage's
+  // BJT case, one entry per transistor stage — walked every Simulation tick
+  // (via updateLiveGains, wired to Simulation.onUpdate) to push a fresh gain
+  // and clip curve as the DC operating point moves (battery sag, etc.)
+  // without ever re-running the netlist walk or rebuilding any node.
+  let _liveGainStages = [];
   let _walkTail          = null;
 
   function getContext() {
@@ -118,6 +125,17 @@ const AudioEngine = (() => {
       const built = buildSource(ctx, inputState());
       _source = built.output;
       _sourceStartable = built.startable;
+      _liveGainStages = [];
+
+      // Tapped on the RAW input, before the circuit and independent of
+      // bypass — sag should respond to how hard the player is actually
+      // driving the circuit, not to whatever the circuit's already done to
+      // the signal (which would create a weird self-referential relationship
+      // once clipping is involved). Separate from _analyser/_analyserSpectrum
+      // above, which are tapped post-routing for the scope/spectrum display.
+      _inputAnalyser = ctx.createAnalyser();
+      _inputAnalyser.fftSize = 2048;
+      _source.connect(_inputAnalyser);
 
       // Walk the real net graph regardless of bypass — Audio Probe needs to
       // be able to bench-probe the circuit even with the footswitch
@@ -160,11 +178,13 @@ const AudioEngine = (() => {
       _allChainNodes = [];
       if (_analyser)         { _analyser.disconnect(); _analyser = null; }
       if (_analyserSpectrum) { _analyserSpectrum.disconnect(); _analyserSpectrum = null; }
+      if (_inputAnalyser)    { _inputAnalyser.disconnect(); _inputAnalyser = null; }
       if (_gainOut)          { _gainOut.disconnect(); _gainOut = null; }
     } catch (err) { console.warn('[Audio] Stop error:', err); }
     _running = false;
     _routedNode = null; _chainTail = null; _probeNets = null; _netTaps = null;
     _walkReachedOutput = false; _walkTail = null;
+    _liveGainStages = [];
   }
 
   // Live-updates Output's volume/mute while running, without rebuilding the
@@ -492,6 +512,16 @@ const AudioEngine = (() => {
   //     knob audible. No such cap -> the whole pot body is in series,
   //     unbypassed, regardless of wiper (matches real breadboard
   //     behavior for that wiring).
+  // Prefers a component's tolerance-resolved actual value over its nominal
+  // one — same helper/reasoning as simulation.js's resolvedValue (duplicated
+  // here rather than shared, since this codebase has no module system).
+  function resolvedValue(inst, key, fallback) {
+    const actual = parseFloat(inst.props[key+'_actual']);
+    if (Number.isFinite(actual)) return actual;
+    const nominal = parseFloat(inst.props[key]);
+    return Number.isFinite(nominal) ? nominal : fallback;
+  }
+
   function findEmitterResistance(emitterNet, groundNet, nets, placed) {
     if (emitterNet == null || groundNet == null) return 0;
 
@@ -513,7 +543,7 @@ const AudioEngine = (() => {
         const b = netOf(p.legs[p.legs.length-1].row, p.legs[p.legs.length-1].col);
         const onEmitter = (a===emitterNet) ? b : (b===emitterNet) ? a : null;
         if (onEmitter === groundNet) {
-          const R = parseFloat(p.props.resistance) || 0;
+          const R = resolvedValue(p, 'resistance', 0);
           return findBypassCap(emitterNet, groundNet) ? 0 : R;
         }
       }
@@ -539,6 +569,63 @@ const AudioEngine = (() => {
     return 0;
   }
 
+  // Real small-signal gain from the DC operating point the electrical
+  // solver already computes (inst._current = Ic, set in simulation.js's
+  // bjt_npn/bjt_pnp case) rather than a flat hFE-only guess: gm = Ic/Vt
+  // (transconductance), and a bare common-emitter stage's voltage gain is
+  // ~gm * Rc, where Rc is whatever resistor is actually sitting on the
+  // collector's net — its real load, not an assumed value. Emitter
+  // degeneration (see findEmitterResistance) is folded in as the standard
+  // Rc / (re + Re) form, where re=1/gm — Re=0 collapses back to the
+  // original gm*Rc, so a bare grounded-emitter stage is unaffected.
+  //
+  // Shared by buildAudioStage (once, at Play) and updateLiveGains (every
+  // Simulation tick) — one formula, read fresh from inst._current/
+  // inst._vceHeadroom each time it's called, rather than two copies that
+  // could quietly drift apart.
+  function computeBjtGainAndHeadroom(inst, def, nets, placed, groundNet) {
+    const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
+    const cIdx = eIdx === 0 ? 2 : 0;
+    const Ic = Math.max(inst._current || 0, 1e-6); // floor avoids a divide-by-near-zero cliff when barely biased
+    const Vt = 0.026; // thermal voltage at room temperature
+    const emitterLeg = inst.legs[eIdx];
+    const emitterNet = nets.find(nets.key(emitterLeg.row, emitterLeg.col));
+    const Re = findEmitterResistance(emitterNet, groundNet, nets, placed);
+    const collectorLeg = inst.legs[cIdx];
+    const collectorNet = nets.find(nets.key(collectorLeg.row, collectorLeg.col));
+    const Rc = placed.find(p => p.defId==='resistor' && !p.failed &&
+      p.legs.some(l => nets.find(nets.key(l.row, l.col)) === collectorNet));
+    const RcValue = Rc ? resolvedValue(Rc, 'resistance', 10000) : 10000; // no collector resistor found -> reasonable fallback load
+    const gm = Ic / Vt;
+    const re = 1 / gm; // transistor's own intrinsic emitter resistance
+    const rawGain = RcValue / (re + Re); // Re=0 (no emitter resistor found) reduces this to the original gm*Rc
+
+    // A bare common-emitter stage's raw gm*Rc easily lands in the tens to
+    // hundreds for realistic bias points and Rc values — a hard clamp made
+    // every model whose raw gain cleared ~25 sound identical, which in
+    // practice was most of them. A soft knee keeps the range differentiated
+    // instead of flatlining past one threshold. Calibrated against a real
+    // saved circuit (Rc=10k): rawGain 40 -> ~14x, 110 -> ~20x, 200 -> ~24x,
+    // 800 -> ~31x. Provisional once live re-linearization is in regular use —
+    // these constants were tuned against one frozen operating point, and
+    // there's no longer a single "the" operating point to have calibrated
+    // against once Ic moves continuously with the signal; expect an
+    // ear-tuning pass once this is actually testable end-to-end.
+    const maxGain = 35, kneePoint = 80;
+    const gain = maxGain * rawGain / (rawGain + kneePoint);
+
+    // Clip headroom follows how close the actual DC operating point sits to
+    // saturation (inst._vceHeadroom, from simulation.js — 0 at the
+    // saturation floor, 1 comfortably clear of it), a real, model- and
+    // bias-sensitive quantity: a higher-hFE model (or heavier sag) pulls
+    // more Ic for the same Ib, sagging Vce further toward the floor through
+    // the same Rc.
+    const vceHeadroom = inst._vceHeadroom ?? 1;
+    const headroom = Utils.clamp(0.15 + (0.9 - 0.15) * vceHeadroom, 0.15, 0.9);
+
+    return { gain, headroom };
+  }
+
   function buildAudioStage(ctx, inst, def, nets, placed, entryNet, exitNet, groundNet) {
     switch (def.behavior?.type) {
       case 'resistor': {
@@ -558,8 +645,8 @@ const AudioEngine = (() => {
           return (aTouches && b===groundNet) || (bTouches && a===groundNet);
         });
         if (!cap) return null; // lone series resistor: no filtering effect, transparent
-        const R = parseFloat(inst.props.resistance) || 10000;
-        const C = parseFloat(cap.props.capacitance) || 0.000001;
+        const R = resolvedValue(inst, 'resistance', 10000);
+        const C = resolvedValue(cap, 'capacitance', 0.000001);
         const fc = 1 / (2 * Math.PI * R * C);
         const f = ctx.createBiquadFilter();
         f.type = 'lowpass'; f.frequency.value = Utils.clamp(fc, 10, 20000); f.Q.value = 0.707;
@@ -574,68 +661,11 @@ const AudioEngine = (() => {
         return { in: g, out: g };
       }
       case 'bjt_npn': case 'bjt_pnp': {
-        const mk  = inst.props.model || (def.behavior.type === 'bjt_pnp' ? '2N3906' : '2N3904');
-        const pm  = def.model_params?.[mk] || {};
-
-        // Real small-signal gain from the DC operating point the electrical
-        // solver already computes (inst._current = Ic, set in
-        // simulation.js's bjt_npn/bjt_pnp case) rather than a flat
-        // hFE-only guess: gm = Ic/Vt (transconductance), and a bare
-        // common-emitter stage's voltage gain is ~gm * Rc, where Rc is
-        // whatever resistor is actually sitting on the collector's net —
-        // its real load, not an assumed value. Emitter degeneration (see
-        // findEmitterResistance below) is folded in as the standard
-        // Rc / (re + Re) form, where re=1/gm — Re=0 collapses back to the
-        // original gm*Rc, so a bare grounded-emitter stage is unaffected.
-        const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
-        const cIdx = eIdx === 0 ? 2 : 0;
-        const Ic = Math.max(inst._current || 0, 1e-6); // floor avoids a divide-by-near-zero cliff when barely biased
-        const Vt = 0.026; // thermal voltage at room temperature
-        const emitterLeg = inst.legs[eIdx];
-        const emitterNet = nets.find(nets.key(emitterLeg.row, emitterLeg.col));
-        const Re = findEmitterResistance(emitterNet, groundNet, nets, placed);
-        const collectorLeg = inst.legs[cIdx];
-        const collectorNet = nets.find(nets.key(collectorLeg.row, collectorLeg.col));
-        const Rc = placed.find(p => p.defId==='resistor' && !p.failed &&
-          p.legs.some(l => nets.find(nets.key(l.row, l.col)) === collectorNet));
-        const RcValue = Rc ? (parseFloat(Rc.props.resistance) || 10000) : 10000; // no collector resistor found -> reasonable fallback load
-        const gm = Ic / Vt;
-        const re = 1 / gm; // transistor's own intrinsic emitter resistance
-        const rawGain = RcValue / (re + Re); // Re=0 (no emitter resistor found) reduces this to the original gm*Rc
-
-        // A bare common-emitter stage's raw gm*Rc easily lands in the tens
-        // to hundreds for realistic bias points and Rc values — a hard clamp
-        // made every model whose raw gain cleared ~25 sound identical, which
-        // in practice was most of them. A soft knee keeps the range
-        // differentiated instead of flatlining past one threshold — but the
-        // first calibration (knee=15) was tuned against a hypothetical
-        // circuit and turned out too low once checked against a real one
-        // (Rc=10k): raw gains there land around 20-800+, almost entirely
-        // past where that knee still differentiates, compressing a real
-        // ~2.8x Ic swing across a model lineup down to under 2dB of audible
-        // difference. Recalibrated against that actual measurement: rawGain
-        // 40 -> ~14x, 110 -> ~20x, 200 -> ~24x, 800 -> ~31x — the same 2.8x
-        // Ic swing now spans about 5dB instead of under 2.
-        const maxGain = 35, kneePoint = 80;
-        const gain = maxGain * rawGain / (rawGain + kneePoint);
-
+        const { gain, headroom } = computeBjtGainAndHeadroom(inst, def, nets, placed, groundNet);
         const g = ctx.createGain(); g.gain.value = gain;
-
-        // Clip headroom now follows how close the actual DC operating point
-        // sits to saturation (inst._vceHeadroom, from simulation.js — 0 at
-        // the saturation floor, 1 comfortably clear of it) instead of Ic
-        // against the device's absolute rated max. That ratio stayed
-        // pinned near its ceiling for virtually any realistic signal-stage
-        // current, since rated max is typically 2-3 orders of magnitude
-        // above what a small-signal stage actually draws — so headroom
-        // barely varied between models even when gain did. Saturation
-        // proximity is a real, model-sensitive quantity: a higher-hFE
-        // model pulls more Ic for the same Ib, sagging Vce further toward
-        // the floor through the same Rc.
-        const vceHeadroom = inst._vceHeadroom ?? 1;
-        const headroom = Utils.clamp(0.15 + (0.9 - 0.15) * vceHeadroom, 0.15, 0.9);
         const sh = ctx.createWaveShaper(); sh.curve = makeClipCurve(headroom);
         g.connect(sh);
+        _liveGainStages.push({ inst, g, sh, nets, placed, groundNet });
         return { in: g, out: sh };
       }
       case 'diode': {
@@ -660,7 +690,7 @@ const AudioEngine = (() => {
         // A capacitor actually IN the traced series path (as opposed to
         // shunting to ground off a resistor, handled above) is a coupling
         // cap — a standalone highpass, no partner needed.
-        const C  = parseFloat(inst.props.capacitance) || 0.000001;
+        const C  = resolvedValue(inst, 'capacitance', 0.000001);
         const fc = 1 / (2 * Math.PI * 10000 * C);
         const f  = ctx.createBiquadFilter();
         f.type = 'highpass'; f.frequency.value = Utils.clamp(fc, 10, 20000);
@@ -703,16 +733,48 @@ const AudioEngine = (() => {
     inst._audioNode.gain.setTargetAtTime(pos, _ctx.currentTime, 0.01);
   }
 
+  // Called after every Simulation tick (wired via Simulation.onUpdate in
+  // app.js) — walks the stages recorded at Play time and pushes a fresh
+  // gain/clip curve for each from the just-completed DC solve. No netlist
+  // walk, no node creation — topology doesn't change while playing (the
+  // engaged-lock already guarantees that), only values do, so this is
+  // proportional to how many transistor stages exist, not how big the
+  // circuit is.
+  function updateLiveGains() {
+    if (!_running || !_ctx) return;
+    for (const stage of _liveGainStages) {
+      const { inst, g, sh, nets, placed, groundNet } = stage;
+      const def = (typeof ComponentRegistry !== 'undefined') ? ComponentRegistry.getById(inst.defId) : null;
+      if (!def) continue;
+      const { gain, headroom } = computeBjtGainAndHeadroom(inst, def, nets, placed, groundNet);
+      // Ramp, don't jump — a hard .value= would click on every 10ms update.
+      g.gain.setTargetAtTime(gain, _ctx.currentTime, 0.01);
+      sh.curve = makeClipCurve(headroom);
+    }
+  }
+
   function getAnalyser()         { return _analyser; }
   function getSpectrumAnalyser() { return _analyserSpectrum; }
   function isRunning()           { return _running; }
   function getAudioFileName()    { return _audioFileName; }
   function getSampleRate()       { return _ctx ? _ctx.sampleRate : 44100; }
 
+  let _rmsScratch = null; // reused buffer, avoids a fresh allocation every 10ms tick
+  function getInputRMS() {
+    if (!_inputAnalyser) return 0;
+    if (!_rmsScratch || _rmsScratch.length !== _inputAnalyser.fftSize) {
+      _rmsScratch = new Float32Array(_inputAnalyser.fftSize);
+    }
+    _inputAnalyser.getFloatTimeDomainData(_rmsScratch);
+    let sumSq = 0;
+    for (let i = 0; i < _rmsScratch.length; i++) sumSq += _rmsScratch[i] * _rmsScratch[i];
+    return Math.sqrt(sumSq / _rmsScratch.length);
+  }
+
   return {
     start, stop, loadAudioFile,
-    getAnalyser, getSpectrumAnalyser,
-    isRunning, getAudioFileName, updatePotWiper, setOutputGain, getSampleRate,
+    getAnalyser, getSpectrumAnalyser, getInputRMS,
+    isRunning, getAudioFileName, updatePotWiper, updateLiveGains, setOutputGain, getSampleRate,
     probeEnable, probeDisable, probeHover, probeIsAudible,
     getCachedSamples, listSamples, loadSampleClip,
     refreshBypassRouting

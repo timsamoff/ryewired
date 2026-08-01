@@ -42,9 +42,11 @@
     },
     {
       "key": "leakage",
-      "label": "Leakage (ICBO, nA) — optional",
-      "type": "number",
-      "default": ""
+      "label": "Leakage (ICBO) — optional",
+      "type": "value_unit",
+      "default": "",
+      "default_unit": "nA",
+      "units": [ {"label":"nA","factor":1}, {"label":"µA","factor":1000} ]
     }
   ],
   "model_params": {
@@ -91,7 +93,7 @@
       "max_ic_ma": 200,
       "max_vce": 20,
       "type": "germanium",
-      "icbo_na": 8000
+      "icbo_na": 100000
     },
     "OC75": {
       "hfe": 60,
@@ -100,7 +102,7 @@
       "max_ic_ma": 50,
       "max_vce": 15,
       "type": "germanium",
-      "icbo_na": 9000
+      "icbo_na": 100000
     },
     "NKT275": {
       "hfe": 90,
@@ -109,7 +111,7 @@
       "max_ic_ma": 50,
       "max_vce": 20,
       "type": "germanium",
-      "icbo_na": 2000
+      "icbo_na": 100000
     }
   },
   "behavior": {

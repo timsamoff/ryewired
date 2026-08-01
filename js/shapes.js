@@ -19,15 +19,20 @@ const Shapes = (() => {
   }
 
   const BANDS=['#000','#8B4513','#f00','#f80','#ff0','#0a0','#00f','#808','#999','#fff'];
-  function resBands(ohms){
+  // Standard resistor tolerance color-band code — brown=1%, red=2%,
+  // gold=5%, silver=10%; 20% traditionally has no 4th band at all on a
+  // real part, but this app always renders 4 band slots, so a neutral
+  // gray stands in for "no precision band" rather than a real color.
+  const TOLERANCE_BAND_COLORS = { '1%':'#8B4513', '2%':'#f00', '5%':'#c8a000', '10%':'#aaa', '20%':'#666' };
+  function resBands(ohms, tolerance){
     const m=parseFloat(ohms.toPrecision(2)),s=m.toString().replace('.','').padStart(2,'0').split('').map(Number);
-    return[BANDS[s[0]%10],BANDS[s[1]%10],BANDS[Math.max(0,Math.floor(Math.log10(ohms)-1))%10],'#c8a000'];
+    return[BANDS[s[0]%10],BANDS[s[1]%10],BANDS[Math.max(0,Math.floor(Math.log10(ohms)-1))%10],TOLERANCE_BAND_COLORS[tolerance]||TOLERANCE_BAND_COLORS['5%']];
   }
 
-  function drawResistor(ctx,res,bw,bh){
+  function drawResistor(ctx,res,bw,bh,tolerance){
     ctx.fillStyle='#d4b896';roundRect(ctx,-bw/2,-bh/2,bw,bh,3);ctx.fill();
     ctx.strokeStyle='#b09070';ctx.lineWidth=0.5;ctx.stroke();
-    resBands(res||10000).forEach((h,i)=>{ctx.fillStyle=h;ctx.fillRect(-bw/2+6+i*6,-(bh-2)/2,4,bh-2);});
+    resBands(res||10000,tolerance).forEach((h,i)=>{ctx.fillStyle=h;ctx.fillRect(-bw/2+6+i*6,-(bh-2)/2,4,bh-2);});
   }
 
   const CAP_COLORS = {
@@ -47,11 +52,18 @@ const Shapes = (() => {
     ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=0.8;ctx.stroke();
     // Polarity stripe: a circular segment (straight chord + arc), NOT a
     // wedge through center — real caps have a straight-edged band.
-    ctx.beginPath();ctx.arc(0,0,r,Math.PI*0.6,Math.PI*1.4);ctx.closePath();
+    // On the RIGHT (leg[last]'s side) — board.js's ang = atan2(leg[last]
+    // - leg[0]) means local +x always points toward leg[last], and
+    // leg_labels=['+','-'] means leg[last] is the '-' (stripe) leg. This
+    // used to be drawn on the LEFT (leg[0]'s side) unconditionally, which
+    // misrepresented every electrolytic cap's real wiring regardless of
+    // rotation — the stripe must track the actual polarity data, not a
+    // fixed geometric side.
+    ctx.beginPath();ctx.arc(0,0,r,-Math.PI*0.4,Math.PI*0.4);ctx.closePath();
     ctx.fillStyle='rgba(255,255,255,0.55)';ctx.fill();
     ctx.fillStyle='rgba(20,20,40,0.9)';
     ctx.font=`bold ${Math.max(8,r*0.65)}px monospace`;ctx.textAlign='center';
-    ctx.fillText('–',-r*0.55,r*0.22);
+    ctx.fillText('–',r*0.55,r*0.22);
   }
 
   function drawLED(ctx,hex,bw,bh,brightness){
@@ -220,7 +232,7 @@ const Shapes = (() => {
   function drawBody(ctx,def,inst,theme,halfLen,ang){
     const bw=def.visual?.body_width||28, bh=def.visual?.body_height||14, col=def.visual?.body_color||'#888';
     switch(def.id){
-      case 'resistor':              drawResistor(ctx,inst.props.resistance,bw,bh); break;
+      case 'resistor':              drawResistor(ctx,inst.props.resistance,bw,bh,inst.props.tolerance); break;
       case 'capacitor':             drawFilmCap(ctx,bw,bh,inst.props.type); break;
       case 'capacitor_electrolytic':drawElectroCap(ctx,col,bw); break;
       case 'led':{const cm=def.color_map?.[inst.props.color]||{};drawLED(ctx,cm.hex||'#ff2200',bw,bh,inst._brightness||0);break;}
