@@ -267,16 +267,6 @@ const PropertiesPanel = (() => {
         }
       }
       html += buildPropField(prop, inst.props[prop.key], placeholder, unitLabel);
-
-      // Tolerance always sits right next to the value it affects — a small
-      // reroll control here, rather than a separate section, keeps "this
-      // is the part that's randomized" visually obvious.
-      if (prop.key === 'tolerance' && (def.properties||[]).some(p => p.type==='value_unit' && p.key!=='tolerance')) {
-        html += `
-          <button class="prop-reroll-btn" id="prop-reroll-tolerance" title="Swap for a different simulated unit of the same nominal part">
-            <i class="fa-solid fa-dice"></i> Reroll actual value
-          </button>`;
-      }
     }
 
     // ── Orientation controls ─────────────────────────────────────────────────
@@ -342,13 +332,6 @@ const PropertiesPanel = (() => {
     });
     document.getElementById('prop-rotate-ccw')?.addEventListener('click', () => {
       rotateLeg90(inst, -1); // counter-clockwise = -90°
-    });
-    document.getElementById('prop-reroll-tolerance')?.addEventListener('click', () => {
-      if (typeof ComponentRegistry !== 'undefined' && ComponentRegistry.rerollTolerance) {
-        ComponentRegistry.rerollTolerance(inst);
-        Storage.markDirty(); History.push();
-        Board.redraw();
-      }
     });
 
     // Property change listeners

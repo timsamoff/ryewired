@@ -833,16 +833,6 @@ body.dragging  #board-canvas { cursor: grabbing; }
   text-align: center;
 }
 
-.prop-reroll-btn {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  width: 100%; margin-top: 6px; padding: 6px 8px;
-  background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm);
-  color: var(--text-secondary); font-size: 11px; font-family: var(--font-mono);
-  cursor: pointer; transition: all var(--t-fast);
-}
-.prop-reroll-btn:hover { background: var(--accent-subtle); border-color: var(--accent-dim); color: var(--accent); }
-.prop-reroll-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
 /* ── Value + unit picker (capacitance, resistance) ────────────────────────── */
 
 .prop-value-unit-wrap { display: flex; gap: 6px; }

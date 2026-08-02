@@ -9,7 +9,6 @@ const Board = (() => {
   const HOLE_PITCH   = 20;
   const GROUP_GAP    = 6;
   const HOLE_R       = 3.2;
-  const RAIL_BREAK   = 31;
   const ROW_LABELS   = ['a','b','c','d','e','f','g','h','i','j'];
   const ROW_LABELS_DISPLAY = [...ROW_LABELS].reverse(); // bottom-half (rows 0-4) display order, top-to-bottom: f,g,h,i,j — cosmetic only, internal row indices are untouched
   // Top half (rows 5-9) reads top-to-bottom as row index increases (row5 is
@@ -317,7 +316,6 @@ const Board = (() => {
     const rx=ML-6, rw=W-ML-MR+12;
     ctx.fillStyle=c.railBlueBg; ctx.fillRect(rx,sT,rw,sH/2);
     ctx.fillStyle=c.railRedBg;  ctx.fillRect(rx,sT+sH/2,rw,sH/2);
-    const bx1=holeX(RAIL_BREAK-1)+HOLE_PITCH/2+4, bx2=holeX(RAIL_BREAK)-HOLE_PITCH/2-4;
     const lx1=holeX(0)-HOLE_PITCH/2+2, lx2=holeX(COLS-1)+HOLE_PITCH/2-2;
     ctx.lineWidth=1.5;
     // Only the top rail is fed by the permanent supply — the bottom rail
@@ -326,19 +324,16 @@ const Board = (() => {
     const permOff = isTop && typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.getPermanentState().power.power_on===false;
     const traceBlue = permOff ? 'rgba(130,130,120,0.45)' : c.railBlue;
     const traceRed  = permOff ? 'rgba(130,130,120,0.45)' : c.railRed;
-    ctx.strokeStyle=traceBlue; brokenLine(mY,lx1,bx1,bx2,lx2);
-    ctx.strokeStyle=traceRed;  brokenLine(pY,lx1,bx1,bx2,lx2);
+    ctx.strokeStyle=traceBlue; ctx.beginPath(); ctx.moveTo(lx1,mY); ctx.lineTo(lx2,mY); ctx.stroke();
+    ctx.strokeStyle=traceRed;  ctx.beginPath(); ctx.moveTo(lx1,pY); ctx.lineTo(lx2,pY); ctx.stroke();
     ctx.font='bold 11px IBM Plex Mono,monospace'; ctx.textAlign='center';
     ctx.fillStyle=traceBlue; ctx.fillText('–',ML/2,mY+4); ctx.fillText('–',W-MR/2,mY+4);
     ctx.fillStyle=traceRed;  ctx.fillText('+',ML/2,pY+4); ctx.fillText('+',W-MR/2,pY+4);
     for(let col=0;col<COLS;col++) {
-      if(col===RAIL_BREAK) continue;
       drawRailHole(col,mY,c,'blue',isTop?'rtm':'rbm');
       drawRailHole(col,pY,c,'red', isTop?'rtp':'rbp');
     }
   }
-
-  function brokenLine(y,x1,bx1,bx2,x2){ctx.beginPath();ctx.moveTo(x1,y);ctx.lineTo(bx1,y);ctx.stroke();ctx.beginPath();ctx.moveTo(bx2,y);ctx.lineTo(x2,y);ctx.stroke();}
 
   function drawRailHole(col,y,c,color,railRow){
     const x=holeX(col);

@@ -81,7 +81,13 @@ const Simulation = (() => {
       const sag  = Utils.clamp(parseFloat(power.battery_sag) || 0, 0, 1);
       if (sag > 0) {
         if (_battery.effectiveV == null) _battery.effectiveV = nominalV;
-        const sagFactor = Utils.clamp(Utils.clamp(_battery.lastCurrent / 0.5, 0, 1) + signalSagFactor(), 0, 1);
+        // 0.01A (10mA) is the "heavy draw" reference for a pedal circuit —
+        // this used to be 0.5A (amp-scale current), which no pedal ever
+        // gets remotely close to (this app's own circuits typically draw
+        // well under 5mA total), making the DC-current term contribute a
+        // few hundredths of a volt even at max slider — effectively
+        // invisible regardless of the sag setting.
+        const sagFactor = Utils.clamp(Utils.clamp(_battery.lastCurrent / 0.01, 0, 1) + signalSagFactor(), 0, 1);
         const sagVolts = sag * nominalV * sagFactor;
         const target = nominalV - sagVolts;
         _battery.effectiveV += (target - _battery.effectiveV) * 0.05;
@@ -119,7 +125,7 @@ const Simulation = (() => {
       let v;
       if (sag > 0) {
         if (inst._battery.effectiveV == null) inst._battery.effectiveV = nominalV;
-        const sagFactor = Utils.clamp(Utils.clamp(inst._battery.lastCurrent / 0.5, 0, 1) + signalSagFactor(), 0, 1);
+        const sagFactor = Utils.clamp(Utils.clamp(inst._battery.lastCurrent / 0.01, 0, 1) + signalSagFactor(), 0, 1);
         const sagVolts = sag * nominalV * sagFactor;
         const target = nominalV - sagVolts;
         inst._battery.effectiveV += (target - inst._battery.effectiveV) * 0.05;
@@ -751,10 +757,12 @@ const Simulation = (() => {
     for (let col=0; col<63; col++)
       for (let r=6; r<=9; r++) union(key(5,col), key(r,col));
 
-    // Power rail connections (broken at col 31)
+    // Power rails span the full board width, no break — both top (fed by
+    // the permanent supply) and bottom (unpowered by default, needs a
+    // user-placed jumper or power_supply component to do anything) rails
+    // are each one continuous electrical segment.
     for (const rr of ['rtp','rtm','rbp','rbm']) {
-      for (let col=1; col<=30; col++) union(key(rr,0), key(rr,col));
-      for (let col=32; col<=62; col++) union(key(rr,31), key(rr,col));
+      for (let col=1; col<=62; col++) union(key(rr,0), key(rr,col));
     }
 
     // Wire connections
