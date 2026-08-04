@@ -604,14 +604,23 @@ const AudioEngine = (() => {
     // hundreds for realistic bias points and Rc values — a hard clamp made
     // every model whose raw gain cleared ~25 sound identical, which in
     // practice was most of them. A soft knee keeps the range differentiated
-    // instead of flatlining past one threshold. Calibrated against a real
-    // saved circuit (Rc=10k): rawGain 40 -> ~14x, 110 -> ~20x, 200 -> ~24x,
-    // 800 -> ~31x. Provisional once live re-linearization is in regular use —
-    // these constants were tuned against one frozen operating point, and
-    // there's no longer a single "the" operating point to have calibrated
-    // against once Ic moves continuously with the signal; expect an
-    // ear-tuning pass once this is actually testable end-to-end.
-    const maxGain = 35, kneePoint = 80;
+    // instead of flatlining past one threshold.
+    //
+    // kneePoint recalibrated from 80 to 400: this circuit's actual measured
+    // rawGain range is roughly 200-800 (a real ~4x spread from genuine
+    // transistor/bias differences) — at kneePoint=80, that whole range sat
+    // deep in the knee's asymptotically-flat region (200->~24x, 800->~32x,
+    // under 2.5dB of difference for a real 4x underlying swing), which is
+    // why transistor substitutions and supply voltage changes were barely
+    // audible: the knee was erasing the very differentiation those changes
+    // produced, before it ever reached the WaveShaper. At kneePoint=400,
+    // the same 200-800 range spans roughly 12x-23x (~5.7dB) — a real,
+    // audible difference for the same underlying variation. Still
+    // provisional and still needs a genuine ear-tuning pass once this is
+    // testable end-to-end; this recalibration is analytical (matching the
+    // knee to the circuit's actual measured range), not a substitute for
+    // actually listening to it.
+    const maxGain = 35, kneePoint = 400;
     const gain = maxGain * rawGain / (rawGain + kneePoint);
 
     // Clip headroom follows how close the actual DC operating point sits to

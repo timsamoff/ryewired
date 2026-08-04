@@ -39,6 +39,12 @@ const Simulation = (() => {
     // reasoning as the Input->Output audio passthrough) — everything below
     // already handles empty placed/wires arrays fine on its own.
 
+    // Tracks whichever supply is actually contributing this tick — used
+    // below to scale BJT headroom against the real active voltage instead
+    // of a flat assumption, so changing the supply voltage actually moves
+    // where clipping kicks in.
+    let activeSupplyV = null;
+
     const nets = buildNetMap(placed, wires);
 
     // ── Permanent power supply (Phase 3): feeds the TOP rail only. The
@@ -100,6 +106,7 @@ const Simulation = (() => {
       if (permPosNet && permNegNet) {
         intendedFixed.push({ net: permPosNet, voltage: permEmf });
         intendedFixed.push({ net: permNegNet, voltage: 0 });
+        activeSupplyV = permEmf;
       }
     } else {
       _battery.effectiveV = null; _battery.lastCurrent = 0; _battery.virtualPos = null;
@@ -141,6 +148,7 @@ const Simulation = (() => {
       placedSupplies.push({ inst, pNet, nNet, v, effectiveRint });
       if (pNet) intendedFixed.push({ net: pNet, voltage: v });
       if (nNet) intendedFixed.push({ net: nNet, voltage: 0 });
+      if (activeSupplyV == null) activeSupplyV = v;
     }
 
     const conflict = detectSupplyConflict(intendedFixed);
@@ -342,9 +350,14 @@ const Simulation = (() => {
         inst._current = Ic;
         inst._saturated = !!c?.saturated;
         // 0 = sitting right at the saturation floor, 1 = comfortably clear
-        // of it (3V+ of Vce margin — a reasonable reference for the supply
-        // voltages these circuits typically run at).
-        inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - 0.2) / 3, 0, 1);
+        // of it. The reference scales with the actual active supply
+        // voltage (3V at a 9V supply, the original calibration point,
+        // scaled proportionally otherwise) rather than a flat "3V is
+        // enough headroom" assumption regardless of supply — that flat
+        // assumption meant halving the supply barely moved this number,
+        // which is why changing supply voltage barely changed the sound.
+        const headroomRef = 3 * ((activeSupplyV ?? 9) / 9);
+        inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - 0.2) / headroomRef, 0, 1);
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
       }
@@ -357,7 +370,9 @@ const Simulation = (() => {
         const Ic = c?.Ic || 0;
         inst._current = Ic;
         inst._saturated = !!c?.saturated;
-        inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - 0.2) / 3, 0, 1);
+        // Same reasoning as bjt_npn — see that case for the full comment.
+        const headroomRefPnp = 3 * ((activeSupplyV ?? 9) / 9);
+        inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - 0.2) / headroomRefPnp, 0, 1);
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
       }
