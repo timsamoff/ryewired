@@ -11,6 +11,12 @@ const Simulation = (() => {
   // the cursor" on demand (mousemove) without re-running the solver.
   let _lastNets = null, _lastNetVoltage = null;
 
+  // Last small-signal solve: net -> voltage gain relative to a 1V input drive.
+  // Recomputed every tick from the just-solved DC operating point, so the audio
+  // engine can read real, network-derived stage gains instead of per-component
+  // formulas. null when there's no input connection point or the solve failed.
+  let _lastSmallSignal = null;
+
   // Whichever supply is actually contributing this tick. Module-scope, not a
   // tick()-local, because solveComponent() reads it and is a SIBLING function,
   // not nested inside tick() — as a local it was an unresolved identifier
@@ -291,6 +297,23 @@ const Simulation = (() => {
       catch(e) { console.warn('[Sim]', e.message); }
     }
 
+    // Small-signal pass, AFTER the component solve because it linearizes each
+    // transistor around the operating point that pass just computed
+    // (inst._current). Every solved node voltage is that node's gain relative
+    // to the input, which is what the audio engine builds its stage gains and
+    // pot ratios from.
+    _lastSmallSignal = null;
+    const cpSS = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getConnectionPoints)
+      ? WorkbenchStrip.getConnectionPoints() : null;
+    if (cpSS) {
+      // Supply rails count as AC ground alongside the ground rail.
+      const acGrounds = [permNegNet, permPosNet, ...placedSupplies.flatMap(s => [s.nNet, s.pNet])];
+      try {
+        _lastSmallSignal = solveSmallSignal(
+          placed, nets, nets.find(nets.key(cpSS.firstRow, cpSS.inputCol)), acGrounds);
+      } catch (e) { console.warn('[Sim] small-signal solve failed:', e.message); }
+    }
+
     if (_onUpdate) _onUpdate();
     Board.redraw();
   }
@@ -421,6 +444,7 @@ const Simulation = (() => {
         const headroomRef = 3 * ((_activeSupplyV ?? 9) / 9);
         const vceSatN = Number.isFinite(parseFloat(pm.vce_sat)) ? parseFloat(pm.vce_sat) : 0.2;
         inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - vceSatN) / headroomRef, 0, 1);
+        setOutputSwing(inst, nets, netVoltage, vceSatN, false);
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
       }
@@ -437,6 +461,7 @@ const Simulation = (() => {
         const headroomRefPnp = 3 * ((_activeSupplyV ?? 9) / 9);
         const vceSatP = Number.isFinite(parseFloat(pm.vce_sat)) ? parseFloat(pm.vce_sat) : 0.2;
         inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - vceSatP) / headroomRefPnp, 0, 1);
+        setOutputSwing(inst, nets, netVoltage, vceSatP, true);
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
       }
@@ -447,6 +472,40 @@ const Simulation = (() => {
 
       default:
         break;
+    }
+  }
+
+  // How far a transistor's collector can actually swing, IN VOLTS, in each
+  // direction from where it currently sits. This is the real, physical limit
+  // on the stage's output, and it is what the audio engine's clipping
+  // thresholds should be — the previous `0.15 + 0.75*vceHeadroom` was a
+  // normalized 0-1 number sitting in a signal path whose gains are real
+  // volts-per-volt, which made the two dimensionally incoherent.
+  //
+  // The two directions are genuinely DIFFERENT, and that asymmetry is real
+  // rather than a stylistic choice. A starved-bias germanium stage might sit
+  // at Vc = 0.77V on a 9V supply: it can only fall about 0.67V before hitting
+  // saturation, but can rise 8.2V before hitting the rail. Clipping one way
+  // long before the other is exactly where a fuzz's even-harmonic character
+  // comes from.
+  //
+  //   _swingDown : how far the collector can fall  (to Ve + Vce_sat)
+  //   _swingUp   : how far it can rise             (to the supply rail)
+  function setOutputSwing(inst, nets, netVoltage, vceSat, pnp) {
+    const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
+    const cIdx = eIdx === 0 ? 2 : 0;
+    const vC = legVoltage(inst, cIdx, nets, netVoltage);
+    const vE = legVoltage(inst, eIdx, nets, netVoltage);
+    const supply = _activeSupplyV ?? 9;
+    if (vC == null || vE == null) { inst._swingDown = null; inst._swingUp = null; return; }
+    if (pnp) {
+      // Mirrored: a PNP's collector sits BELOW its emitter, so it rises toward
+      // saturation and falls toward the negative rail (ground here).
+      inst._swingUp   = Math.max(0, vE - vceSat - vC);
+      inst._swingDown = Math.max(0, vC - 0);
+    } else {
+      inst._swingDown = Math.max(0, vC - vE - vceSat);
+      inst._swingUp   = Math.max(0, supply - vC);
     }
   }
 
@@ -792,6 +851,144 @@ const Simulation = (() => {
     return { netVoltage, diodeCurrents, bjtCurrents };
   }
 
+  // ── Small-signal (AC) solve ───────────────────────────────────────────────
+  // The same nodal machinery as solveNetVoltages, but linearized for SIGNAL
+  // rather than DC. Differences, all of them deliberate:
+  //
+  //   - The SUPPLY rail is AC ground. A supply is a low impedance at signal
+  //     frequencies, so a collector resistor to V+ loads the collector exactly
+  //     as one to ground would.
+  //   - Coupling capacitors are SHORTS. Every corner frequency in a pedal sits
+  //     below the audio band once computed properly (see audio-engine's
+  //     acLoadResistance), so across the band they simply pass signal. The
+  //     frequency shaping is handled separately by the biquads.
+  //   - Transistors use the hybrid-pi small-signal model: r_pi between base and
+  //     emitter, plus a gm*Vbe controlled current source into the collector.
+  //     r_pi = hFE/gm is bias-dependent, unlike the DC solve's fixed RBE.
+  //   - Diodes contribute their small-signal resistance Vt/I only when actually
+  //     conducting; an off diode is an open, which is what a clipping pair
+  //     sitting at 0V DC should be.
+  //   - The INPUT net is driven at exactly 1V, so every solved node voltage IS
+  //     that node's voltage gain relative to the input.
+  //
+  // Why this exists: it is the only thing in the engine that models FEEDBACK
+  // (a nodal solve doesn't care that the netlist contains loops, so a Fuzz
+  // Face's collector-to-base resistor finally participates), and it is what
+  // lets a POTENTIOMETER be modelled once, as two resistors and a tap, with
+  // volume/tone/fuzz behaviour emerging from the surrounding network instead
+  // of from a per-use-case rule. See CLAUDE.md's note on the AC solve.
+  const CAP_AC_SHORT_R = 0.01; // ohms — a coupling cap across the audio band
+  const VT            = 0.026; // thermal voltage, same as the audio engine uses
+
+  function solveSmallSignal(placed, nets, inputNet, acGroundNets) {
+    if (inputNet == null) return null;
+    const netOf = (row, col) => nets.find(nets.key(row, col));
+
+    const fixed = new Map();
+    for (const n of acGroundNets) if (n != null) fixed.set(n, 0);
+    if (fixed.has(inputNet)) return null; // input shorted to ground/supply — no meaningful drive
+    fixed.set(inputNet, 1);
+
+    const edges = []; // { a, b, G }
+    const vccs  = []; // { p, q, src, sink, gm } : gm*(Vp-Vq) injected at src, extracted at sink
+
+    for (const inst of placed) {
+      if (inst.failed) continue;
+      const def = ComponentRegistry.getById(inst.defId);
+      const bt  = def?.behavior?.type;
+      const L   = inst.legs;
+
+      if (bt === 'resistor' && L.length >= 2) {
+        const R = resolvedValue(inst, 'resistance', 1000);
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
+                     G: 1 / Math.max(R, 1e-6) });
+
+      } else if (bt === 'potentiometer' && L.length >= 3) {
+        // Identical to the DC model: two resistors and a tap. Nothing here
+        // knows or cares whether this is a volume, tone or fuzz control.
+        const Rt = parseFloat(inst.props.resistance) || 100000;
+        const parsedW = parseFloat(inst.props.wiper);
+        const w   = Number.isNaN(parsedW) ? 0.5 : parsedW;
+        const pos = (inst.props.taper||'').includes('Audio') ? Math.pow(w,2) : w;
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[1].row, L[1].col), G: 1/Math.max(Rt*pos, 1) });
+        edges.push({ a: netOf(L[1].row, L[1].col), b: netOf(L[2].row, L[2].col), G: 1/Math.max(Rt*(1-pos), 1) });
+
+      } else if (bt === 'capacitor' && L.length >= 2) {
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
+                     G: 1 / CAP_AC_SHORT_R });
+
+      } else if ((bt === 'diode' || bt === 'led') && L.length >= 2) {
+        const I = inst._current || 0;
+        if (I <= 0) continue; // off: open circuit, contributes nothing
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
+                     G: I / VT }); // 1/(Vt/I)
+
+      } else if ((bt === 'bjt_npn' || bt === 'bjt_pnp') && L.length >= 3) {
+        const pnp = bt === 'bjt_pnp';
+        const pm  = def.model_params?.[inst.props.model] || {};
+        const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
+        const Ic  = Math.max(inst._current || 0, 1e-6);
+        const gm  = Ic / VT;
+        const rpi = Math.max(hfe / gm, 1);
+        const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
+        const cIdx = eIdx === 0 ? 2 : 0;
+        const bN = netOf(L[1].row, L[1].col);
+        const eN = netOf(L[eIdx].row, L[eIdx].col);
+        const cN = netOf(L[cIdx].row, L[cIdx].col);
+        edges.push({ a: bN, b: eN, G: 1/rpi });
+        // Orientation mirrors the DC solver's stampBjtIc exactly.
+        if (pnp) vccs.push({ p: eN, q: bN, src: cN, sink: eN, gm });
+        else     vccs.push({ p: bN, q: eN, src: eN, sink: cN, gm });
+
+      } else if (bt === 'switch_spst') {
+        // Already unioned into one net by buildNetMap when closed; open
+        // switches correctly leave the two sides unconnected.
+      }
+    }
+
+    // index the free (non-fixed) nets
+    const idx = new Map();
+    const reg = n => { if (n != null && !fixed.has(n) && !idx.has(n)) idx.set(n, idx.size); };
+    for (const e of edges) { reg(e.a); reg(e.b); }
+    for (const v of vccs)  { reg(v.p); reg(v.q); reg(v.src); reg(v.sink); }
+
+    const N = idx.size;
+    const out = new Map(fixed);
+    if (N === 0) return out;
+
+    const G = Array.from({length:N}, () => new Array(N).fill(0));
+    const I = new Array(N).fill(0);
+    for (let i=0;i<N;i++) G[i][i] += EPS;
+
+    for (const e of edges) {
+      if (e.a == null || e.b == null || e.a === e.b) continue;
+      const ai = idx.has(e.a) ? idx.get(e.a) : -1;
+      const bi = idx.has(e.b) ? idx.get(e.b) : -1;
+      if (ai>=0) G[ai][ai] += e.G;
+      if (bi>=0) G[bi][bi] += e.G;
+      if (ai>=0 && bi>=0) { G[ai][bi] -= e.G; G[bi][ai] -= e.G; }
+      else if (ai>=0 && fixed.has(e.b)) I[ai] += e.G * fixed.get(e.b);
+      else if (bi>=0 && fixed.has(e.a)) I[bi] += e.G * fixed.get(e.a);
+    }
+
+    for (const v of vccs) {
+      const pi = idx.has(v.p) ? idx.get(v.p) : -1, qi = idx.has(v.q) ? idx.get(v.q) : -1;
+      const si = idx.has(v.src) ? idx.get(v.src) : -1, ki = idx.has(v.sink) ? idx.get(v.sink) : -1;
+      if (si>=0) {
+        if (pi>=0) G[si][pi] -= v.gm; else if (fixed.has(v.p)) I[si] += v.gm*fixed.get(v.p);
+        if (qi>=0) G[si][qi] += v.gm; else if (fixed.has(v.q)) I[si] -= v.gm*fixed.get(v.q);
+      }
+      if (ki>=0) {
+        if (pi>=0) G[ki][pi] += v.gm; else if (fixed.has(v.p)) I[ki] -= v.gm*fixed.get(v.p);
+        if (qi>=0) G[ki][qi] -= v.gm; else if (fixed.has(v.q)) I[ki] += v.gm*fixed.get(v.q);
+      }
+    }
+
+    const V = gaussianSolve(G, I);
+    for (const [net, i] of idx) out.set(net, V[i]);
+    return out;
+  }
+
   // Small Gaussian-elimination solver for G·V = I (dense, fine at breadboard scale)
   function gaussianSolve(G, I) {
     const n = I.length;
@@ -1064,5 +1261,9 @@ const Simulation = (() => {
     return typeof v === 'number' ? v : 0;
   }
 
-  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,notifyStateChange,hasElectricalPath,getVoltageAt,buildNetMap };
+  // net -> small-signal voltage gain relative to the input (see
+  // solveSmallSignal). Null until the first tick, or if there's no input.
+  function getSmallSignalV() { return _lastSmallSignal; }
+
+  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,notifyStateChange,hasElectricalPath,getVoltageAt,getSmallSignalV,buildNetMap };
 })();

@@ -131,6 +131,8 @@ const AudioEngine = (() => {
   // and clip curve as the DC operating point moves (battery sag, etc.)
   // without ever re-running the netlist walk or rebuilding any node.
   let _liveGainStages = [];
+  // Pot stages, refreshed from the small-signal solve on the same tick loop.
+  let _livePotStages  = [];
   let _walkTail          = null;
 
   function getContext() {
@@ -248,6 +250,7 @@ const AudioEngine = (() => {
     // updateLiveGains starts writing gain values to disconnected dead nodes
     // on every tick, forever.
     _liveGainStages = [];
+    _livePotStages  = [];
 
     const cp = (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getConnectionPoints() : null;
     const walk = (cp && typeof Simulation !== 'undefined' && Simulation.buildNetMap)
@@ -587,7 +590,11 @@ const AudioEngine = (() => {
         const exitBus = busIn(otherNet); // arriving at the far net, so pre-clamp
         if (built) {
           entryBus.connect(built.in);
-          allNodes.push(built.in); if (built.out !== built.in) allNodes.push(built.out);
+          // A stage may be more than two nodes (a transistor is pre-gain,
+          // shaper, post-gain), and every one of them has to be tracked or
+          // stop()/refreshTopology leaks it.
+          if (built.nodes) allNodes.push(...built.nodes);
+          else { allNodes.push(built.in); if (built.out !== built.in) allNodes.push(built.out); }
           built.out.connect(exitBus);
         } else {
           // no audio-shaping effect (e.g. a lone series resistor, or an
@@ -690,7 +697,7 @@ const AudioEngine = (() => {
   // VISIBLY rather than silently pretending it knew. That distinction matters:
   // findEmitterResistance's silent zero for unrecognised topologies cost a
   // full debugging session on a real circuit.
-  function acLoadResistance(net, nets, placed, groundNet, supplyNet, skipInstanceId) {
+  function acLoadResistance(net, nets, placed, groundNet, supplyNet, skipInstanceId, depth = 0) {
     if (net == null) return null;
     const acGrounds = new Set([groundNet, supplyNet].filter(n => n != null));
     if (!acGrounds.size) return null;
@@ -725,7 +732,13 @@ const AudioEngine = (() => {
         if (baseNet !== net) continue;
         const eIdx = (p.props.pinout === 'CBE') ? 2 : 0;
         const emitterNet = netOf(p.legs[eIdx].row, p.legs[eIdx].col);
-        const Re  = findEmitterResistance(emitterNet, groundNet, nets, placed);
+        // Emitter impedance via the same general lookup rather than a
+        // separate pattern-matcher: whatever resistors or pot tracks actually
+        // run from the emitter to AC ground. Depth-guarded because a base can
+        // in principle sit on another transistor's emitter net.
+        const Re  = depth < 2
+          ? (acLoadResistance(emitterNet, nets, placed, groundNet, supplyNet, p.instanceId, depth+1) || 0)
+          : 0;
         const Ic  = Math.max(p._current || 0, 1e-6); // same floor as the gain formula
         const re  = 0.026 / Ic;
         const pm  = def.model_params?.[p.props.model] || {};
@@ -739,67 +752,47 @@ const AudioEngine = (() => {
     return 1 / conductances.reduce((sum, g) => sum + g, 0);
   }
 
-  function findEmitterResistance(emitterNet, groundNet, nets, placed) {
-    if (emitterNet == null || groundNet == null) return 0;
+  // findEmitterResistance used to live here. It pattern-matched exactly two
+  // emitter topologies and returned 0 for everything else, which was
+  // indistinguishable from "this stage genuinely has no emitter resistance"
+  // and silently made a real Fuzz Face's Fuzz knob inert. Emitter degeneration
+  // now falls out of the small-signal network solve instead, so there is
+  // nothing left to pattern-match. Don't reintroduce it.
 
-    const netOf = (row, col) => nets.find(nets.key(row, col));
-    const bridgesNets = (capInst, netX, netY) => {
-      if (capInst.legs.length < 2) return false;
-      const a = netOf(capInst.legs[0].row, capInst.legs[0].col);
-      const b = netOf(capInst.legs[capInst.legs.length-1].row, capInst.legs[capInst.legs.length-1].col);
-      return (a===netX && b===netY) || (a===netY && b===netX);
-    };
-    const findBypassCap = (netX, netY) => placed.find(p =>
-      (p.defId==='capacitor' || p.defId==='capacitor_electrolytic') && !p.failed && bridgesNets(p, netX, netY));
-
-    for (const p of placed) {
-      if (p.failed) continue;
-
-      if (p.defId === 'resistor' && p.legs.length >= 2) {
-        const a = netOf(p.legs[0].row, p.legs[0].col);
-        const b = netOf(p.legs[p.legs.length-1].row, p.legs[p.legs.length-1].col);
-        const onEmitter = (a===emitterNet) ? b : (b===emitterNet) ? a : null;
-        if (onEmitter === groundNet) {
-          const R = resolvedValue(p, 'resistance', 0);
-          return findBypassCap(emitterNet, groundNet) ? 0 : R;
-        }
-      }
-
-      if (p.defId === 'potentiometer' && p.legs.length >= 3) {
-        const ccwNet = netOf(p.legs[0].row, p.legs[0].col);
-        const wprNet = netOf(p.legs[1].row, p.legs[1].col);
-        const cwNet  = netOf(p.legs[2].row, p.legs[2].col);
-        const onEmitter = (ccwNet===emitterNet) ? 'ccw' : (cwNet===emitterNet) ? 'cw' : null;
-        if (!onEmitter) continue;
-        const farNet = onEmitter==='ccw' ? cwNet : ccwNet;
-        if (farNet !== groundNet) continue; // not the "outer leg to ground" shape we model
-
-        const Rt  = parseFloat(p.props.resistance) || 0;
-        const parsedW = parseFloat(p.props.wiper);
-        const w   = Number.isNaN(parsedW) ? 0.5 : parsedW;
-        const pos = (p.props.taper||'').includes('Audio') ? Math.pow(w,2) : w;
-        const unbypassedR = onEmitter==='ccw' ? Rt*pos : Rt*(1-pos); // emitter-net-to-wiper segment
-
-        return findBypassCap(wprNet, groundNet) ? unbypassedR : Rt;
-      }
-    }
-    return 0;
+  // Voltage gain between two nets, taken straight from simulation.js's
+  // small-signal solve. Every node in that solve carries its gain relative to
+  // a 1V input drive, so the ratio between two nodes IS the gain of whatever
+  // sits between them, INCLUDING the effect of feedback, loading, and every
+  // surrounding component. Returns null when the solve isn't available or the
+  // input node carries no signal, so callers fall back visibly.
+  //
+  // This replaces a family of per-component formulas (gm*Rc with an emitter
+  // term found by pattern-matching, a pot's gain assumed to be its wiper
+  // fraction) with one network-derived number. A potentiometer in particular
+  // is now modelled exactly once, in the solver, as two resistors and a tap —
+  // whether it behaves as a volume, tone or fuzz control is decided by what
+  // it's wired to, not by a rule keyed on its use case.
+  function netGain(fromNet, toNet) {
+    if (typeof Simulation === 'undefined' || !Simulation.getSmallSignalV) return null;
+    const ss = Simulation.getSmallSignalV();
+    if (!ss) return null;
+    const vFrom = ss.get(fromNet), vTo = ss.get(toNet);
+    if (!Number.isFinite(vFrom) || !Number.isFinite(vTo)) return null;
+    if (Math.abs(vFrom) < 1e-12) return null; // nothing arriving here to amplify
+    return Math.abs(vTo / vFrom);
   }
 
-  // Real small-signal gain from the DC operating point the electrical
-  // solver already computes (inst._current = Ic, set in simulation.js's
-  // bjt_npn/bjt_pnp case) rather than a flat hFE-only guess: gm = Ic/Vt
-  // (transconductance), and a bare common-emitter stage's voltage gain is
-  // ~gm * Rc, where Rc is whatever resistor is actually sitting on the
-  // collector's net — its real load, not an assumed value. Emitter
-  // degeneration (see findEmitterResistance) is folded in as the standard
-  // Rc / (re + Re) form, where re=1/gm — Re=0 collapses back to the
-  // original gm*Rc, so a bare grounded-emitter stage is unaffected.
+  // Small-signal gain for a transistor stage, plus its clipping headroom.
+  //
+  // The gain comes from the network solve (see netGain), so emitter
+  // degeneration, collector loading and any feedback loop around the stage are
+  // all included automatically rather than being reconstructed here. The
+  // fallback is the old gm*Rc estimate, used only when the solve is
+  // unavailable, and it warns rather than substituting silently.
   //
   // Shared by buildAudioStage (once, at Play) and updateLiveGains (every
-  // Simulation tick) — one formula, read fresh from inst._current/
-  // inst._vceHeadroom each time it's called, rather than two copies that
-  // could quietly drift apart.
+  // Simulation tick), so the two can't drift apart.
+  let _warnedNoSmallSignal = false;
   function computeBjtGainAndHeadroom(inst, def, nets, placed, groundNet) {
     const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
     const cIdx = eIdx === 0 ? 2 : 0;
@@ -807,49 +800,77 @@ const AudioEngine = (() => {
     const Vt = 0.026; // thermal voltage at room temperature
     const emitterLeg = inst.legs[eIdx];
     const emitterNet = nets.find(nets.key(emitterLeg.row, emitterLeg.col));
-    const Re = findEmitterResistance(emitterNet, groundNet, nets, placed);
     const collectorLeg = inst.legs[cIdx];
     const collectorNet = nets.find(nets.key(collectorLeg.row, collectorLeg.col));
+    const baseNet = nets.find(nets.key(inst.legs[1].row, inst.legs[1].col));
+
+    const solved = netGain(baseNet, collectorNet);
+    if (solved != null) return finishBjt(solved, inst);
+
+    if (!_warnedNoSmallSignal) {
+      _warnedNoSmallSignal = true;
+      console.warn('[Audio] Small-signal solve unavailable; transistor gains are falling back ' +
+                   'to a gm*Rc estimate that ignores feedback and loading.');
+    }
     const Rc = placed.find(p => p.defId==='resistor' && !p.failed &&
       p.legs.some(l => nets.find(nets.key(l.row, l.col)) === collectorNet));
     const RcValue = Rc ? resolvedValue(Rc, 'resistance', 10000) : 10000; // no collector resistor found -> reasonable fallback load
     const gm = Ic / Vt;
     const re = 1 / gm; // transistor's own intrinsic emitter resistance
-    const rawGain = RcValue / (re + Re); // Re=0 (no emitter resistor found) reduces this to the original gm*Rc
+    return finishBjt(RcValue / re, inst); // no emitter term available in the fallback
+  }
 
+  // Knee + headroom, shared by both paths above so they can't diverge.
+  function finishBjt(rawGain, inst) {
     // A bare common-emitter stage's raw gm*Rc easily lands in the tens to
-    // hundreds for realistic bias points and Rc values — a hard clamp made
-    // every model whose raw gain cleared ~25 sound identical, which in
-    // practice was most of them. A soft knee keeps the range differentiated
-    // instead of flatlining past one threshold.
+    // hundreds for realistic bias points and Rc values, and a hard clamp made
+    // every model whose raw gain cleared ~25 sound identical. A soft knee
+    // keeps the range differentiated instead of flatlining past a threshold.
     //
-    // kneePoint recalibrated from 80 to 400: this circuit's actual measured
-    // rawGain range is roughly 200-800 (a real ~4x spread from genuine
-    // transistor/bias differences) — at kneePoint=80, that whole range sat
-    // deep in the knee's asymptotically-flat region (200->~24x, 800->~32x,
-    // under 2.5dB of difference for a real 4x underlying swing), which is
-    // why transistor substitutions and supply voltage changes were barely
-    // audible: the knee was erasing the very differentiation those changes
-    // produced, before it ever reached the WaveShaper. At kneePoint=400,
-    // the same 200-800 range spans roughly 12x-23x (~5.7dB) — a real,
-    // audible difference for the same underlying variation. Still
-    // provisional and still needs a genuine ear-tuning pass once this is
-    // testable end-to-end; this recalibration is analytical (matching the
-    // knee to the circuit's actual measured range), not a substitute for
-    // actually listening to it.
-    const maxGain = 35, kneePoint = 400;
+    // kneePoint MUST equal maxGain. `M*raw/(raw+K)` reduces to `(M/K)*raw` for
+    // small raw, so any K != M applies a CONSTANT SCALING ERROR to every
+    // stage's true gain. This sat at K=400 for a long time, an M/K of 0.0875,
+    // meaning an 11.4x attenuation of every circuit in the app: an Electra
+    // Distortion stage with a genuine voltage gain of 52 arrived as 4.06, so
+    // its clipping diodes saw 22dB less drive than the real circuit delivers
+    // and the pedal barely distorted at normal playing levels (measured: 0.4%
+    // THD at an input amplitude of 0.05, against 8.5% once corrected).
+    //
+    // K=400 was originally chosen to spread a Fuzz Face's 200-800 raw range
+    // across ~6dB of differentiation, which K=maxGain narrows to ~1dB. That
+    // differentiation was being bought by attenuating every circuit 11x, and
+    // measurement showed it is largely erased by saturation anyway: THD lands
+    // at ~41% at normal input levels under every candidate formula.
+    //
+    // The real cost is the Fuzz Face's cleanup — with accurate gain it
+    // saturates at essentially any input level. That is correct for the
+    // circuit. A real Fuzz Face's cleanup comes from rolling the guitar
+    // volume, which raises source impedance and reduces gain through input
+    // loading: an IMPEDANCE effect (open items 4 and 5), not something this
+    // curve should be faking by attenuating everything.
+    const maxGain = 35;
+    const kneePoint = maxGain;
     const gain = maxGain * rawGain / (rawGain + kneePoint);
 
-    // Clip headroom follows how close the actual DC operating point sits to
-    // saturation (inst._vceHeadroom, from simulation.js — 0 at the
-    // saturation floor, 1 comfortably clear of it), a real, model- and
-    // bias-sensitive quantity: a higher-hFE model (or heavier sag) pulls
-    // more Ic for the same Ib, sagging Vce further toward the floor through
-    // the same Rc.
-    const vceHeadroom = inst._vceHeadroom ?? 1;
-    const headroom = Utils.clamp(0.15 + (0.9 - 0.15) * vceHeadroom, 0.15, 0.9);
+    // Clip thresholds are the stage's REAL output swing in each direction, in
+    // volts, from simulation.js's setOutputSwing. The two differ, often by a
+    // lot: a starved-bias germanium stage sitting at Vc=0.77V on a 9V supply
+    // can only fall ~0.67V before saturating but can rise ~8.2V before hitting
+    // the rail, and clipping one way long before the other is where a fuzz's
+    // even-harmonic character actually comes from.
+    //
+    // A common-emitter stage inverts, and netGain returns a magnitude, so our
+    // signal is upside down relative to the real collector: OUR positive half
+    // corresponds to the collector falling, hence swingDown.
+    const V = VOLTS_PER_SIGNAL_UNIT;
+    const swingDown = Number.isFinite(inst._swingDown) ? inst._swingDown / V : null;
+    const swingUp   = Number.isFinite(inst._swingUp)   ? inst._swingUp   / V : null;
+    // Fall back to the old normalized estimate only if the solve didn't run.
+    const legacy = Utils.clamp(0.15 + (0.9 - 0.15) * (inst._vceHeadroom ?? 1), 0.15, 0.9);
+    const clipPos = swingDown != null ? Math.max(swingDown, 1e-4) : legacy;
+    const clipNeg = swingUp   != null ? Math.max(swingUp,   1e-4) : legacy;
 
-    return { gain, headroom };
+    return { gain, clipPos, clipNeg };
   }
 
   function buildAudioStage(ctx, inst, def, nets, placed, entryNet, exitNet, groundNet, supplyNet) {
@@ -879,21 +900,43 @@ const AudioEngine = (() => {
         return { in: f, out: f };
       }
       case 'potentiometer': {
+        // A pot is a pot. Its ratio comes from the network solve, so the same
+        // model serves a volume, tone, fuzz, time or repeats control, and its
+        // RESISTANCE finally matters (a 10k and a 1M volume pot used to
+        // attenuate identically, because this was `gain = wiper fraction` with
+        // no resistance term and no knowledge of what the third leg touched).
+        //
+        // Falls back to the wiper fraction only when the solve is unavailable,
+        // which is the classic divider-into-a-high-impedance-load answer and
+        // therefore right for a plain volume pot and wrong for everything else.
         const parsedWiper = parseFloat(inst.props.wiper);
         const wiper = Number.isNaN(parsedWiper) ? 0.5 : parsedWiper; // NOT `|| 0.5` — that treats a real, valid wiper of exactly 0 as missing and silently substitutes 0.5
         const pos   = (inst.props.taper||'').includes('Audio') ? Math.pow(wiper,2) : wiper;
-        const g     = ctx.createGain(); g.gain.value = pos;
+        const solved = netGain(entryNet, exitNet);
+        const g     = ctx.createGain();
+        g.gain.value = solved != null ? solved : pos;
         inst._audioNode = g;
+        // Refreshed from the solve every tick, same as transistor stages, so
+        // turning the knob moves the real network ratio rather than a fraction.
+        _livePotStages.push({ inst, g, entryNet, exitNet });
         return { in: g, out: g };
       }
       case 'bjt_npn': case 'bjt_pnp': {
-        const { gain, headroom } = computeBjtGainAndHeadroom(inst, def, nets, placed, groundNet);
-        const g = ctx.createGain(); g.gain.value = gain;
-        const sh = ctx.createWaveShaper(); sh.oversample = CLIP_OVERSAMPLE;
-        sh.curve = makeClipCurve(headroom);
-        g.connect(sh);
-        _liveGainStages.push({ inst, g, sh, nets, placed, groundNet });
-        return { in: g, out: sh };
+        // A WaveShaper's curve only spans [-1,1], but a stage's real swing can
+        // be several volts, so the signal is scaled DOWN into the curve's
+        // domain and back UP afterwards. `scale` is chosen so the larger of the
+        // two thresholds lands at 0.9, which keeps both inside the domain and
+        // leaves the linear region intact (the pre- and post-scaling cancel for
+        // signals below the knee).
+        const { gain, clipPos, clipNeg } = computeBjtGainAndHeadroom(inst, def, nets, placed, groundNet);
+        const scale = Math.max(clipPos, clipNeg, 1e-3) / 0.9;
+        const pre  = ctx.createGain(); pre.gain.value  = gain / scale;
+        const sh   = ctx.createWaveShaper(); sh.oversample = CLIP_OVERSAMPLE;
+        sh.curve   = makeClipCurve(clipPos / scale, clipNeg / scale);
+        const post = ctx.createGain(); post.gain.value = scale;
+        pre.connect(sh); sh.connect(post);
+        _liveGainStages.push({ inst, g: pre, sh, post, nets, placed, groundNet });
+        return { in: pre, out: post, nodes: [pre, sh, post] };
       }
       case 'diode': {
         const mk  = inst.props.model || '1N4148';
@@ -961,12 +1004,21 @@ const AudioEngine = (() => {
   // from and is the whole point of circuits like the Electra. Omitting the
   // second argument gives the symmetric curve this used to produce, which is
   // still correct for a transistor stage's own headroom.
+  // The curve now ASYMPTOTES TO THE THRESHOLD. The previous shape was
+  // `t + (1-t)*tanh(...)`, which saturates at 1.0 whatever t is, so t only
+  // decided where the knee began and not what the output was limited to. Now
+  // that thresholds carry a real voltage meaning (a stage's actual output
+  // swing, a diode's actual Vf) the curve has to genuinely limit to them.
+  //
+  // 4096 points rather than 256: a stage whose swing is several volts needs
+  // the pre/post scaling below, and at 256 points a quiet signal would be
+  // quantized into a handful of steps.
   function makeClipCurve(posThreshold, negThreshold = posThreshold) {
-    const n = 256, curve = new Float32Array(n);
-    const shape = (mag, t) => mag < t ? mag : t + (1-t) * Math.tanh((mag - t) / (1-t));
+    const n = 4096, curve = new Float32Array(n);
+    const shape = (mag, t) => t * Math.tanh(mag / t);
     for (let i = 0; i < n; i++) {
-      const x = (i * 2) / n - 1;
-      const t = Utils.clamp(x >= 0 ? posThreshold : negThreshold, 0.01, 0.99);
+      const x = (i * 2) / (n - 1) - 1; // spec's index->x mapping, spans exactly [-1,1]
+      const t = Math.max(x >= 0 ? posThreshold : negThreshold, 1e-4);
       curve[i] = Math.sign(x) * shape(Math.abs(x), t);
     }
     return curve;
@@ -1012,13 +1064,23 @@ const AudioEngine = (() => {
   function updateLiveGains() {
     if (!_running || !_ctx) return;
     for (const stage of _liveGainStages) {
-      const { inst, g, sh, nets, placed, groundNet } = stage;
+      const { inst, g, sh, post, nets, placed, groundNet } = stage;
       const def = (typeof ComponentRegistry !== 'undefined') ? ComponentRegistry.getById(inst.defId) : null;
       if (!def) continue;
-      const { gain, headroom } = computeBjtGainAndHeadroom(inst, def, nets, placed, groundNet);
+      const { gain, clipPos, clipNeg } = computeBjtGainAndHeadroom(inst, def, nets, placed, groundNet);
+      const scale = Math.max(clipPos, clipNeg, 1e-3) / 0.9;
       // Ramp, don't jump — a hard .value= would click on every 10ms update.
-      g.gain.setTargetAtTime(gain, _ctx.currentTime, 0.01);
-      sh.curve = makeClipCurve(headroom);
+      g.gain.setTargetAtTime(gain / scale, _ctx.currentTime, 0.01);
+      if (post) post.gain.setTargetAtTime(scale, _ctx.currentTime, 0.01);
+      sh.curve = makeClipCurve(clipPos / scale, clipNeg / scale);
+    }
+    // Pots too: their ratio is network-derived, so it moves when the knob
+    // moves AND when anything around them changes (another pot loading them,
+    // a transistor's bias shifting its input impedance, and so on).
+    for (const { inst, g, entryNet, exitNet } of _livePotStages) {
+      const solved = netGain(entryNet, exitNet);
+      if (solved == null) continue; // leave the build-time value in place
+      g.gain.setTargetAtTime(solved, _ctx.currentTime, 0.01);
     }
   }
 

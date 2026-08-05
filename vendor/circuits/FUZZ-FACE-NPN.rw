@@ -21,12 +21,12 @@
         "model": "2N1302",
         "hfe": 70,
         "pinout": "EBC",
-        "leakage": 70000,
+        "leakage": 120000,
         "leakage__unit": "µA",
         "title": "Q1"
       },
       "_saturated": true,
-      "_vceHeadroom": 0.00011655785466986128
+      "_vceHeadroom": 0.00006656038135924303
     },
     {
       "instanceId": "Q6DPBHS",
@@ -49,7 +49,7 @@
         "model": "2N1302",
         "hfe": 120,
         "pinout": "EBC",
-        "leakage": 150000,
+        "leakage": 50000,
         "leakage__unit": "µA",
         "title": "Q2"
       },
@@ -157,12 +157,12 @@
       "props": {
         "resistance": 500000,
         "taper": "Audio/Log (A)",
-        "wiper": 0.53,
+        "wiper": 0.35,
         "resistance__unit": "kΩ",
         "title": "Volume"
       },
-      "_rLow": 140450.00000000003,
-      "_rHigh": 359550
+      "_rLow": 61249.99999999999,
+      "_rHigh": 438750
     },
     {
       "instanceId": "C9XUY41",
@@ -204,12 +204,12 @@
       "props": {
         "resistance": 1000,
         "taper": "Linear (B)",
-        "wiper": 0.91,
+        "wiper": 0.5,
         "resistance__unit": "kΩ",
         "title": "Fuzz"
       },
-      "_rLow": 910,
-      "_rHigh": 89.99999999999997
+      "_rLow": 500,
+      "_rHigh": 500
     },
     {
       "instanceId": "C+9LICU",
@@ -389,8 +389,8 @@
       "dc_offset": 0,
       "phase": 0,
       "looping": true,
-      "audio_file": "151009__khoon__rhythm-1-clean-95-bpm.wav",
-      "audio_source": "upload"
+      "audio_file": "Electric Guitar Sample",
+      "audio_source": "electric_guitar_sample.wav"
     },
     "output": {
       "volume": 0.33,
