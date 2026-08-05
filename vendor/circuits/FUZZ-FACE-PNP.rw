@@ -2,7 +2,7 @@
   "components": [
     {
       "instanceId": "QXAJI0Y",
-      "defId": "transistor_npn",
+      "defId": "transistor_pnp",
       "legs": [
         {
           "row": 6,
@@ -18,21 +18,19 @@
         }
       ],
       "props": {
-        "model": "BC108B",
-        "hfe": 110,
+        "model": "NKT275",
+        "hfe": 70,
         "pinout": "EBC",
-        "leakage": 15,
-        "leakage__unit": "nA",
+        "leakage": 120000,
+        "leakage__unit": "µA",
         "title": "Q1"
       },
-      "_saturated": false,
-      "_vceHeadroom": 0.4625177663923517,
-      "_swingDown": 1.3875532991770552,
-      "_swingUp": 7.412446700822945
+      "_saturated": true,
+      "_vceHeadroom": 0.00006656038135924303
     },
     {
       "instanceId": "Q6DPBHS",
-      "defId": "transistor_npn",
+      "defId": "transistor_pnp",
       "legs": [
         {
           "row": 6,
@@ -48,17 +46,15 @@
         }
       ],
       "props": {
-        "model": "BC108B",
-        "hfe": 110,
+        "model": "NKT275",
+        "hfe": 120,
         "pinout": "EBC",
-        "leakage": 15,
-        "leakage__unit": "nA",
+        "leakage": 50000,
+        "leakage__unit": "µA",
         "title": "Q2"
       },
       "_saturated": false,
-      "_vceHeadroom": 0.17794698714971902,
-      "_swingDown": 0.533840961449157,
-      "_swingUp": 7.40625114543631
+      "_vceHeadroom": 1
     },
     {
       "instanceId": "RAHXTHV",
@@ -85,11 +81,11 @@
       "defId": "resistor",
       "legs": [
         {
-          "row": 0,
+          "row": 9,
           "col": 40
         },
         {
-          "row": 0,
+          "row": 9,
           "col": 32
         }
       ],
@@ -208,12 +204,12 @@
       "props": {
         "resistance": 1000,
         "taper": "Linear (B)",
-        "wiper": 0.51,
+        "wiper": 0.5,
         "resistance__unit": "kΩ",
         "title": "Fuzz"
       },
-      "_rLow": 510,
-      "_rHigh": 490
+      "_rLow": 500,
+      "_rHigh": 500
     },
     {
       "instanceId": "C+9LICU",
@@ -221,11 +217,11 @@
       "legs": [
         {
           "row": 8,
-          "col": 45
+          "col": 55
         },
         {
           "row": 8,
-          "col": 55
+          "col": 45
         }
       ],
       "props": {
@@ -241,11 +237,11 @@
       "legs": [
         {
           "row": 6,
-          "col": 34
+          "col": 33
         },
         {
           "row": 6,
-          "col": 33
+          "col": 34
         }
       ],
       "props": {
@@ -308,16 +304,16 @@
       "id": "WGOC80",
       "r1": 4,
       "c1": 38,
-      "r2": 9,
-      "c2": 38,
+      "r2": 4,
+      "c2": 40,
       "color": "#ff3333"
     },
     {
       "id": "WH9KSL",
-      "r1": 4,
+      "r1": 9,
       "c1": 40,
       "r2": 9,
-      "c2": 40,
+      "c2": 45,
       "color": "#3399ff"
     },
     {
@@ -381,7 +377,7 @@
     "power": {
       "voltage": 9,
       "current_limit_ma": 500,
-      "reverse_polarity": false,
+      "reverse_polarity": true,
       "power_on": true,
       "battery_sag": 0,
       "internal_resistance": 1
@@ -393,8 +389,8 @@
       "dc_offset": 0,
       "phase": 0,
       "looping": true,
-      "audio_file": "151009__khoon__rhythm-1-clean-95-bpm.wav",
-      "audio_source": "upload"
+      "audio_file": "Electric Guitar Sample",
+      "audio_source": "electric_guitar_sample.wav"
     },
     "output": {
       "volume": 0.33,

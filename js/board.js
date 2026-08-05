@@ -1084,7 +1084,19 @@ const Board = (() => {
   function getLayoutData(){
     const permanentDevices = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getPermanentState)
       ? WorkbenchStrip.getPermanentState() : undefined;
-    return{components:_placed.map(inst=>{const c=Utils.clone(inst);delete c._voltage;delete c._current;delete c._audioNode;delete c._brightness;delete c._state;delete c._pressed;delete c.failed;delete c.failureType;return c;}),wires:_wires,permanentDevices};
+    // Strip ALL runtime state rather than an explicit list. The list version
+    // kept falling behind: it named _voltage/_current/_state/etc but not
+    // _vceHeadroom, _saturated, _rLow, _rHigh, so solver output was written
+    // into saved .rw files and reloaded as if it were user data. Every new
+    // per-tick field silently joined the leak (_swingUp/_swingDown were the
+    // most recent). Convention: anything the solver writes onto an instance
+    // is prefixed with _, and nothing prefixed with _ is ever saved.
+    return{components:_placed.map(inst=>{
+      const c=Utils.clone(inst);
+      for(const k of Object.keys(c)) if(k.charCodeAt(0)===95) delete c[k]; // '_'
+      delete c.failed; delete c.failureType;
+      return c;
+    }),wires:_wires,permanentDevices};
   }
 
   return{init,render,clear,loadLayout,getLayoutData,getPlaced,getWires,addWire,nextWireColor,
