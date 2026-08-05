@@ -12,6 +12,12 @@
   ],
   "properties": [
     {
+      "key": "power_on",
+      "label": "Power On",
+      "type": "boolean",
+      "default": true
+    },
+    {
       "key": "voltage",
       "label": "Voltage (V)",
       "type": "number",
@@ -30,12 +36,6 @@
       "label": "Reverse Polarity",
       "type": "boolean",
       "default": false
-    },
-    {
-      "key": "power_on",
-      "label": "Power On",
-      "type": "boolean",
-      "default": true
     },
     {
       "key": "battery_sag",
