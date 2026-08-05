@@ -1,0 +1,221 @@
+{
+  "components": [
+    {
+      "instanceId": "CEIN001",
+      "defId": "capacitor",
+      "legs": [
+        { "row": 8, "col": 55 },
+        { "row": 8, "col": 46 }
+      ],
+      "props": {
+        "capacitance": 1e-7,
+        "capacitance__unit": "µF",
+        "voltage_rating": "50V",
+        "type": "Film",
+        "tolerance": "5%",
+        "title": "Input Cap"
+      }
+    },
+    {
+      "instanceId": "QELEC01",
+      "defId": "transistor_npn",
+      "legs": [
+        { "row": 6, "col": 45 },
+        { "row": 6, "col": 46 },
+        { "row": 6, "col": 47 }
+      ],
+      "props": {
+        "model": "2N3904",
+        "pinout": "EBC",
+        "title": "Q1"
+      }
+    },
+    {
+      "instanceId": "RCOL047",
+      "defId": "resistor",
+      "legs": [
+        { "row": "rtp", "col": 47 },
+        { "row": 5, "col": 47 }
+      ],
+      "props": {
+        "resistance": 47000,
+        "resistance__unit": "kΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "Collector 47K"
+      }
+    },
+    {
+      "instanceId": "RFB22M0",
+      "defId": "resistor",
+      "legs": [
+        { "row": 7, "col": 46 },
+        { "row": 7, "col": 47 }
+      ],
+      "props": {
+        "resistance": 2200000,
+        "resistance__unit": "MΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "Bias Feedback 2M2"
+      }
+    },
+    {
+      "instanceId": "REMT680",
+      "defId": "resistor",
+      "legs": [
+        { "row": 5, "col": 45 },
+        { "row": "rtm", "col": 45 }
+      ],
+      "props": {
+        "resistance": 680,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "Emitter 680R"
+      }
+    },
+    {
+      "instanceId": "CEOUT01",
+      "defId": "capacitor",
+      "legs": [
+        { "row": 2, "col": 40 },
+        { "row": 2, "col": 38 }
+      ],
+      "props": {
+        "capacitance": 1e-7,
+        "capacitance__unit": "µF",
+        "voltage_rating": "50V",
+        "type": "Film",
+        "tolerance": "5%",
+        "title": "Output Cap"
+      }
+    },
+    {
+      "instanceId": "DSI4148",
+      "defId": "diode",
+      "legs": [
+        { "row": 1, "col": 38 },
+        { "row": 1, "col": 36 }
+      ],
+      "props": {
+        "model": "1N4148",
+        "forward_voltage": "",
+        "leakage": "",
+        "title": "D1 1N4148"
+      }
+    },
+    {
+      "instanceId": "DGE34A0",
+      "defId": "diode",
+      "legs": [
+        { "row": 0, "col": 36 },
+        { "row": 0, "col": 38 }
+      ],
+      "props": {
+        "model": "1N34A (Germanium)",
+        "forward_voltage": "",
+        "leakage": "",
+        "title": "D2 1N34A"
+      }
+    },
+    {
+      "instanceId": "RVOL100",
+      "defId": "potentiometer",
+      "legs": [
+        { "row": 1, "col": 32 },
+        { "row": 1, "col": 33 },
+        { "row": 1, "col": 34 }
+      ],
+      "props": {
+        "resistance": 100000,
+        "resistance__unit": "kΩ",
+        "taper": "Audio/Log (A)",
+        "wiper": 0.7,
+        "title": "Volume"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "WELBR01",
+      "r1": 9,
+      "c1": 47,
+      "r2": 4,
+      "c2": 47,
+      "color": "#ff9900"
+    },
+    {
+      "id": "WELCOL1",
+      "r1": 3,
+      "c1": 47,
+      "r2": 3,
+      "c2": 40,
+      "color": "#ff9900"
+    },
+    {
+      "id": "WELCLP1",
+      "r1": 3,
+      "c1": 38,
+      "r2": 3,
+      "c2": 34,
+      "color": "#3399ff"
+    },
+    {
+      "id": "WELGND1",
+      "r1": 4,
+      "c1": 36,
+      "r2": "rtm",
+      "c2": 36,
+      "color": "#000000"
+    },
+    {
+      "id": "WELGND2",
+      "r1": 4,
+      "c1": 32,
+      "r2": "rtm",
+      "c2": 32,
+      "color": "#000000"
+    },
+    {
+      "id": "WELOUT1",
+      "r1": 4,
+      "c1": 33,
+      "r2": 9,
+      "c2": 33,
+      "color": "#15b21f"
+    },
+    {
+      "id": "WELOUT2",
+      "r1": 8,
+      "c1": 33,
+      "r2": 8,
+      "c2": 6,
+      "color": "#15b21f"
+    }
+  ],
+  "permanentDevices": {
+    "power": {
+      "voltage": 9,
+      "current_limit_ma": 500,
+      "reverse_polarity": false,
+      "power_on": true,
+      "battery_sag": 0,
+      "internal_resistance": 1
+    },
+    "input": {
+      "waveform": "Audio File",
+      "frequency": 440,
+      "amplitude": 1,
+      "dc_offset": 0,
+      "phase": 0,
+      "looping": true,
+      "audio_file": "Electric Guitar Sample",
+      "audio_source": "electric_guitar_sample.wav"
+    },
+    "output": {
+      "volume": 0.5,
+      "mute": false
+    }
+  }
+}
