@@ -61,6 +61,12 @@ let _statusGen = 0;
   // moves Ic while playing would update the model but never be audible
   // until a fresh Stop/Play.
   Simulation.onUpdate(() => { if (typeof AudioEngine !== 'undefined' && AudioEngine.updateLiveGains) AudioEngine.updateLiveGains(); });
+  // Topology (not value) changes: a switch toggling while engaged actually
+  // rewires the net graph, which the per-tick value push above can't express —
+  // it only updates existing nodes. Without this, flipping a switch mid-play
+  // updates the DC solve and the visuals but the sound keeps whatever
+  // topology existed when Play was pressed, until a fresh Stop/Play.
+  Simulation.onTopologyChange(() => { if (typeof AudioEngine !== 'undefined' && AudioEngine.refreshTopology) AudioEngine.refreshTopology(); });
 
   document.getElementById('failure-dismiss').addEventListener('click', () => {
     document.getElementById('failure-overlay').classList.add('hidden');

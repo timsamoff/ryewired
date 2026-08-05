@@ -30,9 +30,18 @@ const Utils = {
 
   isSwitchClosed(inst) {
     const type = inst.props?.type || 'Latching';
+    // Momentary switches are held, not set — _pressed is genuinely runtime-
+    // only state and props.state doesn't apply to them.
     if (type === 'Momentary (NO)') return !!inst._pressed;
     if (type === 'Momentary (NC)') return !inst._pressed;
-    return !!inst._state || inst.props?.state === 'Closed';
+    // Latching: props.state is the SINGLE source of truth, and board.js's
+    // toggle writes it. This used to be `!!inst._state || props.state ===
+    // 'Closed'`, two representations of one piece of state OR'd together,
+    // which broke three ways: setting state to Closed in the properties
+    // panel pinned the switch shut permanently (the OR meant flipping
+    // _state could never open it), and since getLayoutData strips _state,
+    // a toggle survived neither save/reload nor undo/redo.
+    return inst.props?.state === 'Closed';
   },
 
   /** Format a capacitance value nicely */

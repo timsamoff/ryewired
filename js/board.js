@@ -835,7 +835,10 @@ const Board = (() => {
     if(def?.behavior?.type==='switch_spst'){
       const t=inst.props.type;
       if(t!=='Momentary (NO)' && t!=='Momentary (NC)'){
-        inst._state=!inst._state;Simulation.notifyStateChange(inst);Storage.markDirty();History.push();render();
+        // Writes props.state, not a separate _state flag — props is what
+        // getLayoutData serializes, so the toggle now survives save/reload
+        // and is captured by History.push() below. See Utils.isSwitchClosed.
+        inst.props.state=(inst.props.state==='Closed')?'Open':'Closed';Simulation.notifyStateChange(inst);Storage.markDirty();History.push();render();
       }
     }
   }

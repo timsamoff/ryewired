@@ -3,13 +3,23 @@
 // then traces current paths through components to compute voltages/brightness.
 
 const Simulation = (() => {
-  let _running=false, _interval=null, _onFailure=null, _onUpdate=null;
+  let _running=false, _interval=null, _onFailure=null, _onUpdate=null, _onTopologyChange=null;
   const TICK_MS=10;
 
   // Latest solved net map + per-net voltages, cached from the most recent
   // tick() so the Voltage Meter tool can query "what's the voltage under
   // the cursor" on demand (mousemove) without re-running the solver.
   let _lastNets = null, _lastNetVoltage = null;
+
+  // Whichever supply is actually contributing this tick. Module-scope, not a
+  // tick()-local, because solveComponent() reads it and is a SIBLING function,
+  // not nested inside tick() — as a local it was an unresolved identifier
+  // there, and the ReferenceError got silently swallowed by the try/catch
+  // around the solveComponent call, freezing _vceHeadroom permanently
+  // undefined and disabling the BJT over-current check entirely.
+  // Reset at the top of every tick, and only ever read from within the same
+  // tick's solveComponent pass, so it can never be read stale.
+  let _activeSupplyV = null;
 
   // Permanent power supply's battery-sag state (Phase 3). Persists across
   // ticks (sag is inherently a running-average effect), but resets whenever
@@ -42,8 +52,8 @@ const Simulation = (() => {
     // Tracks whichever supply is actually contributing this tick — used
     // below to scale BJT headroom against the real active voltage instead
     // of a flat assumption, so changing the supply voltage actually moves
-    // where clipping kicks in.
-    let activeSupplyV = null;
+    // where clipping kicks in. Declared at module scope (see above).
+    _activeSupplyV = null;
 
     const nets = buildNetMap(placed, wires);
 
@@ -68,14 +78,13 @@ const Simulation = (() => {
       const reversed = !!power.reverse_polarity;
       // Use the power block's REAL connection columns (dynamically
       // hole-snapped, from WorkbenchStrip.getConnectionPoints) instead of
-      // hardcoded column 0 — the top rail has a physical break partway
-      // across the board, splitting it into two independent segments;
-      // hardcoding column 0 only ever fixes ONE of those segments,
-      // silently leaving the permanent supply's real connection point
-      // (which commonly lands in the OTHER segment) completely unpowered
-      // in the actual electrical solve, regardless of what the visual
-      // traces show. This is the same class of bug already fixed in
-      // audio-engine.js's groundNet — missed here until now.
+      // hardcoded column 0. The rails span the full board width now (see
+      // buildNetMap), so column choice no longer changes WHICH segment gets
+      // powered — this originally fixed a rail-break bug that no longer
+      // exists. It's kept because reading the block's actual position is
+      // still the correct thing to do: it stays right if the rails are ever
+      // segmented again, and it doesn't depend on the supply happening to
+      // sit at column 0.
       const cp = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getConnectionPoints) ? WorkbenchStrip.getConnectionPoints() : null;
       const plusCol  = cp?.powerPlusCol  ?? 0;
       const minusCol = cp?.powerMinusCol ?? 0;
@@ -106,7 +115,7 @@ const Simulation = (() => {
       if (permPosNet && permNegNet) {
         intendedFixed.push({ net: permPosNet, voltage: permEmf });
         intendedFixed.push({ net: permNegNet, voltage: 0 });
-        activeSupplyV = permEmf;
+        _activeSupplyV = permEmf;
       }
     } else {
       _battery.effectiveV = null; _battery.lastCurrent = 0; _battery.virtualPos = null;
@@ -148,7 +157,7 @@ const Simulation = (() => {
       placedSupplies.push({ inst, pNet, nNet, v, effectiveRint });
       if (pNet) intendedFixed.push({ net: pNet, voltage: v });
       if (nNet) intendedFixed.push({ net: nNet, voltage: 0 });
-      if (activeSupplyV == null) activeSupplyV = v;
+      if (_activeSupplyV == null) _activeSupplyV = v;
     }
 
     const conflict = detectSupplyConflict(intendedFixed);
@@ -356,7 +365,7 @@ const Simulation = (() => {
         // enough headroom" assumption regardless of supply — that flat
         // assumption meant halving the supply barely moved this number,
         // which is why changing supply voltage barely changed the sound.
-        const headroomRef = 3 * ((activeSupplyV ?? 9) / 9);
+        const headroomRef = 3 * ((_activeSupplyV ?? 9) / 9);
         inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - 0.2) / headroomRef, 0, 1);
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
@@ -371,7 +380,7 @@ const Simulation = (() => {
         inst._current = Ic;
         inst._saturated = !!c?.saturated;
         // Same reasoning as bjt_npn — see that case for the full comment.
-        const headroomRefPnp = 3 * ((activeSupplyV ?? 9) / 9);
+        const headroomRefPnp = 3 * ((_activeSupplyV ?? 9) / 9);
         inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - 0.2) / headroomRefPnp, 0, 1);
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
@@ -843,16 +852,39 @@ const Simulation = (() => {
   }
 
   function parseWatts(str) { return parseFloat(str)||0.25; }
-  function notifyStateChange(inst) { if(_running) tick(); }
+
+  // A switch changing state is the one thing that alters board TOPOLOGY while
+  // the circuit is engaged (switches are deliberately exempt from the
+  // engaged-lock — they're runtime controls, not edits). All four callers of
+  // this are switch toggles in board.js.
+  //
+  // tick() re-solves DC first, THEN the topology callback fires, because the
+  // audio rebuild reads this solve's inst._current/_vceHeadroom to compute
+  // transistor stage gain. Reversing that order would rebuild every stage from
+  // the pre-toggle operating point.
+  function notifyStateChange(inst) {
+    if (!_running) return;
+    tick();
+    // tick() can fail() and stop the sim. Don't rebuild the audio graph for a
+    // circuit that just blew up — the failure handler has already stopped
+    // AudioEngine, and its own guard would no-op anyway.
+    if (_running && _onTopologyChange) _onTopologyChange();
+  }
   function onFailure(fn) { _onFailure=fn; }
   function onUpdate(fn)  { _onUpdate=fn; }
+  function onTopologyChange(fn) { _onTopologyChange=fn; }
 
   // Whether two specific holes are on the same electrical net right now —
   // reuses buildNetMap() exactly as tick() does (same wires, same closed-
   // switch handling), so this always matches what the simulation itself
-  // would consider connected. Used by AudioEngine to decide whether an
-  // engaged bypass actually has a complete Input->Output path, rather than
-  // just assuming one exists because components happen to be placed.
+  // would consider connected.
+  //
+  // Currently UNUSED. It was written for AudioEngine to check whether an
+  // engaged bypass has a complete Input->Output path, but AudioEngine
+  // answers that from its own walk instead (walk.reachedOutput), which is
+  // strictly better: it means a real component-mediated path exists, not
+  // just electrical continuity through a wire. Kept as a public query
+  // helper; delete it if nothing has picked it up.
   function hasElectricalPath(rowA, colA, rowB, colB) {
     const placed = Board.getPlaced();
     const wires  = Board.getWires();
@@ -870,5 +902,5 @@ const Simulation = (() => {
     return typeof v === 'number' ? v : 0;
   }
 
-  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,notifyStateChange,hasElectricalPath,getVoltageAt,buildNetMap };
+  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,notifyStateChange,hasElectricalPath,getVoltageAt,buildNetMap };
 })();

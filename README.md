@@ -42,8 +42,6 @@ ryewired/                    ← repo root / web root
 │       ├── css/
 │       │   └── admin.css    ← admin styles (@import ../../css/tokens.css)
 │       └── js/admin.js
-├── main.js                  ← Electron entry (optional desktop app)
-├── preload.js
 ├── package.json
 └── setup.sh
 ```
@@ -58,12 +56,6 @@ Serve the repo root over HTTP — VS Code Live Server, or:
 npx serve .
 ```
 Then open `http://localhost:3000`.
-
-### As an Electron desktop app
-```
-npm install
-npm start
-```
 
 ### Admin tool
 ```

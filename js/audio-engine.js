@@ -6,11 +6,22 @@
 // The audio chain is built by walking the REAL net graph (Simulation.buildNetMap)
 // from the Input's net to the Output's net, hopping through whichever
 // component actually has a leg on the current net — not by blindly chaining
-// every placed component in board order. This is deliberately a single
-// primary-path walk (no parallel/branch modeling yet): 3-leg parts pick one
-// default signal-carrying leg pair (potentiometer: wiper->ccw leg;
-// transistor: collector->emitter), everything else is treated as off the
-// traced path.
+// every placed component in board order. The walk is branch-aware: every
+// reached net gets its own bus, so several components hanging off one net
+// each get connected and Web Audio sums them (see traceSignalPath). 3-leg
+// parts offer their signal-carrying leg pairs (potentiometer: wiper to
+// either outer leg; transistor: base->collector), and whichever pair
+// matches the net being expanded from wins.
+//
+// The remaining honest limitation is that this is a signal-level graph, not
+// an impedance-aware one — see the note above traceSignalPath.
+//
+// Switches are not hops and have no case in signalLegPairs by design:
+// buildNetMap already unions a CLOSED switch's two legs into one net, so a
+// closed switch is transparent here for free, and an open one leaves the
+// two sides on separate nets with nothing bridging them, which correctly
+// stops the walk. Adding a leg pair for them would make an OPEN switch pass
+// signal, since its legs are the only case where the two nets differ.
 //
 // Each net visited during the walk is recorded in a net->tap map, which is
 // what makes Audio Probe possible: probing a hole looks up its net and plays
@@ -125,7 +136,6 @@ const AudioEngine = (() => {
       const built = buildSource(ctx, inputState());
       _source = built.output;
       _sourceStartable = built.startable;
-      _liveGainStages = [];
 
       // Tapped on the RAW input, before the circuit and independent of
       // bypass — sag should respond to how hard the player is actually
@@ -137,28 +147,7 @@ const AudioEngine = (() => {
       _inputAnalyser.fftSize = 2048;
       _source.connect(_inputAnalyser);
 
-      // Walk the real net graph regardless of bypass — Audio Probe needs to
-      // be able to bench-probe the circuit even with the footswitch
-      // disengaged, same as a real pedal. Bypass only decides what feeds
-      // the actual Output below.
-      const cp = (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getConnectionPoints() : null;
-      const walk = (cp && typeof Simulation !== 'undefined' && Simulation.buildNetMap)
-        ? traceSignalPath(ctx, placed, wires, cp, _source)
-        : { nets:null, netTaps:new Map(), reachedOutput:false, tail:null, allNodes:[] };
-
-      _probeNets      = walk.nets;
-      _netTaps        = walk.netTaps;
-      _allChainNodes  = walk.allNodes;
-      _walkReachedOutput = walk.reachedOutput;
-      _walkTail          = walk.tail;
-
-      // Bypass OFF: Input -> Output directly (clean signal, no user circuit).
-      // Bypass ON:  Input -> user circuit -> Output, using the same walk
-      // above — reachedOutput means a real, component-mediated path exists
-      // (not just "some components happen to be on the board").
-      _chainTail = bypassOn() ? (walk.reachedOutput ? walk.tail : null) : _source;
-
-      _routeToOutput(_probeActive ? null : _chainTail);
+      _rebuildWalk(ctx, placed, wires);
 
       for (const s of _sourceStartable) { if (s.start) s.start(s._startAt || 0); }
       _running = true;
@@ -205,6 +194,73 @@ const AudioEngine = (() => {
     if (!_running) return;
     _chainTail = bypassOn() ? (_walkReachedOutput ? _walkTail : null) : _source;
     _routeToOutput(_probeActive ? null : _chainTail);
+  }
+
+  // The net-graph walk plus the routing decision that follows it. Shared by
+  // start() and refreshTopology() rather than duplicated, for the same reason
+  // computeBjtGainAndHeadroom is shared by buildAudioStage and
+  // updateLiveGains: one copy can't quietly drift from the other.
+  //
+  // Reads _source but never rebuilds it, so a playing sample or oscillator
+  // survives a rebuild untouched.
+  //
+  // Walks the real net graph regardless of bypass — Audio Probe needs to be
+  // able to bench-probe the circuit even with the footswitch disengaged, same
+  // as a real pedal. Bypass only decides what feeds the actual Output.
+  function _rebuildWalk(ctx, placed, wires) {
+    // Reset BEFORE the walk: buildAudioStage's BJT case pushes onto this, so
+    // without the reset every rebuild appends a duplicate set and
+    // updateLiveGains starts writing gain values to disconnected dead nodes
+    // on every tick, forever.
+    _liveGainStages = [];
+
+    const cp = (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getConnectionPoints() : null;
+    const walk = (cp && typeof Simulation !== 'undefined' && Simulation.buildNetMap)
+      ? traceSignalPath(ctx, placed, wires, cp, _source)
+      : { nets:null, netTaps:new Map(), reachedOutput:false, tail:null, allNodes:[] };
+
+    _probeNets      = walk.nets;
+    _netTaps        = walk.netTaps;
+    _allChainNodes  = walk.allNodes;
+    _walkReachedOutput = walk.reachedOutput;
+    _walkTail          = walk.tail;
+
+    // Bypass OFF: Input -> Output directly (clean signal, no user circuit).
+    // Bypass ON:  Input -> user circuit -> Output, using the walk above —
+    // reachedOutput means a real, component-mediated path exists (not just
+    // "some components happen to be on the board").
+    _chainTail = bypassOn() ? (walk.reachedOutput ? walk.tail : null) : _source;
+    _routeToOutput(_probeActive ? null : _chainTail);
+  }
+
+  // Called when the board's TOPOLOGY changes while running. Currently that's
+  // only a switch toggle, which is the one control deliberately exempt from
+  // the engaged-lock (a switch is a runtime control, not an edit — see
+  // board.js's onClick and its momentary-press handling). Everything else
+  // that can change while playing is a VALUE change, pushed onto the existing
+  // graph by updateLiveGains/updatePotWiper without any rewalk.
+  //
+  // MUST run AFTER the DC re-solve (Simulation.notifyStateChange calls tick()
+  // first, then fires this): buildAudioStage's BJT case reads inst._current
+  // and inst._vceHeadroom from that solve to compute stage gain, so rebuilding
+  // first would build every transistor stage from the PRE-toggle operating
+  // point. Don't reorder these.
+  //
+  // _source/_sourceStartable are deliberately not rebuilt, so flipping a
+  // switch doesn't restart an audio file mid-playback — the same property
+  // refreshBypassRouting preserves, and the reason both exist instead of just
+  // calling stop()/start().
+  function refreshTopology() {
+    if (!_running || !_ctx) return;
+
+    // Detach the speaker feed before tearing down the nodes it points at.
+    _routeToOutput(null);
+
+    // Only the walk's own nodes. _source and the analysers are not in here.
+    for (const n of _allChainNodes) { try { n.disconnect(); } catch(e){} }
+    _allChainNodes = [];
+
+    _rebuildWalk(_ctx, Board.getPlaced(), Board.getWires());
   }
 
   // ── Routing ───────────────────────────────────────────────────────────────
@@ -381,11 +437,11 @@ const AudioEngine = (() => {
     //
     // Uses the power block's REAL connection columns (from
     // getConnectionPoints, which reflects wherever it's actually snapped to
-    // on the board) rather than a hardcoded column — the top rail has a
-    // physical break partway across the board, splitting it into two
-    // independent segments; hardcoding column 0 only identifies ONE of
-    // those segments, silently missing ground entirely for any circuit
-    // built on the other side of the break.
+    // on the board) rather than a hardcoded column. The rails span the full
+    // board width now (see simulation.js's buildNetMap), so this no longer
+    // guards against missing one segment of a split rail — that break is
+    // gone. Kept because reading the block's actual position is still
+    // correct regardless, and mirrors what simulation.js does.
     const power    = (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getPermanentState().power : null;
     const reversed = !!power?.reverse_polarity;
     const minusRow = reversed ? 'rtp' : 'rtm'; // reverse_polarity changes which physical rail row the minus LEAD lands on, not which lead is ground
@@ -786,6 +842,6 @@ const AudioEngine = (() => {
     isRunning, getAudioFileName, updatePotWiper, updateLiveGains, setOutputGain, getSampleRate,
     probeEnable, probeDisable, probeHover, probeIsAudible,
     getCachedSamples, listSamples, loadSampleClip,
-    refreshBypassRouting
+    refreshBypassRouting, refreshTopology
   };
 })();

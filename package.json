@@ -2,14 +2,6 @@
   "name": "ryewired",
   "version": "0.1.0",
   "description": "RYEWIRED — Audio circuit breadboard simulator",
-  "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev"
-  },
-  "devDependencies": {
-    "electron": "^43.1.0"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/timsamoff/ryewired.git"
@@ -21,8 +13,5 @@
   "bugs": {
     "url": "https://github.com/timsamoff/ryewired/issues"
   },
-  "homepage": "https://github.com/timsamoff/ryewired#readme",
-  "dependencies": {
-    "archiver": "^8.0.0"
-  }
+  "homepage": "https://github.com/timsamoff/ryewired#readme"
 }
