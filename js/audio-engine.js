@@ -28,6 +28,19 @@
 // whatever's actually there, instead of a fixed chain-order guess.
 
 const AudioEngine = (() => {
+  // Diode thresholds are in VOLTS; a WaveShaper curve works on the signal's
+  // [-1,1] range, and this graph is normalized with no volts mapping anywhere
+  // in it. This is that mapping: 1.0 of signal treated as 1.0 volt, so a
+  // silicon diode's 0.7V clamp lands at 0.7 of full scale.
+  //
+  // PROVISIONAL, same status as the gain-knee constants. It's analytically
+  // motivated (buildSource emits amp*0.5, and a guitar's output is order-of-
+  // magnitude 1V peak) but it has NOT had an ear-tuning pass. Getting the
+  // curve's SHAPE right — asymmetric, correct thresholds relative to each
+  // other — is what determines character; this single number sets how hard
+  // the clipping bites, and is the one knob to turn if it sounds wrong.
+  const VOLTS_PER_SIGNAL_UNIT = 1.0;
+
   let _ctx              = null;
   let _source           = null;   // node the rest of the graph connects FROM
   let _sourceStartable  = null;   // the actual OscillatorNode/BufferSource/ConstantSource(s) needing .start()
@@ -447,21 +460,74 @@ const AudioEngine = (() => {
     const minusRow = reversed ? 'rtp' : 'rtm'; // reverse_polarity changes which physical rail row the minus LEAD lands on, not which lead is ground
     const groundNet = (cp.powerMinusCol!=null) ? nets.find(nets.key(minusRow, cp.powerMinusCol)) : null;
 
-    const netTaps  = new Map(); // net -> bus GainNode, doubles as the Audio Probe tap
+    const netTaps  = new Map(); // net -> node to connect OUT FROM; also the Audio Probe tap (post-clamp)
+    const netIns   = new Map(); // net -> node to connect INTO; same object as the tap unless a clamp sits on the net
     const allNodes = [];
     const used      = new Set(); // instanceIds already built — each component gets exactly one stage, however many of its nets get reached
     const MAX_STAGES = 64;       // finitely many parts on a board — `used` already prevents true infinite loops, this is just a documented backstop
 
-    function busFor(net) {
-      if (!netTaps.has(net)) {
-        const bus = ctx.createGain(); bus.gain.value = 1;
-        netTaps.set(net, bus);
-        allNodes.push(bus);
+    // ── Shunt clippers ────────────────────────────────────────────────────
+    // A diode or LED from a net to ground does NOT sit in the signal path, it
+    // CLAMPS the net: everything downstream sees the limited waveform. The
+    // walk's normal treatment (net -> stage -> ground bus) is wrong twice over
+    // for a shunt part — the ground bus's tap is nulled so the stage feeds
+    // nothing, and the through-signal bypasses it entirely. Measured on the
+    // Electra Distortion: both clipping diodes were built, were fed by the
+    // source, and were completely inaudible, which is most of that pedal.
+    //
+    // Anti-parallel pairs clip ASYMMETRICALLY, and that asymmetry is the whole
+    // character of such circuits. A diode with its ANODE on the net conducts
+    // on the positive swing and so clamps the POSITIVE half at its Vf; one
+    // with its CATHODE on the net clamps the NEGATIVE half. An Electra's
+    // silicon/germanium pair therefore clips at ~0.7V one way and ~0.25V the
+    // other, from the real per-model vf rather than a hand-tuned curve shape.
+    //
+    // Where several diodes share a half, the LOWEST Vf wins: it starts
+    // conducting first and holds the node before the others can.
+    const clampsByNet = new Map(); // net -> { pos, neg } thresholds in volts
+    if (groundNet != null) {
+      for (const inst of placed) {
+        if (inst.failed || inst.legs.length < 2) continue;
+        const def = ComponentRegistry.getById(inst.defId);
+        const bt  = def?.behavior?.type;
+        if (bt !== 'diode' && bt !== 'led') continue;
+        const anodeNet   = nets.find(nets.key(inst.legs[0].row, inst.legs[0].col));
+        const cathodeNet = nets.find(nets.key(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col));
+        let net = null, half = null;
+        if (cathodeNet === groundNet && anodeNet !== groundNet) { net = anodeNet;   half = 'pos'; }
+        else if (anodeNet === groundNet && cathodeNet !== groundNet) { net = cathodeNet; half = 'neg'; }
+        else continue; // not a shunt-to-ground clipper; leave it to the walk as a series hop
+
+        const entry = clampsByNet.get(net) || { pos: Infinity, neg: Infinity };
+        entry[half] = Math.min(entry[half], forwardVoltage(inst, def));
+        clampsByNet.set(net, entry);
+        used.add(inst.instanceId); // handled as a clamp, so never also built as a series stage
       }
-      return netTaps.get(net);
     }
 
-    source.connect(busFor(inputNet));
+    // A net needs two nodes only when something clamps it. Without a clamp the
+    // in and out nodes are literally the same object, so every circuit with no
+    // shunt clipper produces exactly the graph it did before.
+    function ensureBus(net) {
+      if (netIns.has(net)) return;
+      const inBus = ctx.createGain(); inBus.gain.value = 1;
+      allNodes.push(inBus);
+      netIns.set(net, inBus);
+
+      const clamp = clampsByNet.get(net);
+      if (!clamp) { netTaps.set(net, inBus); return; }
+
+      const toUnits = v => Utils.clamp(Number.isFinite(v) ? v / VOLTS_PER_SIGNAL_UNIT : 0.99, 0.01, 0.99);
+      const sh = ctx.createWaveShaper();
+      sh.curve = makeClipCurve(toUnits(clamp.pos), toUnits(clamp.neg));
+      inBus.connect(sh);
+      allNodes.push(sh);
+      netTaps.set(net, sh); // downstream, and the probe, hear the CLAMPED signal
+    }
+    function busIn(net)  { ensureBus(net); return netIns.get(net); }  // things arriving at the net
+    function busOut(net) { ensureBus(net); return netTaps.get(net); } // things leaving it, and the probe tap
+
+    source.connect(busIn(inputNet));
 
     const frontier = [inputNet];
     const visitedNets = new Set(frontier);
@@ -470,7 +536,7 @@ const AudioEngine = (() => {
     while (frontier.length && stageCount < MAX_STAGES) {
       const net = frontier.shift();
       if (net === groundNet) continue; // ground is a valid destination, never a valid source of further hops — see note above traceSignalPath
-      const entryBus = busFor(net);
+      const entryBus = busOut(net); // leaving this net, so post-clamp
 
       for (const inst of placed) {
         if (inst.failed || used.has(inst.instanceId)) continue;
@@ -490,7 +556,7 @@ const AudioEngine = (() => {
         stageCount++;
 
         const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet, groundNet);
-        const exitBus = busFor(otherNet);
+        const exitBus = busIn(otherNet); // arriving at the far net, so pre-clamp
         if (built) {
           entryBus.connect(built.in);
           allNodes.push(built.in); if (built.out !== built.in) allNodes.push(built.out);
@@ -765,16 +831,30 @@ const AudioEngine = (() => {
     }
   }
 
-  function makeClipCurve(threshold) {
+  // Soft-knee clipping curve. Takes a separate threshold per half so an
+  // anti-parallel diode pair clips asymmetrically — silicon at ~0.7 one way,
+  // germanium at ~0.25 the other — which is where even-harmonic warmth comes
+  // from and is the whole point of circuits like the Electra. Omitting the
+  // second argument gives the symmetric curve this used to produce, which is
+  // still correct for a transistor stage's own headroom.
+  function makeClipCurve(posThreshold, negThreshold = posThreshold) {
     const n = 256, curve = new Float32Array(n);
+    const shape = (mag, t) => mag < t ? mag : t + (1-t) * Math.tanh((mag - t) / (1-t));
     for (let i = 0; i < n; i++) {
       const x = (i * 2) / n - 1;
-      curve[i] = Math.abs(x) < threshold
-        ? x
-        : Math.sign(x) * (threshold + (1-threshold) *
-            Math.tanh((Math.abs(x)-threshold) / (1-threshold)));
+      const t = Utils.clamp(x >= 0 ? posThreshold : negThreshold, 0.01, 0.99);
+      curve[i] = Math.sign(x) * shape(Math.abs(x), t);
     }
     return curve;
+  }
+
+  // Same resolution order simulation.js uses, so the audio model and the
+  // solver can never disagree about a diode's forward voltage.
+  function forwardVoltage(inst, def) {
+    const typed = parseFloat(inst.props.forward_voltage);
+    if (Number.isFinite(typed)) return typed;
+    if (def.behavior?.type === 'led') return def.color_map?.[inst.props.color]?.vf ?? 2.0;
+    return def.model_params?.[inst.props.model]?.vf ?? 0.7;
   }
 
   async function loadAudioFile(fileData) {
