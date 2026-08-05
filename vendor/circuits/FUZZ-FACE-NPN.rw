@@ -1,0 +1,400 @@
+{
+  "components": [
+    {
+      "instanceId": "QXAJI0Y",
+      "defId": "transistor_npn",
+      "legs": [
+        {
+          "row": 6,
+          "col": 44
+        },
+        {
+          "row": 6,
+          "col": 45
+        },
+        {
+          "row": 6,
+          "col": 46
+        }
+      ],
+      "props": {
+        "model": "2N1302",
+        "hfe": 70,
+        "pinout": "EBC",
+        "leakage": 70000,
+        "leakage__unit": "µA",
+        "title": "Q1"
+      },
+      "_saturated": true,
+      "_vceHeadroom": 0.00011655785466986128
+    },
+    {
+      "instanceId": "Q6DPBHS",
+      "defId": "transistor_npn",
+      "legs": [
+        {
+          "row": 6,
+          "col": 38
+        },
+        {
+          "row": 6,
+          "col": 39
+        },
+        {
+          "row": 6,
+          "col": 40
+        }
+      ],
+      "props": {
+        "model": "2N1302",
+        "hfe": 120,
+        "pinout": "EBC",
+        "leakage": 150000,
+        "leakage__unit": "µA",
+        "title": "Q2"
+      },
+      "_saturated": false,
+      "_vceHeadroom": 1
+    },
+    {
+      "instanceId": "RAHXTHV",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 46
+        },
+        {
+          "row": "rtp",
+          "col": 46
+        }
+      ],
+      "props": {
+        "resistance": 33000,
+        "power_rating": "0.25W",
+        "tolerance": "20%",
+        "resistance__unit": "kΩ"
+      }
+    },
+    {
+      "instanceId": "R3A3ZMF",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 0,
+          "col": 40
+        },
+        {
+          "row": 0,
+          "col": 32
+        }
+      ],
+      "props": {
+        "resistance": 8200,
+        "power_rating": "0.25W",
+        "tolerance": "20%",
+        "resistance__unit": "kΩ"
+      }
+    },
+    {
+      "instanceId": "R8MDD4V",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": "rtp",
+          "col": 32
+        },
+        {
+          "row": 6,
+          "col": 32
+        }
+      ],
+      "props": {
+        "resistance": 470,
+        "power_rating": "0.25W",
+        "tolerance": "20%",
+        "resistance__unit": "Ω"
+      }
+    },
+    {
+      "instanceId": "R30T9NT",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 3,
+          "col": 45
+        },
+        {
+          "row": 3,
+          "col": 38
+        }
+      ],
+      "props": {
+        "resistance": 100000,
+        "power_rating": "0.25W",
+        "tolerance": "20%",
+        "resistance__unit": "kΩ",
+        "resistance_actual": 97231.98993569317
+      }
+    },
+    {
+      "instanceId": "RV3W5UZB",
+      "defId": "potentiometer",
+      "legs": [
+        {
+          "row": 1,
+          "col": 28
+        },
+        {
+          "row": 1,
+          "col": 29
+        },
+        {
+          "row": 1,
+          "col": 30
+        }
+      ],
+      "props": {
+        "resistance": 500000,
+        "taper": "Audio/Log (A)",
+        "wiper": 0.53,
+        "resistance__unit": "kΩ",
+        "title": "Volume"
+      },
+      "_rLow": 140450.00000000003,
+      "_rHigh": 359550
+    },
+    {
+      "instanceId": "C9XUY41",
+      "defId": "capacitor",
+      "legs": [
+        {
+          "row": 7,
+          "col": 32
+        },
+        {
+          "row": 7,
+          "col": 30
+        }
+      ],
+      "props": {
+        "capacitance": 1e-8,
+        "voltage_rating": "50V",
+        "type": "Ceramic",
+        "capacitance__unit": "nF"
+      }
+    },
+    {
+      "instanceId": "RV44FO8",
+      "defId": "potentiometer",
+      "legs": [
+        {
+          "row": 1,
+          "col": 33
+        },
+        {
+          "row": 1,
+          "col": 34
+        },
+        {
+          "row": 1,
+          "col": 35
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "taper": "Linear (B)",
+        "wiper": 0.91,
+        "resistance__unit": "kΩ",
+        "title": "Fuzz"
+      },
+      "_rLow": 910,
+      "_rHigh": 89.99999999999997
+    },
+    {
+      "instanceId": "C+9LICU",
+      "defId": "capacitor_electrolytic",
+      "legs": [
+        {
+          "row": 8,
+          "col": 45
+        },
+        {
+          "row": 8,
+          "col": 55
+        }
+      ],
+      "props": {
+        "capacitance": 0.0000022,
+        "voltage_rating": "25V",
+        "capacitance__unit": "µF",
+        "title": "Input Cap"
+      }
+    },
+    {
+      "instanceId": "C+XYZ7Z",
+      "defId": "capacitor_electrolytic",
+      "legs": [
+        {
+          "row": 6,
+          "col": 34
+        },
+        {
+          "row": 6,
+          "col": 33
+        }
+      ],
+      "props": {
+        "capacitance": 0.000022,
+        "voltage_rating": "25V",
+        "capacitance__unit": "µF"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "WIBLJH7",
+      "r1": 5,
+      "c1": 44,
+      "r2": "rtm",
+      "c2": 44,
+      "color": "#000000"
+    },
+    {
+      "id": "W5LXO6Q",
+      "r1": 4,
+      "c1": 28,
+      "r2": "rtm",
+      "c2": 28,
+      "color": "#000000"
+    },
+    {
+      "id": "WJIUJV6",
+      "r1": 5,
+      "c1": 33,
+      "r2": "rtm",
+      "c2": 33,
+      "color": "#000000"
+    },
+    {
+      "id": "WOH9SDB",
+      "r1": 8,
+      "c1": 29,
+      "r2": 8,
+      "c2": 6,
+      "color": "#15b21f"
+    },
+    {
+      "id": "WDW2PCN",
+      "r1": 7,
+      "c1": 46,
+      "r2": 7,
+      "c2": 39,
+      "color": "#ff9900"
+    },
+    {
+      "id": "WVBLQO",
+      "r1": 8,
+      "c1": 35,
+      "r2": 8,
+      "c2": 38,
+      "color": "#ff9900"
+    },
+    {
+      "id": "WGOC80",
+      "r1": 4,
+      "c1": 38,
+      "r2": 9,
+      "c2": 38,
+      "color": "#ff3333"
+    },
+    {
+      "id": "WH9KSL",
+      "r1": 4,
+      "c1": 40,
+      "r2": 9,
+      "c2": 40,
+      "color": "#3399ff"
+    },
+    {
+      "id": "WMNX7H",
+      "r1": 4,
+      "c1": 32,
+      "r2": 9,
+      "c2": 32,
+      "color": "#33cc66"
+    },
+    {
+      "id": "W38IU9",
+      "r1": 9,
+      "c1": 45,
+      "r2": 4,
+      "c2": 45,
+      "color": "#cc33ff"
+    },
+    {
+      "id": "WWL14E",
+      "r1": 8,
+      "c1": 33,
+      "r2": 4,
+      "c2": 33,
+      "color": "#ff9900"
+    },
+    {
+      "id": "WEFDFO",
+      "r1": 8,
+      "c1": 34,
+      "r2": 4,
+      "c2": 34,
+      "color": "#ff3333"
+    },
+    {
+      "id": "WWSHN2",
+      "r1": 9,
+      "c1": 35,
+      "r2": 4,
+      "c2": 35,
+      "color": "#ff9900"
+    },
+    {
+      "id": "W5T765",
+      "r1": 9,
+      "c1": 29,
+      "r2": 4,
+      "c2": 29,
+      "color": "#ff3333"
+    },
+    {
+      "id": "WQ9290",
+      "r1": 9,
+      "c1": 30,
+      "r2": 4,
+      "c2": 30,
+      "color": "#3399ff"
+    }
+  ],
+  "permanentDevices": {
+    "power": {
+      "voltage": 9,
+      "current_limit_ma": 500,
+      "reverse_polarity": false,
+      "power_on": true,
+      "battery_sag": 0,
+      "internal_resistance": 1
+    },
+    "input": {
+      "waveform": "Audio File",
+      "frequency": 440,
+      "amplitude": 1,
+      "dc_offset": 0,
+      "phase": 0,
+      "looping": true,
+      "audio_file": "151009__khoon__rhythm-1-clean-95-bpm.wav",
+      "audio_source": "upload"
+    },
+    "output": {
+      "volume": 0.33,
+      "mute": false
+    }
+  }
+}

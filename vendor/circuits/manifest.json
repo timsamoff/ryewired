@@ -1,6 +1,7 @@
 {
   "circuits": [
     { "name": "EHX LPB-1", "file": "EHX-LPB-1.rw" },
-    { "name": "Electra Distortion", "file": "ELECTRA-DISTORTION.rw" }
+    { "name": "Electra Distortion", "file": "ELECTRA-DISTORTION.rw" },
+    { "name": "Fuzz Face NPN", "file": "FUZZ-FACE-NPN.rw" }
   ]
 }

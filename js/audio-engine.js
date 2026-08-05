@@ -41,6 +41,28 @@ const AudioEngine = (() => {
   // the clipping bites, and is the one knob to turn if it sounds wrong.
   const VOLTS_PER_SIGNAL_UNIT = 1.0;
 
+  // Last-resort reference impedance for a coupling cap whose real load can't
+  // be derived from the netlist (see acLoadResistance). Only reached when
+  // nothing recognisable sits on either side of the cap, and it warns when it
+  // is, because a silent fallback here is what made every coupling cap in the
+  // app filter an order of magnitude too high for a long time.
+  const CAP_REFERENCE_FALLBACK_R = 10000;
+
+  // Every clipping stage runs its WaveShaper oversampled. A hard nonlinearity
+  // generates harmonics far above the audio band; at 1x they fold back down as
+  // inharmonic content, which is the metallic "digital fizz" that reads as
+  // harsh and thin. WaveShaperNode.oversample defaults to 'none', so this was
+  // happening everywhere.
+  //
+  // Measured on the Fuzz Face by driving a high sine into the clippers and
+  // looking for energy BELOW the fundamental (a memoryless nonlinearity can
+  // only produce harmonics ABOVE it, so anything below is folded): 4x removes
+  // 16-21dB of it. -16.5dB of garbage at 7kHz became -33.9dB.
+  //
+  // '4x' rather than '2x' because the measured difference was large and the
+  // cost is browser-side resampling on a handful of nodes, not per-sample JS.
+  const CLIP_OVERSAMPLE = '4x';
+
   let _ctx              = null;
   let _source           = null;   // node the rest of the graph connects FROM
   let _sourceStartable  = null;   // the actual OscillatorNode/BufferSource/ConstantSource(s) needing .start()
@@ -459,6 +481,11 @@ const AudioEngine = (() => {
     const reversed = !!power?.reverse_polarity;
     const minusRow = reversed ? 'rtp' : 'rtm'; // reverse_polarity changes which physical rail row the minus LEAD lands on, not which lead is ground
     const groundNet = (cp.powerMinusCol!=null) ? nets.find(nets.key(minusRow, cp.powerMinusCol)) : null;
+    // The supply rail is AC ground too: a supply is a low impedance at signal
+    // frequencies, so a collector resistor to V+ loads a node exactly as one
+    // to ground would. Needed to get coupling-cap corner frequencies right.
+    const plusRow   = reversed ? 'rtm' : 'rtp';
+    const supplyNet = (cp.powerPlusCol!=null) ? nets.find(nets.key(plusRow, cp.powerPlusCol)) : null;
 
     const netTaps  = new Map(); // net -> node to connect OUT FROM; also the Audio Probe tap (post-clamp)
     const netIns   = new Map(); // net -> node to connect INTO; same object as the tap unless a clamp sits on the net
@@ -519,6 +546,7 @@ const AudioEngine = (() => {
 
       const toUnits = v => Utils.clamp(Number.isFinite(v) ? v / VOLTS_PER_SIGNAL_UNIT : 0.99, 0.01, 0.99);
       const sh = ctx.createWaveShaper();
+      sh.oversample = CLIP_OVERSAMPLE;
       sh.curve = makeClipCurve(toUnits(clamp.pos), toUnits(clamp.neg));
       inBus.connect(sh);
       allNodes.push(sh);
@@ -555,7 +583,7 @@ const AudioEngine = (() => {
         used.add(inst.instanceId);
         stageCount++;
 
-        const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet, groundNet);
+        const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet, groundNet, supplyNet);
         const exitBus = busIn(otherNet); // arriving at the far net, so pre-clamp
         if (built) {
           entryBus.connect(built.in);
@@ -642,6 +670,73 @@ const AudioEngine = (() => {
     if (Number.isFinite(actual)) return actual;
     const nominal = parseFloat(inst.props[key]);
     return Number.isFinite(nominal) ? nominal : fallback;
+  }
+
+  // Resistance from a net to AC ground, used to give a coupling capacitor its
+  // REAL corner frequency instead of a hardcoded guess.
+  //
+  // "AC ground" is the ground rail OR the supply rail, because a supply is a
+  // low impedance at signal frequencies: a collector resistor to V+ loads a
+  // node exactly as one to ground would.
+  //
+  // Handles the shapes that actually set a coupling cap's load in pedal
+  // circuits, combined in parallel:
+  //   - a resistor from the net to AC ground
+  //   - a pot with one outer leg on the net and the other on AC ground (a
+  //     volume or tone pot presents its whole track to whatever feeds it)
+  //   - a transistor base on the net, input impedance ~ hFE*(re + Re)
+  //
+  // Returns null when it recognises nothing, so the caller can fall back
+  // VISIBLY rather than silently pretending it knew. That distinction matters:
+  // findEmitterResistance's silent zero for unrecognised topologies cost a
+  // full debugging session on a real circuit.
+  function acLoadResistance(net, nets, placed, groundNet, supplyNet, skipInstanceId) {
+    if (net == null) return null;
+    const acGrounds = new Set([groundNet, supplyNet].filter(n => n != null));
+    if (!acGrounds.size) return null;
+    const netOf = (row, col) => nets.find(nets.key(row, col));
+    const conductances = [];
+
+    for (const p of placed) {
+      if (p.failed || p.instanceId === skipInstanceId) continue;
+      const def = ComponentRegistry.getById(p.defId);
+      const bt  = def?.behavior?.type;
+
+      if (bt === 'resistor' && p.legs.length >= 2) {
+        const a = netOf(p.legs[0].row, p.legs[0].col);
+        const b = netOf(p.legs[p.legs.length-1].row, p.legs[p.legs.length-1].col);
+        const far = (a === net) ? b : (b === net) ? a : null;
+        if (far != null && acGrounds.has(far)) {
+          const R = resolvedValue(p, 'resistance', 0);
+          if (R > 0) conductances.push(1 / R);
+        }
+
+      } else if (bt === 'potentiometer' && p.legs.length >= 3) {
+        const ccw = netOf(p.legs[0].row, p.legs[0].col);
+        const cw  = netOf(p.legs[2].row, p.legs[2].col);
+        const far = (ccw === net) ? cw : (cw === net) ? ccw : null;
+        if (far != null && acGrounds.has(far)) {
+          const Rt = resolvedValue(p, 'resistance', 0);
+          if (Rt > 0) conductances.push(1 / Rt);
+        }
+
+      } else if ((bt === 'bjt_npn' || bt === 'bjt_pnp') && p.legs.length >= 3) {
+        const baseNet = netOf(p.legs[1].row, p.legs[1].col);
+        if (baseNet !== net) continue;
+        const eIdx = (p.props.pinout === 'CBE') ? 2 : 0;
+        const emitterNet = netOf(p.legs[eIdx].row, p.legs[eIdx].col);
+        const Re  = findEmitterResistance(emitterNet, groundNet, nets, placed);
+        const Ic  = Math.max(p._current || 0, 1e-6); // same floor as the gain formula
+        const re  = 0.026 / Ic;
+        const pm  = def.model_params?.[p.props.model] || {};
+        const hfe = parseFloat(p.props.hfe) || pm.hfe || 100;
+        const Rin = hfe * (re + Re);
+        if (Rin > 0) conductances.push(1 / Rin);
+      }
+    }
+
+    if (!conductances.length) return null;
+    return 1 / conductances.reduce((sum, g) => sum + g, 0);
   }
 
   function findEmitterResistance(emitterNet, groundNet, nets, placed) {
@@ -757,7 +852,7 @@ const AudioEngine = (() => {
     return { gain, headroom };
   }
 
-  function buildAudioStage(ctx, inst, def, nets, placed, entryNet, exitNet, groundNet) {
+  function buildAudioStage(ctx, inst, def, nets, placed, entryNet, exitNet, groundNet, supplyNet) {
     switch (def.behavior?.type) {
       case 'resistor': {
         // Net-based RC pairing: a capacitor shunting one of this resistor's
@@ -794,7 +889,8 @@ const AudioEngine = (() => {
       case 'bjt_npn': case 'bjt_pnp': {
         const { gain, headroom } = computeBjtGainAndHeadroom(inst, def, nets, placed, groundNet);
         const g = ctx.createGain(); g.gain.value = gain;
-        const sh = ctx.createWaveShaper(); sh.curve = makeClipCurve(headroom);
+        const sh = ctx.createWaveShaper(); sh.oversample = CLIP_OVERSAMPLE;
+        sh.curve = makeClipCurve(headroom);
         g.connect(sh);
         _liveGainStages.push({ inst, g, sh, nets, placed, groundNet });
         return { in: g, out: sh };
@@ -814,15 +910,43 @@ const AudioEngine = (() => {
         const drive = Utils.clamp((inst._current || 0) / ImA, 0, 1);
         const base  = isGerman ? 0.3 : 0.65;
         const threshold = Utils.clamp(base - drive*0.15, 0.15, 0.9); // harder-driven diode clips a bit sooner
-        const sh = ctx.createWaveShaper(); sh.curve = makeClipCurve(threshold);
+        const sh = ctx.createWaveShaper(); sh.oversample = CLIP_OVERSAMPLE;
+        sh.curve = makeClipCurve(threshold);
         return { in: sh, out: sh };
       }
       case 'capacitor': {
         // A capacitor actually IN the traced series path (as opposed to
         // shunting to ground off a resistor, handled above) is a coupling
-        // cap — a standalone highpass, no partner needed.
-        const C  = resolvedValue(inst, 'capacitance', 0.000001);
-        const fc = 1 / (2 * Math.PI * 10000 * C);
+        // cap: a highpass whose corner is set by C and the total series
+        // resistance around it, which is the source impedance on one side
+        // plus the load impedance on the other.
+        //
+        // Both are now derived from the netlist. This used to use a hardcoded
+        // 10k, which was wrong by up to 50x on real circuits: a Fuzz Face's
+        // 10nF into its 500k volume pot was modelled at 1592Hz when the real
+        // corner is ~32Hz, so the filter was removing every fundamental a
+        // guitar produces (open low E is 82Hz) and passing only harmonics.
+        // That is almost certainly the long-standing "lacks low-end
+        // heaviness" complaint, which had been attributed to unmodelled
+        // input/output impedance instead.
+        const C     = resolvedValue(inst, 'capacitance', 0.000001);
+        const rSrc  = acLoadResistance(entryNet, nets, placed, groundNet, supplyNet, inst.instanceId);
+        const rLoad = acLoadResistance(exitNet,  nets, placed, groundNet, supplyNet, inst.instanceId);
+
+        let R;
+        if (rSrc == null && rLoad == null) {
+          // Nothing recognisable on either side. Warn rather than silently
+          // substituting a number and presenting the result as if it meant
+          // something.
+          R = CAP_REFERENCE_FALLBACK_R;
+          console.warn(`[Audio] Coupling cap ${inst.props?.title || inst.instanceId}: ` +
+            `couldn't derive a load impedance from the netlist, falling back to ` +
+            `${CAP_REFERENCE_FALLBACK_R}Ω — its corner frequency is a guess.`);
+        } else {
+          R = (rSrc || 0) + (rLoad || 0);
+        }
+
+        const fc = 1 / (2 * Math.PI * Math.max(R, 1) * C);
         const f  = ctx.createBiquadFilter();
         f.type = 'highpass'; f.frequency.value = Utils.clamp(fc, 10, 20000);
         return { in: f, out: f };
