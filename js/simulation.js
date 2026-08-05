@@ -57,6 +57,27 @@ const Simulation = (() => {
 
     const nets = buildNetMap(placed, wires);
 
+    // Structural check: a semiconductor terminal that is the ONLY thing on
+    // its net isn't connected to anything — on a real board that leg is
+    // sitting in an empty row, and nothing about the solve downstream will
+    // mean anything.
+    //
+    // Checked structurally rather than by symptom, because the symptom is not
+    // stable. A floating collector used to blow its node up to ~1e9 volts
+    // (the range check further down catches that), but once the part
+    // saturates, the saturation clamp ties the collector to the emitter
+    // through RSAT and the voltage reads perfectly ordinary while current is
+    // still reported flowing through a leg that goes nowhere. Structure
+    // doesn't lie the way a solved number can.
+    const floating = findFloatingTerminal(placed, nets);
+    if (floating) {
+      failBoard('🔌', 'Disconnected Leg',
+        `${floating.who}'s ${floating.leg} isn't connected to anything — it's the only thing on ` +
+        `its row. A ${floating.label} with a floating leg can't do anything on a real board, and ` +
+        `the voltages here won't mean much until it's wired up.`);
+      return;
+    }
+
     // ── Permanent power supply (Phase 3): feeds the TOP rail only. The
     // bottom rail is deliberately left untouched here — it's electrically
     // isolated unless the user jumpers it to the top rail or places their
@@ -212,6 +233,35 @@ const Simulation = (() => {
     const { netVoltage, diodeCurrents, bjtCurrents } = solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges);
     _lastNets = nets; _lastNetVoltage = netVoltage;
 
+    // Sanity check: in this DC-only model (no inductors, and caps correctly
+    // block DC) no node can legitimately sit outside the supply rails — a
+    // resistive network's node voltages are bounded by its sources. A node
+    // that lands far outside means the netlist is broken, and by far the most
+    // common cause is a semiconductor terminal connected to nothing: the
+    // solver's tiny EPS leak-to-ground is then the only path to ground, so
+    // V = I/EPS explodes to ~1e9.
+    //
+    // Worth catching loudly. A real board just wouldn't work; before this
+    // check the app instead solved a floating collector to -9.7 GIGAvolts,
+    // reported no problem at all, and fed that straight into the audio model,
+    // which cost a long debugging session chasing the sound rather than the
+    // wiring.
+    const supplyHigh = Math.max(0, ...fixedNodes.map(f => f.voltage));
+    const RANGE_SLACK = 1.0; // volts, comfortably past solver noise
+    let worstNode = null;
+    for (const [net, v] of netVoltage) {
+      if (Number.isFinite(v) && v >= -RANGE_SLACK && v <= supplyHigh + RANGE_SLACK) continue;
+      if (!worstNode || !Number.isFinite(v) || Math.abs(v) > Math.abs(worstNode.v)) worstNode = { net, v };
+    }
+    if (worstNode) {
+      failBoard('⚡', 'Impossible Voltage',
+        `${describeNet(worstNode.net, placed, nets)} solved to ${formatVolts(worstNode.v)}, ` +
+        `which can't happen on a ${supplyHigh}V supply. Something is wired wrong — most often a ` +
+        `component leg (commonly a transistor's collector or emitter) isn't actually connected to ` +
+        `anything. Check for a leg sitting in a row with nothing else in it.`);
+      return;
+    }
+
     // Current actually drawn from the permanent supply, remembered for next
     // tick's sag calculation.
     if (_battery.virtualPos) {
@@ -365,8 +415,12 @@ const Simulation = (() => {
         // enough headroom" assumption regardless of supply — that flat
         // assumption meant halving the supply barely moved this number,
         // which is why changing supply voltage barely changed the sound.
+        // Measured from the model's OWN saturation floor, not a flat 0.2V —
+        // germanium saturates at half silicon's Vce(sat), so a flat floor
+        // understated how much headroom a germanium stage actually has.
         const headroomRef = 3 * ((_activeSupplyV ?? 9) / 9);
-        inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - 0.2) / headroomRef, 0, 1);
+        const vceSatN = Number.isFinite(parseFloat(pm.vce_sat)) ? parseFloat(pm.vce_sat) : 0.2;
+        inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - vceSatN) / headroomRef, 0, 1);
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
       }
@@ -381,7 +435,8 @@ const Simulation = (() => {
         inst._saturated = !!c?.saturated;
         // Same reasoning as bjt_npn — see that case for the full comment.
         const headroomRefPnp = 3 * ((_activeSupplyV ?? 9) / 9);
-        inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - 0.2) / headroomRefPnp, 0, 1);
+        const vceSatP = Number.isFinite(parseFloat(pm.vce_sat)) ? parseFloat(pm.vce_sat) : 0.2;
+        inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - vceSatP) / headroomRefPnp, 0, 1);
         if (Ic > IcMax) fail(inst, def, 'over_current');
         break;
       }
@@ -444,7 +499,14 @@ const Simulation = (() => {
   const ROFF   = 1e9;   // ohms — effectively open for a non-conducting diode/LED
   const RBE    = 10000; // ohms — effective "on" resistance of a transistor's base-emitter junction past Vbe (same figure the old per-instance-only approximation used)
   const RSAT   = 1;     // ohms — small "on" resistance of the saturation clamp (collector-emitter, once saturated)
-  const VCESAT = 0.2;   // volts — realistic floor for Vce (or Vec for PNP) once a transistor saturates
+  // volts — fallback floor for Vce (or Vec for PNP) once a transistor
+  // saturates, used only when the model has no vce_sat of its own. Every
+  // model in the component JSON does define one, and germanium's (0.1V) is
+  // half silicon's, so the per-model value is read from pm.vce_sat at edge
+  // build time (see bjtEdges below). This constant used to be applied to
+  // every transistor regardless of material, which clamped germanium parts
+  // at the silicon floor.
+  const VCESAT_FALLBACK = 0.2;
   const EPS    = 1e-12; // tiny leak-to-ground on every net so isolated islands don't produce a singular matrix
 
   function solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges) {
@@ -491,16 +553,31 @@ const Simulation = (() => {
         const mk  = inst.props.model || (pnp ? '2N3906' : '2N3904');
         const pm  = def.model_params?.[mk] || {};
         const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
-        // ICBO (collector-base leakage with the emitter open) gets amplified
-        // by the transistor exactly like base current does — a real
-        // transistor's collector current is approximately
-        // Ic = hFE*Ib + (hFE+1)*ICBO, not just hFE*Ib. This term is what's
-        // missing for germanium especially (icbo_na is 100-500x higher than
-        // silicon in the component data) — it's the actual mechanism behind
-        // "leaky germanium transistor" bias drift/warmth, which some builders
-        // work around by tweaking bias resistor values instead.
+        // ICBO is collector-base junction leakage. It's stamped as a real
+        // current source from collector to base (see the bjtEdges loop) and
+        // the solve decides how much of it gets amplified, rather than being
+        // pre-multiplied here.
+        //
+        // This used to be `(hFE+1) * ICBO` stamped collector-to-emitter. That
+        // formula is the ICEO case, meaning base OPEN — the maximum possible
+        // multiplication, not the general one. In a real circuit the base
+        // isn't open: leakage arriving at the base splits between the base
+        // network and the B-E junction, so the real multiplication runs from
+        // ~1x (base shorted to emitter) up to (hFE+1)x (base open), set by
+        // the base circuit's impedance. Applying the base-open maximum
+        // unconditionally made realistic germanium ICBO values unusable — a
+        // Fuzz Face with 5uA on both transistors had BOTH collector currents
+        // pinned at exactly (hFE+1)*ICBO, the bias network contributing
+        // nothing, and anything at or above 10uA drove the collector to a
+        // non-physical negative voltage. Real builders run these parts at
+        // 50-150uA.
+        //
+        // Stamping it at the base instead needs no special-casing: current
+        // into the base raises Vbe, and the existing gm stamp amplifies
+        // whatever the solve settles on. Base open still yields (hFE+1)*ICBO,
+        // now as an emergent result rather than a hardcoded assumption.
         const icboNa = parseFloat(inst.props.leakage) || pm.icbo_na || 0;
-        const Ileak = (hfe + 1) * (icboNa / 1e9); // nA -> A
+        const Icbo = icboNa / 1e9; // nA -> A, raw junction leakage, NOT pre-multiplied
         const Vf  = pm.vbe || 0.65; // magnitude of the turn-on threshold, whichever junction direction applies
         const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
         const cIdx = eIdx === 0 ? 2 : 0;
@@ -517,7 +594,9 @@ const Simulation = (() => {
         const b = pnp ? baseNet : emitterNet;
         const icSrc  = pnp ? collectorNet : emitterNet;  // where Ic is injected
         const icSink = pnp ? emitterNet   : collectorNet; // where Ic is extracted from
-        bjtEdges.push({ a, b, Vf, inst, gm: hfe/RBE, icSrc, icSink, pnp, Ileak });
+        const vceSat = Number.isFinite(parseFloat(pm.vce_sat)) ? parseFloat(pm.vce_sat) : VCESAT_FALLBACK;
+        bjtEdges.push({ a, b, Vf, inst, gm: hfe/RBE, icSrc, icSink, pnp, Icbo, vceSat,
+                        baseNet, collectorNet });
       }
     }
 
@@ -602,6 +681,17 @@ const Simulation = (() => {
         const on = bjtStates[idx];
         const g = 1/(on ? RBE : ROFF);
         stampConductance(G, I, e.a, e.b, g);
+        // Collector-base leakage, stamped unconditionally: the CB junction is
+        // reverse-biased and leaking whatever the B-E junction is doing, and
+        // regardless of saturation. NPN: conventional current enters the
+        // collector terminal and leaves at the base, so inject at base and
+        // extract at collector. PNP mirrors it. Whether this ends up
+        // amplified is left to the solve — it depends on how much of it the
+        // base network drains versus how much reaches the B-E junction.
+        if (e.Icbo && e.baseNet != null && e.collectorNet != null) {
+          if (e.pnp) stampCurrentSource(I, e.collectorNet, e.baseNet, e.Icbo);
+          else       stampCurrentSource(I, e.baseNet, e.collectorNet, e.Icbo);
+        }
         if (on) {
           stampCurrentSource(I, e.a, e.b, g*e.Vf);
           if (satStates[idx]) {
@@ -612,16 +702,16 @@ const Simulation = (() => {
             // can actually push through that clamp becomes Ic.
             const gs = 1/RSAT;
             stampConductance(G, I, e.icSink, e.icSrc, gs);
-            stampCurrentSource(I, e.icSink, e.icSrc, gs*VCESAT);
+            stampCurrentSource(I, e.icSink, e.icSrc, gs*e.vceSat);
           } else {
             stampBjtIc(G, I, e, e.gm);
-            if (e.Ileak) stampCurrentSource(I, e.icSrc, e.icSink, e.Ileak);
           }
-        } else if (e.Ileak) {
-          // B-E junction not conducting (Ib=0) doesn't mean Ic=0 for a real
-          // transistor — this is the ICEO-like leakage floor.
-          stampCurrentSource(I, e.icSrc, e.icSink, e.Ileak);
         }
+        // Nothing extra when the B-E junction is off: the collector-to-base
+        // leakage stamped above is already flowing, and if the base network
+        // can't drain it, it raises Vbe until the junction turns on and the
+        // relaxation loop picks that up on the next iteration. That's the
+        // real mechanism, rather than a separate hardcoded "off" leakage.
       });
 
       V = gaussianSolve(G, I);
@@ -653,13 +743,13 @@ const Simulation = (() => {
           // realistic floor, the external circuit can't actually sustain it —
           // switch to the clamp for the next iteration.
           const vce = vSink - vSrc;
-          if (vce < VCESAT * 0.9) { satStates[idx] = true; changed = true; }
+          if (vce < e.vceSat * 0.9) { satStates[idx] = true; changed = true; }
         } else {
           // Saturated: if the clamp is passing MORE current than hFE*Ib would
           // even allow, the transistor's own gain — not the external circuit —
           // is now the binding constraint, so revert to active mode.
-          const IcActiveWouldBe = Math.max(0, e.gm*((va-vb) - e.Vf) + (e.Ileak||0));
-          const IcSatActual = Math.max(0, (1/RSAT)*((vSink-vSrc) - VCESAT));
+          const IcActiveWouldBe = Math.max(0, e.gm*((va-vb) - e.Vf)) + (e.Icbo||0);
+          const IcSatActual = Math.max(0, (1/RSAT)*((vSink-vSrc) - e.vceSat));
           if (IcSatActual > IcActiveWouldBe) { satStates[idx] = false; changed = true; }
         }
       });
@@ -685,16 +775,17 @@ const Simulation = (() => {
       const vSink = netIndex.has(e.icSink) ? V[netIndex.get(e.icSink)] : fixed.get(e.icSink);
       const vSrc  = netIndex.has(e.icSrc)  ? V[netIndex.get(e.icSrc)]  : fixed.get(e.icSrc);
       const vce = vSink - vSrc; // Vce for NPN, Vec for PNP (icSink/icSrc already oriented per polarity)
+      // Total current at the collector terminal: the amplified part plus the
+      // collector-base leakage, which flows through the collector whatever
+      // the junction is doing. The leakage's AMPLIFIED contribution is
+      // already inside the gm term, via the Vbe the solve arrived at.
       let Ic = 0;
       if (on) {
-        if (satStates[idx]) {
-          Ic = Math.max(0, (1/RSAT)*(vce - VCESAT));
-        } else {
-          Ic = Math.max(0, e.gm*((va-vb) - e.Vf) + (e.Ileak||0));
-        }
-      } else {
-        Ic = e.Ileak || 0; // leaks even with the junction off
+        Ic = satStates[idx]
+          ? Math.max(0, (1/RSAT)*(vce - e.vceSat))
+          : Math.max(0, e.gm*((va-vb) - e.Vf));
       }
+      Ic += (e.Icbo || 0); // leaks even with the junction off
       bjtCurrents.set(e.inst, { Ib, Ic, vce, saturated: satStates[idx] && on });
     });
 
@@ -840,6 +931,77 @@ const Simulation = (() => {
       }
     }
     return null;
+  }
+
+  // First semiconductor terminal (transistor/diode/LED leg) that has nothing
+  // else on its net, or null if every one is connected to something.
+  //
+  // Only semiconductors are checked. A resistor or capacitor with one leg
+  // parked in an empty row is a normal in-progress board state and shouldn't
+  // stop the sim, whereas a transistor terminal going nowhere means the part
+  // can't conduct at all and every number downstream is meaningless.
+  //
+  // Rails are exempt (they're real conductors carrying the supply), as are
+  // the workbench's Input and Output holes, where a single leg landing alone
+  // is exactly how those are meant to be connected.
+  function findFloatingTerminal(placed, nets) {
+    const cp = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getConnectionPoints)
+      ? WorkbenchStrip.getConnectionPoints() : null;
+    const exempt = new Set(['rtp','rtm','rbp','rbm'].map(r => nets.find(nets.key(r, 0))));
+    if (cp) {
+      exempt.add(nets.find(nets.key(cp.firstRow, cp.inputCol)));
+      exempt.add(nets.find(nets.key(cp.firstRow, cp.outputCol)));
+    }
+
+    const legsOnNet = new Map();
+    for (const inst of placed) {
+      if (inst.failed) continue;
+      for (const l of inst.legs) {
+        const n = nets.find(nets.key(l.row, l.col));
+        legsOnNet.set(n, (legsOnNet.get(n) || 0) + 1);
+      }
+    }
+
+    for (const inst of placed) {
+      if (inst.failed) continue;
+      const def = ComponentRegistry.getById(inst.defId);
+      const bt = def?.behavior?.type;
+      if (bt !== 'bjt_npn' && bt !== 'bjt_pnp' && bt !== 'diode' && bt !== 'led') continue;
+      for (let i = 0; i < inst.legs.length; i++) {
+        const n = nets.find(nets.key(inst.legs[i].row, inst.legs[i].col));
+        if (exempt.has(n) || (legsOnNet.get(n) || 0) > 1) continue;
+        return {
+          who:   inst.props?.title || def?.label || inst.instanceId,
+          leg:   def?.leg_labels?.[i] ? `${def.leg_labels[i]} leg` : `leg ${i + 1}`,
+          label: def?.label || 'component',
+        };
+      }
+    }
+    return null;
+  }
+
+  // Human-readable name for a net, for error messages: the first component
+  // leg found sitting on it, named by the user's own title where they set one
+  // and by the def's leg labels ('C', 'B', 'E', '+', '-') for the terminal.
+  // Falls back to a generic phrase rather than exposing an internal net id,
+  // which would mean nothing to someone looking at a breadboard.
+  function describeNet(net, placed, nets) {
+    for (const inst of placed) {
+      const def = ComponentRegistry.getById(inst.defId);
+      const legLabels = def?.leg_labels || [];
+      for (let i = 0; i < inst.legs.length; i++) {
+        const l = inst.legs[i];
+        if (nets.find(nets.key(l.row, l.col)) !== net) continue;
+        const who = inst.props?.title || def?.label || inst.instanceId;
+        return legLabels[i] ? `${who}'s ${legLabels[i]} leg` : who;
+      }
+    }
+    return 'A point on the board';
+  }
+
+  function formatVolts(v) {
+    if (!Number.isFinite(v)) return 'a non-numeric value';
+    return (Math.abs(v) >= 1e6 ? v.toExponential(2) : v.toFixed(2)) + 'V';
   }
 
   // Board-level failure — a wiring/topology fault with no single
