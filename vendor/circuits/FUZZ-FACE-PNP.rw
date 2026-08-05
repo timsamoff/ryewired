@@ -24,9 +24,7 @@
         "leakage": 120000,
         "leakage__unit": "µA",
         "title": "Q1"
-      },
-      "_saturated": true,
-      "_vceHeadroom": 0.00006656038135924303
+      }
     },
     {
       "instanceId": "Q6DPBHS",
@@ -52,9 +50,7 @@
         "leakage": 50000,
         "leakage__unit": "µA",
         "title": "Q2"
-      },
-      "_saturated": false,
-      "_vceHeadroom": 1
+      }
     },
     {
       "instanceId": "RAHXTHV",
@@ -160,9 +156,7 @@
         "wiper": 0.35,
         "resistance__unit": "kΩ",
         "title": "Volume"
-      },
-      "_rLow": 61249.99999999999,
-      "_rHigh": 438750
+      }
     },
     {
       "instanceId": "C9XUY41",
@@ -207,9 +201,7 @@
         "wiper": 0.5,
         "resistance__unit": "kΩ",
         "title": "Fuzz"
-      },
-      "_rLow": 500,
-      "_rHigh": 500
+      }
     },
     {
       "instanceId": "C+9LICU",
@@ -217,11 +209,11 @@
       "legs": [
         {
           "row": 8,
-          "col": 55
+          "col": 45
         },
         {
           "row": 8,
-          "col": 45
+          "col": 55
         }
       ],
       "props": {
@@ -237,11 +229,11 @@
       "legs": [
         {
           "row": 6,
-          "col": 33
+          "col": 34
         },
         {
           "row": 6,
-          "col": 34
+          "col": 33
         }
       ],
       "props": {
