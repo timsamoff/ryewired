@@ -339,6 +339,7 @@ const PropertiesPanel = (() => {
       el.addEventListener('input',  onPropChange);
       el.addEventListener('change', onPropChange);
     });
+    wireCustomSelects();
 
     // Audio file button
     const audioBtn = _content.querySelector('.prop-audio-btn');
@@ -439,10 +440,38 @@ const PropertiesPanel = (() => {
       case 'select': {
         const opts = prop.options.map(o =>
           `<option value="${o}" ${o===value?'selected':''}>${o}</option>`).join('');
-        return `
+
+        // Short lists stay as a native select. Long ones (the transistor model
+        // list is 18 entries) get a custom dropdown, because a native select's
+        // popup is drawn by the OS and cannot be capped to N rows or given a
+        // styled scrollbar from CSS.
+        //
+        // The real <select> is kept in the DOM, visually hidden, and remains
+        // the source of truth: the custom UI writes to it and dispatches
+        // 'change', so onPropChange and the engaged-lock's blanket
+        // `querySelectorAll('input, select, textarea, button').disabled = true`
+        // both keep working with no special cases.
+        if (prop.options.length <= LONG_SELECT_THRESHOLD) {
+          return `
           <div class="prop-group">
             <label class="prop-label">${prop.label}</label>
             <select class="prop-input" data-key="${prop.key}">${opts}</select>
+          </div>`;
+        }
+
+        const items = prop.options.map(o =>
+          `<button type="button" class="cs-item${o===value?' cs-selected':''}" data-value="${o}">${o}</button>`).join('');
+        return `
+          <div class="prop-group">
+            <label class="prop-label">${prop.label}</label>
+            <div class="custom-select" data-for="${prop.key}">
+              <select class="prop-input cs-native" data-key="${prop.key}">${opts}</select>
+              <button type="button" class="cs-trigger">
+                <span class="cs-value">${value}</span>
+                <i class="fa-solid fa-chevron-down"></i>
+              </button>
+              <div class="cs-menu">${items}</div>
+            </div>
           </div>`;
       }
       case 'boolean':
@@ -501,6 +530,54 @@ const PropertiesPanel = (() => {
       default: return '';
     }
   }
+
+  // Option-count above which a select becomes a custom dropdown. Matches the
+  // 8 rows the menu is capped at, so anything that fits without scrolling
+  // stays a plain native select.
+  const LONG_SELECT_THRESHOLD = 8;
+
+  // Wires the custom dropdowns built above. The hidden native <select> stays
+  // authoritative, so this only has to keep the two in sync and close itself.
+  function wireCustomSelects() {
+    for (const cs of _content.querySelectorAll('.custom-select')) {
+      const native  = cs.querySelector('.cs-native');
+      const trigger = cs.querySelector('.cs-trigger');
+      const menu    = cs.querySelector('.cs-menu');
+      const label   = cs.querySelector('.cs-value');
+
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (trigger.disabled) return;
+        const wasOpen = cs.classList.contains('cs-open');
+        closeAllCustomSelects();
+        if (wasOpen) return;
+        cs.classList.add('cs-open');
+        // Scroll the current choice into view — with 18 models the selected
+        // one is often below the fold.
+        const sel = menu.querySelector('.cs-selected');
+        if (sel) sel.scrollIntoView({ block: 'nearest' });
+      });
+
+      for (const item of menu.querySelectorAll('.cs-item')) {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const v = item.dataset.value;
+          native.value = v;
+          label.textContent = v;
+          menu.querySelectorAll('.cs-selected').forEach(n => n.classList.remove('cs-selected'));
+          item.classList.add('cs-selected');
+          cs.classList.remove('cs-open');
+          // Drive the existing handler rather than duplicating its logic.
+          native.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+      }
+    }
+  }
+  function closeAllCustomSelects() {
+    document.querySelectorAll('.custom-select.cs-open').forEach(n => n.classList.remove('cs-open'));
+  }
+  document.addEventListener('click', closeAllCustomSelects);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllCustomSelects(); });
 
   function onPropChange(e) {
     if (!_currentInst) return;

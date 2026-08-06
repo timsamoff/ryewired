@@ -489,6 +489,18 @@ const AudioEngine = (() => {
     // to ground would. Needed to get coupling-cap corner frequencies right.
     const plusRow   = reversed ? 'rtm' : 'rtp';
     const supplyNet = (cp.powerPlusCol!=null) ? nets.find(nets.key(plusRow, cp.powerPlusCol)) : null;
+    // BOTH rails are AC ground, and the walk has to honour that or it will
+    // route audio THROUGH a rail. groundNet is whichever net the minus LEAD
+    // lands on, which is not the same thing as the circuit's signal
+    // reference: in a positive-ground PNP build (reverse_polarity), the minus
+    // lead is the -9V supply and the rail every ground symbol returns to is
+    // the PLUS one. Treating only groundNet as ground there left the real
+    // ground looking like an ordinary signal net, and a Fuzz Face PNP built a
+    // path of Input Cap -> Fuzz pot -> 22uF -> Volume that bypassed both
+    // transistors: two clipping stages built, fed, and completely off the
+    // path. Measured as neutral on the NPN Fuzz Face and the Electra, which
+    // build exactly the graph they did before.
+    const isAcGround = net => net != null && (net === groundNet || net === supplyNet);
 
     const netTaps  = new Map(); // net -> node to connect OUT FROM; also the Audio Probe tap (post-clamp)
     const netIns   = new Map(); // net -> node to connect INTO; same object as the tap unless a clamp sits on the net
@@ -566,7 +578,7 @@ const AudioEngine = (() => {
 
     while (frontier.length && stageCount < MAX_STAGES) {
       const net = frontier.shift();
-      if (net === groundNet) continue; // ground is a valid destination, never a valid source of further hops — see note above traceSignalPath
+      if (isAcGround(net)) continue; // an AC ground is a valid destination, never a valid source of further hops — see note above traceSignalPath
       const entryBus = busOut(net); // leaving this net, so post-clamp
 
       for (const inst of placed) {
@@ -602,7 +614,7 @@ const AudioEngine = (() => {
           entryBus.connect(exitBus);
         }
 
-        if (otherNet !== groundNet && !visitedNets.has(otherNet)) { visitedNets.add(otherNet); frontier.push(otherNet); }
+        if (!isAcGround(otherNet) && !visitedNets.has(otherNet)) { visitedNets.add(otherNet); frontier.push(otherNet); }
       }
     }
 
@@ -613,6 +625,7 @@ const AudioEngine = (() => {
     // without needing to special-case every place a component might route
     // to ground.
     if (groundNet != null) netTaps.set(groundNet, null);
+    if (supplyNet != null) netTaps.set(supplyNet, null);
 
     return { nets, netTaps, reachedOutput: netTaps.has(outputNet) && netTaps.get(outputNet)!=null, tail: netTaps.get(outputNet) || null, allNodes };
   }

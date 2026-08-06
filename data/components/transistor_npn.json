@@ -18,18 +18,29 @@
       "type": "select",
       "options": [
         "2N3904",
-        "BC108B",
-        "BC547",
         "2N2222",
         "2N5088",
+        "BC547",
+        "BC108A",
+        "BC108B",
+        "BC108C",
+        "BC109A",
+        "BC109B",
+        "BC109C",
         "2N1302",
-        "2N1304"
+        "2N1304",
+        "2N169A",
+        "2N193",
+        "AC127",
+        "AC187",
+        "GT404V",
+        "MP38A"
       ],
       "default": "2N3904"
     },
     {
       "key": "hfe",
-      "label": "hFE (gain) \u2014 optional, overrides model's rating",
+      "label": "hFE (gain) — optional, overrides model's rating",
       "type": "number",
       "default": ""
     },
@@ -37,7 +48,10 @@
       "key": "pinout",
       "label": "Pinout (left to right)",
       "type": "select",
-      "options": ["EBC", "CBE"],
+      "options": [
+        "EBC",
+        "CBE"
+      ],
       "default": "EBC"
     },
     {
@@ -46,7 +60,16 @@
       "type": "value_unit",
       "default": "",
       "default_unit": "nA",
-      "units": [ {"label":"nA","factor":1}, {"label":"µA","factor":1000} ]
+      "units": [
+        {
+          "label": "nA",
+          "factor": 1
+        },
+        {
+          "label": "µA",
+          "factor": 1000
+        }
+      ]
     }
   ],
   "model_params": {
@@ -58,24 +81,6 @@
       "max_vce": 40,
       "type": "silicon",
       "icbo_na": 50
-    },
-    "BC108B": {
-      "hfe": 110,
-      "vce_sat": 0.2,
-      "vbe": 0.65,
-      "max_ic_ma": 100,
-      "max_vce": 20,
-      "type": "silicon",
-      "icbo_na": 15
-    },
-    "BC547": {
-      "hfe": 200,
-      "vce_sat": 0.2,
-      "vbe": 0.65,
-      "max_ic_ma": 100,
-      "max_vce": 45,
-      "type": "silicon",
-      "icbo_na": 15
     },
     "2N2222": {
       "hfe": 75,
@@ -95,6 +100,72 @@
       "type": "silicon",
       "icbo_na": 50
     },
+    "BC547": {
+      "hfe": 200,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 100,
+      "max_vce": 45,
+      "type": "silicon",
+      "icbo_na": 15
+    },
+    "BC108A": {
+      "hfe": 165,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 200,
+      "max_vce": 20,
+      "type": "silicon",
+      "icbo_na": 15
+    },
+    "BC108B": {
+      "hfe": 325,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 200,
+      "max_vce": 20,
+      "type": "silicon",
+      "icbo_na": 15
+    },
+    "BC108C": {
+      "hfe": 610,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 200,
+      "max_vce": 20,
+      "type": "silicon",
+      "icbo_na": 15
+    },
+    "BC109A": {
+      "hfe": 165,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 200,
+      "max_vce": 20,
+      "type": "silicon",
+      "icbo_na": 15,
+      "ft_mhz": 100
+    },
+    "BC109B": {
+      "hfe": 325,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 200,
+      "max_vce": 25,
+      "type": "silicon",
+      "icbo_na": 15,
+      "ft_mhz": 150
+    },
+    "BC109C": {
+      "hfe": 590,
+      "vce_sat": 0.2,
+      "vbe": 0.65,
+      "max_ic_ma": 200,
+      "max_vce": 25,
+      "type": "silicon",
+      "icbo_na": 15,
+      "ft_mhz": 125
+    },
     "2N1302": {
       "hfe": 45,
       "vce_sat": 0.1,
@@ -102,7 +173,7 @@
       "max_ic_ma": 300,
       "max_vce": 25,
       "type": "germanium",
-      "icbo_na": 100000
+      "icbo_na": 175000
     },
     "2N1304": {
       "hfe": 60,
@@ -112,6 +183,65 @@
       "max_vce": 25,
       "type": "germanium",
       "icbo_na": 100000
+    },
+    "2N169A": {
+      "hfe": 70,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 25,
+      "max_vce": 25,
+      "type": "germanium",
+      "icbo_na": 10000,
+      "ft_mhz": 4,
+      "ccb_pf": 3.5
+    },
+    "2N193": {
+      "hfe": 45,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 50,
+      "max_vce": 18,
+      "type": "germanium",
+      "icbo_na": 12000,
+      "ft_mhz": 1,
+      "ccb_pf": 22
+    },
+    "AC127": {
+      "hfe": 100,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 500,
+      "max_vce": 32,
+      "type": "germanium",
+      "icbo_na": 25000
+    },
+    "AC187": {
+      "hfe": 175,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 1000,
+      "max_vce": 15,
+      "type": "germanium",
+      "icbo_na": 30000
+    },
+    "GT404V": {
+      "hfe": 60,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 500,
+      "max_vce": 40,
+      "type": "germanium",
+      "icbo_na": 15000
+    },
+    "MP38A": {
+      "hfe": 65,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 20,
+      "max_vce": 15,
+      "type": "germanium",
+      "icbo_na": 30000,
+      "ft_mhz": 2
     }
   },
   "behavior": {

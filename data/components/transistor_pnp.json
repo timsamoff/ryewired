@@ -18,18 +18,19 @@
       "type": "select",
       "options": [
         "2N3906",
+        "2N2907",
         "BC178",
         "BC557",
-        "2N2907",
         "AC128",
         "OC75",
-        "NKT275"
+        "NKT275",
+        "2N1309"
       ],
       "default": "2N3906"
     },
     {
       "key": "hfe",
-      "label": "hFE (gain) \u2014 optional, overrides model's rating",
+      "label": "hFE (gain) — optional, overrides model's rating",
       "type": "number",
       "default": ""
     },
@@ -37,7 +38,10 @@
       "key": "pinout",
       "label": "Pinout (left to right)",
       "type": "select",
-      "options": ["EBC", "CBE"],
+      "options": [
+        "EBC",
+        "CBE"
+      ],
       "default": "EBC"
     },
     {
@@ -46,7 +50,16 @@
       "type": "value_unit",
       "default": "",
       "default_unit": "nA",
-      "units": [ {"label":"nA","factor":1}, {"label":"µA","factor":1000} ]
+      "units": [
+        {
+          "label": "nA",
+          "factor": 1
+        },
+        {
+          "label": "µA",
+          "factor": 1000
+        }
+      ]
     }
   ],
   "model_params": {
@@ -58,6 +71,15 @@
       "max_vce": 40,
       "type": "silicon",
       "icbo_na": 50
+    },
+    "2N2907": {
+      "hfe": 100,
+      "vce_sat": 0.4,
+      "vbe": 0.65,
+      "max_ic_ma": 600,
+      "max_vce": 40,
+      "type": "silicon",
+      "icbo_na": 10
     },
     "BC178": {
       "hfe": 180,
@@ -77,15 +99,6 @@
       "type": "silicon",
       "icbo_na": 15
     },
-    "2N2907": {
-      "hfe": 100,
-      "vce_sat": 0.4,
-      "vbe": 0.65,
-      "max_ic_ma": 600,
-      "max_vce": 40,
-      "type": "silicon",
-      "icbo_na": 10
-    },
     "AC128": {
       "hfe": 85,
       "vce_sat": 0.1,
@@ -93,7 +106,7 @@
       "max_ic_ma": 200,
       "max_vce": 20,
       "type": "germanium",
-      "icbo_na": 100000
+      "icbo_na": 250000
     },
     "OC75": {
       "hfe": 60,
@@ -102,7 +115,7 @@
       "max_ic_ma": 50,
       "max_vce": 15,
       "type": "germanium",
-      "icbo_na": 100000
+      "icbo_na": 400000
     },
     "NKT275": {
       "hfe": 90,
@@ -111,7 +124,17 @@
       "max_ic_ma": 50,
       "max_vce": 20,
       "type": "germanium",
-      "icbo_na": 100000
+      "icbo_na": 175000
+    },
+    "2N1309": {
+      "hfe": 100,
+      "vce_sat": 0.1,
+      "vbe": 0.2,
+      "max_ic_ma": 300,
+      "max_vce": 30,
+      "type": "germanium",
+      "icbo_na": 10000,
+      "ccb_pf": 20
     }
   },
   "behavior": {

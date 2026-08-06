@@ -18,17 +18,13 @@
         }
       ],
       "props": {
-        "model": "BC108B",
-        "hfe": 110,
+        "model": "BC109A",
+        "hfe": 165,
         "pinout": "EBC",
         "leakage": 15,
         "leakage__unit": "nA",
         "title": "Q1"
-      },
-      "_saturated": false,
-      "_vceHeadroom": 0.4625177663923517,
-      "_swingDown": 1.3875532991770552,
-      "_swingUp": 7.412446700822945
+      }
     },
     {
       "instanceId": "Q6DPBHS",
@@ -48,17 +44,13 @@
         }
       ],
       "props": {
-        "model": "BC108B",
-        "hfe": 110,
+        "model": "BC109A",
+        "hfe": 165,
         "pinout": "EBC",
         "leakage": 15,
         "leakage__unit": "nA",
         "title": "Q2"
-      },
-      "_saturated": false,
-      "_vceHeadroom": 0.17794698714971902,
-      "_swingDown": 0.533840961449157,
-      "_swingUp": 7.40625114543631
+      }
     },
     {
       "instanceId": "RAHXTHV",
@@ -164,9 +156,7 @@
         "wiper": 0.35,
         "resistance__unit": "kΩ",
         "title": "Volume"
-      },
-      "_rLow": 61249.99999999999,
-      "_rHigh": 438750
+      }
     },
     {
       "instanceId": "C9XUY41",
@@ -208,12 +198,10 @@
       "props": {
         "resistance": 1000,
         "taper": "Linear (B)",
-        "wiper": 0.51,
+        "wiper": 0.63,
         "resistance__unit": "kΩ",
         "title": "Fuzz"
-      },
-      "_rLow": 510,
-      "_rHigh": 490
+      }
     },
     {
       "instanceId": "C+9LICU",
@@ -393,7 +381,7 @@
       "dc_offset": 0,
       "phase": 0,
       "looping": true,
-      "audio_file": "151009__khoon__rhythm-1-clean-95-bpm.wav",
+      "audio_file": null,
       "audio_source": "upload"
     },
     "output": {
