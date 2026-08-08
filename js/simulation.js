@@ -3,7 +3,7 @@
 // then traces current paths through components to compute voltages/brightness.
 
 const Simulation = (() => {
-  let _running=false, _interval=null, _onFailure=null, _onUpdate=null, _onTopologyChange=null;
+  let _running=false, _interval=null, _onFailure=null, _onUpdate=null, _onTopologyChange=null, _onWarning=null;
   const TICK_MS=10;
 
   // Latest solved net map + per-net voltages, cached from the most recent
@@ -26,6 +26,13 @@ const Simulation = (() => {
   // Reset at the top of every tick, and only ever read from within the same
   // tick's solveComponent pass, so it can never be read stale.
   let _activeSupplyV = null;
+
+  // Last saturation warning actually reported through onWarning, so tick()
+  // only calls back on a CHANGE (newly saturated, or no longer) rather than
+  // every 10ms while the condition holds — onUpdate already fires that often
+  // and re-asserting the same string that fast would fight any UI trying to
+  // let the user dismiss or read it.
+  let _lastWarning = null;
 
   // Permanent power supply's battery-sag state (Phase 3). Persists across
   // ticks (sag is inherently a running-average effect), but resets whenever
@@ -314,6 +321,22 @@ const Simulation = (() => {
       } catch (e) { console.warn('[Sim] small-signal solve failed:', e.message); }
     }
 
+    // Saturation warning: non-blocking, unlike the checks above. A saturated
+    // BJT is a valid DC state, not a wiring fault — the sim keeps running —
+    // but it commonly means silence or a dead-sounding stage with nothing in
+    // the UI to explain why, even when the circuit matches its schematic
+    // exactly (see explainSaturation). Only the FIRST one found is reported,
+    // same as the hard-failure checks above only ever name one problem.
+    let warning = null;
+    for (const inst of placed) {
+      if (inst.failed || !inst._saturated) continue;
+      const def = ComponentRegistry.getById(inst.defId);
+      if (def?.behavior?.type !== 'bjt_npn' && def?.behavior?.type !== 'bjt_pnp') continue;
+      warning = explainSaturation(inst, def, nets, placed, netVoltage);
+      if (warning) break;
+    }
+    if (warning !== _lastWarning) { _lastWarning = warning; if (_onWarning) _onWarning(warning); }
+
     if (_onUpdate) _onUpdate();
     Board.redraw();
   }
@@ -582,6 +605,31 @@ const Simulation = (() => {
   // in this engine draws anywhere near 1A; this exists only to reject
   // solver noise, not to model an actual current limit.
   const IC_ESTIMATE_CEILING = 1; // A
+  // A real transistor's hFE is not constant with Ic — every datasheet's
+  // rated hFE is measured at a specific test current (often ~1mA for
+  // small-signal parts regardless of type; confirmed against a real
+  // NKT275 datasheet, Ie=1.0mA), and gain falls off well below that as
+  // base-region recombination current starts to dominate over the
+  // amplifying diffusion current. Treating hFE as one fixed number
+  // regardless of Ic was fine as long as every transistor operated near
+  // its rated test current, but a leakage-dominated germanium stage can
+  // run its BASE current in the single-digit microamps — three orders of
+  // magnitude below HFE_REF_IC — where (hFE+1)*Icbo's amplified leakage
+  // then gets the full, undiminished rated hFE applied to it. Real
+  // hardware doesn't do this (a schematically-correct Fuzz Face biases
+  // fine on the bench); this rolloff is what was missing.
+  //
+  // No per-model rolloff data exists for the other 25 transistors in this
+  // library (one real datasheet page doesn't generalize into 26), so this
+  // is deliberately ONE generic curve applied to every model alike:
+  // hFE_effective = hFE_rated * clamp(Ic/HFE_REF_IC, HFE_ROLLOFF_FLOOR, 1).
+  // Full rated hFE at/above the reference current (matching the datasheet
+  // exactly at its own test point), scaling down proportionally below it,
+  // floored so gain never fully collapses (real transistors don't either).
+  // An approximation of a real curve's shape, not a per-device fit —
+  // revisit if a specific model's real low-current hFE data ever surfaces.
+  const HFE_REF_IC       = 0.001; // A — assumed datasheet test current
+  const HFE_ROLLOFF_FLOOR = 0.1;  // fraction of rated hFE, at very low Ic
   const RSAT   = 1;     // ohms — small "on" resistance of the saturation clamp (collector-emitter, once saturated)
   // volts — fallback floor for Vce (or Vec for PNP) once a transistor
   // saturates, used only when the model has no vce_sat of its own. Every
@@ -682,7 +730,10 @@ const Simulation = (() => {
         // rbe starts at the fixed fallback and is re-estimated from the
         // solve's own Ic each iteration below (see rEstimate) — this initial
         // value only matters for iteration 0, before any Ic estimate exists.
-        bjtEdges.push({ a, b, Vf, inst, hfe, gm: hfe/RBE, rbe: RBE, icSrc, icSink, pnp, Icbo, vceSat,
+        // hfeRated is the fixed datasheet value; hfe (below) is re-derived
+        // each iteration as the low-current-rolled-off EFFECTIVE gain — see
+        // HFE_REF_IC/HFE_ROLLOFF_FLOOR above for why they're not the same.
+        bjtEdges.push({ a, b, Vf, inst, hfeRated: hfe, hfe, gm: hfe/RBE, rbe: RBE, icSrc, icSink, pnp, Icbo, vceSat,
                         baseNet, collectorNet });
       }
     }
@@ -752,6 +803,13 @@ const Simulation = (() => {
     // reasonable order-of-magnitude starting current, and silicon's is close
     // enough to zero that RBE_MAX (the old fixed value) governs instead.
     let icEstimate = bjtEdges.map(e => Math.max(e.Icbo || 0, 1e-9));
+    // Ib estimate, tracked the same way as icEstimate — used to key the
+    // low-current hFE rolloff (see HFE_REF_IC) on the junction's ACTUAL
+    // drive current rather than the already-amplified Ic, which is
+    // self-referential (a leakage-dominated stage's Ic stays "big enough"
+    // to look up its own full rated hFE, even though the Ib driving it is
+    // three-plus orders of magnitude below any realistic hFE test current).
+    let ibEstimate = bjtEdges.map(() => 1e-9);
     let V = new Array(N).fill(0);
 
     for (let iter=0; iter<15; iter++) {
@@ -772,6 +830,18 @@ const Simulation = (() => {
       });
       bjtEdges.forEach((e, idx) => {
         if (e.a==null || e.b==null || e.a===e.b) return;
+        // Low-current hFE rolloff (see HFE_REF_IC above), keyed on Ib (the
+        // junction's actual drive current) rather than Ic. Ic = hFE*Ib is
+        // already amplified, so keying the rolloff on Ic is self-referential:
+        // a leakage-dominated stage's Ic can look "big enough" to justify
+        // its own full rated hFE even while the Ib actually driving it sits
+        // at a small fraction of any realistic test current. HFE_REF_IC is
+        // a COLLECTOR reference current (matching the datasheet convention,
+        // confirmed against a real NKT275 page), so it's converted to the
+        // equivalent base current here via the transistor's OWN rated hFE
+        // (Ib_ref = Ic_ref / hFE_rated) before comparing against ibEstimate.
+        const ibRef = HFE_REF_IC / e.hfeRated;
+        e.hfe = e.hfeRated * Utils.clamp(ibEstimate[idx] / ibRef, HFE_ROLLOFF_FLOOR, 1);
         // r_pi = hFE*Vt/Ic, re-estimated each iteration from the previous
         // iteration's solved Ic (icEstimate). This is what makes germanium's
         // real leakage current land at a realistic few-hundred-ohm r_pi
@@ -867,6 +937,16 @@ const Simulation = (() => {
         const clampedIc = Utils.clamp(newIc, icFloor, IC_ESTIMATE_CEILING);
         if (Math.abs(clampedIc - icEstimate[idx]) > icEstimate[idx] * 0.05) changed = true;
         icEstimate[idx] = clampedIc;
+
+        // Ib actually driving the junction this iteration — the same
+        // quantity the B-E stamp above conducts, at the g=1/e.rbe
+        // conductance that stamp used. Tracked separately from icEstimate
+        // for the hFE rolloff above (see its comment for why Ic can't be
+        // used for that directly).
+        const newIb = Math.max(0, ((va - vb) - e.Vf) / e.rbe);
+        const clampedIb = Utils.clamp(newIb, 1e-9, IC_ESTIMATE_CEILING);
+        if (Math.abs(clampedIb - ibEstimate[idx]) > ibEstimate[idx] * 0.05) changed = true;
+        ibEstimate[idx] = clampedIb;
       });
       if (!changed) break;
     }
@@ -1237,6 +1317,65 @@ const Simulation = (() => {
     return null;
   }
 
+  // Explains WHY a saturated transistor is saturated, in terms a schematic
+  // reader (not a circuit-theory reader) can act on. A schematically-correct
+  // build CAN still saturate — real Fuzz Faces are notoriously hFE-sensitive
+  // for exactly this reason, hand-matching Q1/Q2 is a known part of building
+  // one — but the app has no way to say so today: saturation just plays
+  // silent or wrong with nothing to explain it. This turns that into an
+  // actionable message instead of a mystery.
+  //
+  // Only looks at the DOMINANT term (hFE * Ib into the collector resistor),
+  // not a full network solve — good enough to name the two components
+  // actually in tension (the collector resistor and the transistor's own
+  // gain) without re-deriving what solveNetVoltages already decided.
+  function explainSaturation(inst, def, nets, placed, netVoltage) {
+    const pnp = def.behavior?.type === 'bjt_pnp';
+    const mk = inst.props.model || (pnp ? '2N3906' : '2N3904');
+    const pm = def.model_params?.[mk] || {};
+    const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
+    const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
+    const cIdx = eIdx === 0 ? 2 : 0;
+    const cLeg = inst.legs[cIdx];
+    const cNet = nets.find(nets.key(cLeg.row, cLeg.col));
+
+    // Find a resistor with exactly one leg on the collector net — that's the
+    // collector load actually limiting how much current this stage can pass
+    // before its own drop exceeds the supply. If none is found (the
+    // collector goes straight to a rail, or into something more complex),
+    // there's nothing concrete to name, so this is skipped rather than
+    // guessing.
+    let loadR = null, loadLabel = null;
+    for (const p of placed) {
+      if (p === inst || p.failed) continue;
+      const pdef = ComponentRegistry.getById(p.defId);
+      if (pdef?.behavior?.type !== 'resistor') continue;
+      const a = nets.find(nets.key(p.legs[0].row, p.legs[0].col));
+      const b = nets.find(nets.key(p.legs[p.legs.length-1].row, p.legs[p.legs.length-1].col));
+      if (a === cNet || b === cNet) { loadR = resolvedValue(p, 'resistance', null); loadLabel = p.props?.title || pdef.label; break; }
+    }
+    if (!Number.isFinite(loadR) || loadR <= 0) return null;
+
+    const who = inst.props?.title || def?.label || inst.instanceId;
+    const Ic = Math.abs(inst._current || 0);
+    // What the collector resistor would need to drop to sustain the
+    // transistor's OWN commanded current — this is the number that's
+    // physically impossible, which is why the solve clamped to saturation.
+    const impliedDrop = Ic * loadR;
+    return `${who} is saturated: at hFE ${hfe.toFixed(0)}, its own base current asks for more collector ` +
+      `current than ${loadLabel} (${formatOhms(loadR)}) can support — sustaining it would need ` +
+      `${formatVolts(impliedDrop)} across that resistor alone. Try a lower-hFE transistor, or a smaller ` +
+      `${loadLabel}. This can happen even with schematically-correct values — real builds of this kind of ` +
+      `circuit are often hand-matched for exactly this reason.`;
+  }
+
+  function formatOhms(r) {
+    if (!Number.isFinite(r)) return 'an unknown resistance';
+    if (r >= 1e6) return (r/1e6).toFixed(r%1e6?1:0) + 'MΩ';
+    if (r >= 1e3) return (r/1e3).toFixed(r%1e3?1:0) + 'kΩ';
+    return Math.round(r) + 'Ω';
+  }
+
   // Human-readable name for a net, for error messages: the first component
   // leg found sitting on it, named by the user's own title where they set one
   // and by the def's leg labels ('C', 'B', 'E', '+', '-') for the terminal.
@@ -1292,6 +1431,12 @@ const Simulation = (() => {
   function onFailure(fn) { _onFailure=fn; }
   function onUpdate(fn)  { _onUpdate=fn; }
   function onTopologyChange(fn) { _onTopologyChange=fn; }
+  // Non-blocking, unlike onFailure: a saturated stage is a valid (if
+  // probably unwanted) DC operating point, not a wiring fault, so the sim
+  // keeps running. Fires with a message string when saturation is newly
+  // detected, and with null the tick after it clears — see the scan in
+  // tick() for why only the FIRST saturated BJT found is reported.
+  function onWarning(fn) { _onWarning=fn; }
 
   // Whether two specific holes are on the same electrical net right now —
   // reuses buildNetMap() exactly as tick() does (same wires, same closed-
@@ -1325,5 +1470,5 @@ const Simulation = (() => {
   // solveSmallSignal). Null until the first tick, or if there's no input.
   function getSmallSignalV() { return _lastSmallSignal; }
 
-  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,notifyStateChange,hasElectricalPath,getVoltageAt,getSmallSignalV,buildNetMap };
+  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,onWarning,notifyStateChange,hasElectricalPath,getVoltageAt,getSmallSignalV,buildNetMap };
 })();
