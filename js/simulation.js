@@ -774,6 +774,29 @@ const Simulation = (() => {
 
     let states = diodeEdges.map(() => false);
     let bjtStates = bjtEdges.map(() => false);
+    // bjtStates is committed with a one-iteration delay: a proposed flip only
+    // takes effect once the SAME proposal repeats on the next iteration (see
+    // where this is used below). Without this, a feedback pair (this stage's
+    // collector feeding the next stage's base, feeding back into this one)
+    // can land exactly on the on/off boundary and flip every single
+    // iteration forever — measured on a real Fuzz Face NPN file, where Q2
+    // alternated between Vbe~20V/Ic~314mA and Vbe~0.65V/Ic=0 every iteration
+    // and never converged, hitting the 15-iteration cap and reporting
+    // whichever half of the oscillation the cap happened to land on (Ic=0,
+    // even though KCL on the surrounding resistor network independently
+    // measured ~917uA genuinely flowing into that same collector node — the
+    // reported state was self-inconsistent, not just imprecise). This is why
+    // that Fuzz Face's Q2 read as unsaturated with implausibly low current,
+    // and why its Fuzz pot barely changed the output (gain built from a
+    // non-equilibrium snapshot is meaningless). Requiring two consecutive
+    // agreeing proposals breaks the cycle by holding the state through a
+    // single-iteration flip, while a genuinely converging circuit reaches
+    // the same proposal on consecutive iterations near equilibrium anyway,
+    // so this doesn't change correct behavior — confirmed byte-identical
+    // results on the PNP Fuzz Face and Electra Distortion files, and the NPN
+    // file went from hitting the cap unconverged to converging in fewer
+    // iterations than the old broken loop even ran.
+    let bjtProposed = bjtEdges.map(() => false);
     let satStates = bjtEdges.map(() => false); // true once a bjt is clamped into saturation
     // Ic estimate feeding this iteration's r_pi = hFE*Vt/Ic (see rbe/gm
     // recompute below). Seeded from Icbo alone, since at iteration 0 nothing
@@ -879,8 +902,18 @@ const Simulation = (() => {
         const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
         const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
         const shouldBeOn = (va - vb) > e.Vf * 0.5;
-        if (shouldBeOn !== bjtStates[idx]) { bjtStates[idx] = shouldBeOn; changed = true; }
-        if (!shouldBeOn) {
+        // Commit only on two consecutive agreeing proposals — see the
+        // bjtStates/bjtProposed declaration above for why. Everything below
+        // (saturation logic, icEstimate/ibEstimate, and next iteration's
+        // stamping via bjtStates) uses committedOn, never the raw shouldBeOn.
+        let committedOn = bjtStates[idx];
+        if (shouldBeOn === bjtProposed[idx]) {
+          if (shouldBeOn !== bjtStates[idx]) { bjtStates[idx] = shouldBeOn; changed = true; }
+          committedOn = shouldBeOn;
+        } else {
+          bjtProposed[idx] = shouldBeOn; changed = true;
+        }
+        if (!committedOn) {
           if (satStates[idx]) { satStates[idx] = false; changed = true; } // saturation only means anything while conducting
           return;
         }
