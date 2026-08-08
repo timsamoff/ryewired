@@ -643,7 +643,8 @@ const Simulation = (() => {
 
       } else if (btype === 'potentiometer' && inst.legs.length >= 3) {
         const Rt  = parseFloat(inst.props.resistance) || 100000;
-        const w   = parseFloat(inst.props.wiper) ?? 0.5;
+        const parsedW = parseFloat(inst.props.wiper);
+        const w   = Number.isNaN(parsedW) ? 0.5 : parsedW; // NOT `|| 0.5` — a real, valid wiper of exactly 0 is not "missing"
         const pos = (inst.props.taper||'').includes('Audio') ? Math.pow(w,2) : w;
         const ccw = netOf(inst.legs[0].row, inst.legs[0].col);
         const wpr = netOf(inst.legs[1].row, inst.legs[1].col);
