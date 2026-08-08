@@ -106,7 +106,7 @@
       "max_ic_ma": 200,
       "max_vce": 20,
       "type": "germanium",
-      "icbo_na": 250000
+      "icbo_na": 10000
     },
     "OC75": {
       "hfe": 60,
@@ -115,16 +115,16 @@
       "max_ic_ma": 50,
       "max_vce": 15,
       "type": "germanium",
-      "icbo_na": 400000
+      "icbo_na": 14000
     },
     "NKT275": {
-      "hfe": 90,
+      "hfe": 60,
       "vce_sat": 0.1,
       "vbe": 0.2,
       "max_ic_ma": 50,
       "max_vce": 20,
       "type": "germanium",
-      "icbo_na": 175000
+      "icbo_na": 10000
     },
     "2N1309": {
       "hfe": 100,

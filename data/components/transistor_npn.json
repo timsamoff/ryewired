@@ -173,7 +173,7 @@
       "max_ic_ma": 300,
       "max_vce": 25,
       "type": "germanium",
-      "icbo_na": 175000
+      "icbo_na": 6000
     },
     "2N1304": {
       "hfe": 60,
@@ -182,7 +182,7 @@
       "max_ic_ma": 300,
       "max_vce": 25,
       "type": "germanium",
-      "icbo_na": 100000
+      "icbo_na": 6000
     },
     "2N169A": {
       "hfe": 70,

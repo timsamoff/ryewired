@@ -3,7 +3,7 @@
 // then traces current paths through components to compute voltages/brightness.
 
 const Simulation = (() => {
-  let _running=false, _interval=null, _onFailure=null, _onUpdate=null, _onTopologyChange=null, _onWarning=null;
+  let _running=false, _interval=null, _onFailure=null, _onUpdate=null, _onTopologyChange=null;
   const TICK_MS=10;
 
   // Latest solved net map + per-net voltages, cached from the most recent
@@ -26,13 +26,6 @@ const Simulation = (() => {
   // Reset at the top of every tick, and only ever read from within the same
   // tick's solveComponent pass, so it can never be read stale.
   let _activeSupplyV = null;
-
-  // Last saturation warning actually reported through onWarning, so tick()
-  // only calls back on a CHANGE (newly saturated, or no longer) rather than
-  // every 10ms while the condition holds — onUpdate already fires that often
-  // and re-asserting the same string that fast would fight any UI trying to
-  // let the user dismiss or read it.
-  let _lastWarning = null;
 
   // Permanent power supply's battery-sag state (Phase 3). Persists across
   // ticks (sag is inherently a running-average effect), but resets whenever
@@ -321,21 +314,6 @@ const Simulation = (() => {
       } catch (e) { console.warn('[Sim] small-signal solve failed:', e.message); }
     }
 
-    // Saturation warning: non-blocking, unlike the checks above. A saturated
-    // BJT is a valid DC state, not a wiring fault — the sim keeps running —
-    // but it commonly means silence or a dead-sounding stage with nothing in
-    // the UI to explain why, even when the circuit matches its schematic
-    // exactly (see explainSaturation). Only the FIRST one found is reported,
-    // same as the hard-failure checks above only ever name one problem.
-    let warning = null;
-    for (const inst of placed) {
-      if (inst.failed || !inst._saturated) continue;
-      const def = ComponentRegistry.getById(inst.defId);
-      if (def?.behavior?.type !== 'bjt_npn' && def?.behavior?.type !== 'bjt_pnp') continue;
-      warning = explainSaturation(inst, def, nets, placed, netVoltage);
-      if (warning) break;
-    }
-    if (warning !== _lastWarning) { _lastWarning = warning; if (_onWarning) _onWarning(warning); }
 
     if (_onUpdate) _onUpdate();
     Board.redraw();
@@ -1317,65 +1295,6 @@ const Simulation = (() => {
     return null;
   }
 
-  // Explains WHY a saturated transistor is saturated, in terms a schematic
-  // reader (not a circuit-theory reader) can act on. A schematically-correct
-  // build CAN still saturate — real Fuzz Faces are notoriously hFE-sensitive
-  // for exactly this reason, hand-matching Q1/Q2 is a known part of building
-  // one — but the app has no way to say so today: saturation just plays
-  // silent or wrong with nothing to explain it. This turns that into an
-  // actionable message instead of a mystery.
-  //
-  // Only looks at the DOMINANT term (hFE * Ib into the collector resistor),
-  // not a full network solve — good enough to name the two components
-  // actually in tension (the collector resistor and the transistor's own
-  // gain) without re-deriving what solveNetVoltages already decided.
-  function explainSaturation(inst, def, nets, placed, netVoltage) {
-    const pnp = def.behavior?.type === 'bjt_pnp';
-    const mk = inst.props.model || (pnp ? '2N3906' : '2N3904');
-    const pm = def.model_params?.[mk] || {};
-    const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
-    const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
-    const cIdx = eIdx === 0 ? 2 : 0;
-    const cLeg = inst.legs[cIdx];
-    const cNet = nets.find(nets.key(cLeg.row, cLeg.col));
-
-    // Find a resistor with exactly one leg on the collector net — that's the
-    // collector load actually limiting how much current this stage can pass
-    // before its own drop exceeds the supply. If none is found (the
-    // collector goes straight to a rail, or into something more complex),
-    // there's nothing concrete to name, so this is skipped rather than
-    // guessing.
-    let loadR = null, loadLabel = null;
-    for (const p of placed) {
-      if (p === inst || p.failed) continue;
-      const pdef = ComponentRegistry.getById(p.defId);
-      if (pdef?.behavior?.type !== 'resistor') continue;
-      const a = nets.find(nets.key(p.legs[0].row, p.legs[0].col));
-      const b = nets.find(nets.key(p.legs[p.legs.length-1].row, p.legs[p.legs.length-1].col));
-      if (a === cNet || b === cNet) { loadR = resolvedValue(p, 'resistance', null); loadLabel = p.props?.title || pdef.label; break; }
-    }
-    if (!Number.isFinite(loadR) || loadR <= 0) return null;
-
-    const who = inst.props?.title || def?.label || inst.instanceId;
-    const Ic = Math.abs(inst._current || 0);
-    // What the collector resistor would need to drop to sustain the
-    // transistor's OWN commanded current — this is the number that's
-    // physically impossible, which is why the solve clamped to saturation.
-    const impliedDrop = Ic * loadR;
-    return `${who} is saturated: at hFE ${hfe.toFixed(0)}, its own base current asks for more collector ` +
-      `current than ${loadLabel} (${formatOhms(loadR)}) can support — sustaining it would need ` +
-      `${formatVolts(impliedDrop)} across that resistor alone. Try a lower-hFE transistor, or a smaller ` +
-      `${loadLabel}. This can happen even with schematically-correct values — real builds of this kind of ` +
-      `circuit are often hand-matched for exactly this reason.`;
-  }
-
-  function formatOhms(r) {
-    if (!Number.isFinite(r)) return 'an unknown resistance';
-    if (r >= 1e6) return (r/1e6).toFixed(r%1e6?1:0) + 'MΩ';
-    if (r >= 1e3) return (r/1e3).toFixed(r%1e3?1:0) + 'kΩ';
-    return Math.round(r) + 'Ω';
-  }
-
   // Human-readable name for a net, for error messages: the first component
   // leg found sitting on it, named by the user's own title where they set one
   // and by the def's leg labels ('C', 'B', 'E', '+', '-') for the terminal.
@@ -1431,12 +1350,6 @@ const Simulation = (() => {
   function onFailure(fn) { _onFailure=fn; }
   function onUpdate(fn)  { _onUpdate=fn; }
   function onTopologyChange(fn) { _onTopologyChange=fn; }
-  // Non-blocking, unlike onFailure: a saturated stage is a valid (if
-  // probably unwanted) DC operating point, not a wiring fault, so the sim
-  // keeps running. Fires with a message string when saturation is newly
-  // detected, and with null the tick after it clears — see the scan in
-  // tick() for why only the FIRST saturated BJT found is reported.
-  function onWarning(fn) { _onWarning=fn; }
 
   // Whether two specific holes are on the same electrical net right now —
   // reuses buildNetMap() exactly as tick() does (same wires, same closed-
@@ -1470,5 +1383,5 @@ const Simulation = (() => {
   // solveSmallSignal). Null until the first tick, or if there's no input.
   function getSmallSignalV() { return _lastSmallSignal; }
 
-  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,onWarning,notifyStateChange,hasElectricalPath,getVoltageAt,getSmallSignalV,buildNetMap };
+  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,notifyStateChange,hasElectricalPath,getVoltageAt,getSmallSignalV,buildNetMap };
 })();

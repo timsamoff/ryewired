@@ -9,7 +9,6 @@ const ZOOM_STEP = 0.1;
 
 let _panning=false, _panStartX=0, _panStartY=0, _panScrollX=0, _panScrollY=0;
 let _statusGen = 0;
-let _satWarning = null; // current saturation-cause message, or null — see Simulation.onWarning wiring
 
 (async function initApp() {
 
@@ -61,24 +60,7 @@ let _satWarning = null; // current saturation-cause message, or null — see Sim
   // onto the live audio graph. Without this, sag/leakage/anything else that
   // moves Ic while playing would update the model but never be audible
   // until a fresh Stop/Play.
-  Simulation.onUpdate(() => {
-    if (typeof AudioEngine !== 'undefined' && AudioEngine.updateLiveGains) AudioEngine.updateLiveGains();
-    // Saturation is a standing condition, not a one-off event like the other
-    // setStatus() calls in this file — it stays true for as long as the
-    // circuit is biased that way, so it has to keep re-asserting itself every
-    // tick rather than firing once, or scheduleStatusClear (armed by the next
-    // click/keydown) would silently wipe it while the underlying problem is
-    // still there.
-    if (_satWarning) setStatus(_satWarning);
-  });
-  // Only updates the LOCAL copy above — onWarning fires just on change, so
-  // this is where the current text lives between those changes.
-  Simulation.onWarning(msg => {
-    const wasShowing = _satWarning && _satWarning === document.getElementById('status-msg')?.textContent;
-    _satWarning = msg;
-    if (msg) setStatus(msg);
-    else if (wasShowing) setStatus(''); // clear only if nothing else has since overwritten the status bar
-  });
+  Simulation.onUpdate(() => { if (typeof AudioEngine !== 'undefined' && AudioEngine.updateLiveGains) AudioEngine.updateLiveGains(); });
   // Topology (not value) changes: a switch toggling while engaged actually
   // rewires the net graph, which the per-tick value push above can't express —
   // it only updates existing nodes. Without this, flipping a switch mid-play
