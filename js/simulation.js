@@ -556,7 +556,32 @@ const Simulation = (() => {
   // the rest of the net in this DC-only model.
   const RON    = 1;     // ohms — small "on" resistance for a conducting diode/LED
   const ROFF   = 1e9;   // ohms — effectively open for a non-conducting diode/LED
-  const RBE    = 10000; // ohms — effective "on" resistance of a transistor's base-emitter junction past Vbe (same figure the old per-instance-only approximation used)
+  // ohms — effective "on" resistance of a transistor's base-emitter junction
+  // past Vbe. Used as the iteration-0 starting value (before any Ic estimate
+  // exists) and as a floor, below RBE_MIN, on the bias-dependent r_pi
+  // computed each iteration below. A real junction is exponential, not a
+  // fixed resistance: r_pi = hFE*Vt/Ic (Vt ~= 26mV), which is what
+  // solveSmallSignal already uses. Treating it as this fixed 10k regardless
+  // of current was fine for silicon (nanoamp leakage keeps Ib negligible
+  // either way) but broke germanium, whose realistic 50-300uA of ICBO
+  // multiplied by 10k adds 0.5-3V of fictitious Vbe — enough on its own to
+  // saturate a stage that a real germanium Fuzz Face biases correctly.
+  const RBE     = 10000;
+  const VT      = 0.026; // volts, thermal voltage at room temperature
+  const RBE_MIN = 20;    // ohms — floor for r_pi so a runaway high Ic estimate can't divide the base conductance toward a singular stamp
+  const RBE_MAX = RBE;   // ceiling — never worse than the old fixed behavior
+  // amps — sanity ceiling on the Ic ESTIMATE carried between iterations for
+  // r_pi = hFE*Vt/Ic (not a real device limit; those live per-model as
+  // max_ic_ma). The relaxation loop's early iterations can legitimately
+  // overshoot by hundreds of volts before bjtStates/satStates converge —
+  // e.g. an AC128 on a 1.8M base resistor solves iteration 0 at Vbe=458V,
+  // implying several AMPS of Ic, before settling to 0.64mA by iteration 2 —
+  // and that was always harmless before because only the booleans carried
+  // forward. icEstimate is a VALUE carried forward, so an overshoot
+  // iteration otherwise poisons the very next iteration's r_pi. No real part
+  // in this engine draws anywhere near 1A; this exists only to reject
+  // solver noise, not to model an actual current limit.
+  const IC_ESTIMATE_CEILING = 1; // A
   const RSAT   = 1;     // ohms — small "on" resistance of the saturation clamp (collector-emitter, once saturated)
   // volts — fallback floor for Vce (or Vec for PNP) once a transistor
   // saturates, used only when the model has no vce_sat of its own. Every
@@ -654,7 +679,10 @@ const Simulation = (() => {
         const icSrc  = pnp ? collectorNet : emitterNet;  // where Ic is injected
         const icSink = pnp ? emitterNet   : collectorNet; // where Ic is extracted from
         const vceSat = Number.isFinite(parseFloat(pm.vce_sat)) ? parseFloat(pm.vce_sat) : VCESAT_FALLBACK;
-        bjtEdges.push({ a, b, Vf, inst, gm: hfe/RBE, icSrc, icSink, pnp, Icbo, vceSat,
+        // rbe starts at the fixed fallback and is re-estimated from the
+        // solve's own Ic each iteration below (see rEstimate) — this initial
+        // value only matters for iteration 0, before any Ic estimate exists.
+        bjtEdges.push({ a, b, Vf, inst, hfe, gm: hfe/RBE, rbe: RBE, icSrc, icSink, pnp, Icbo, vceSat,
                         baseNet, collectorNet });
       }
     }
@@ -690,10 +718,11 @@ const Simulation = (() => {
     // are the B-E junction's own anode/cathode (so this reuses exactly the
     // same junction voltage the B-E stamp above is keyed on), injected at
     // e.icSrc and extracted at e.icSink. This is linear in the node voltages
-    // (gm = hFE/RBE is a fixed number once the junction's on/off state is
-    // decided for this iteration), so — unlike the B-E on/off state itself —
-    // it needs no relaxation: it's stamped directly into the same matrix and
-    // solved in one shot, staying exactly consistent with whatever Ib the
+    // (gm = hFE/e.rbe is fixed for the DURATION OF THIS ITERATION — e.rbe
+    // itself is re-estimated once per iteration from the previous iteration's
+    // Ic, not resolved within it), so — unlike the B-E on/off state itself —
+    // it needs no relaxation of its own: it's stamped directly into the same
+    // matrix and solved in one shot, staying exactly consistent with whatever Ib the
     // solve converges to.
     function stampBjtIc(G, I, e, gm) {
       const pIdx = netIndex.has(e.a) ? netIndex.get(e.a) : -1;
@@ -717,6 +746,12 @@ const Simulation = (() => {
     let states = diodeEdges.map(() => false);
     let bjtStates = bjtEdges.map(() => false);
     let satStates = bjtEdges.map(() => false); // true once a bjt is clamped into saturation
+    // Ic estimate feeding this iteration's r_pi = hFE*Vt/Ic (see rbe/gm
+    // recompute below). Seeded from Icbo alone, since at iteration 0 nothing
+    // has been solved yet — a germanium part's own leakage is already a
+    // reasonable order-of-magnitude starting current, and silicon's is close
+    // enough to zero that RBE_MAX (the old fixed value) governs instead.
+    let icEstimate = bjtEdges.map(e => Math.max(e.Icbo || 0, 1e-9));
     let V = new Array(N).fill(0);
 
     for (let iter=0; iter<15; iter++) {
@@ -737,8 +772,16 @@ const Simulation = (() => {
       });
       bjtEdges.forEach((e, idx) => {
         if (e.a==null || e.b==null || e.a===e.b) return;
+        // r_pi = hFE*Vt/Ic, re-estimated each iteration from the previous
+        // iteration's solved Ic (icEstimate). This is what makes germanium's
+        // real leakage current land at a realistic few-hundred-ohm r_pi
+        // instead of the fixed 10k, without changing silicon's behavior
+        // (whose Ic is already large enough that Vt-scaled r_pi is small
+        // either way, or clamped to RBE_MAX same as before if it isn't).
+        e.rbe = Utils.clamp(e.hfe * VT / icEstimate[idx], RBE_MIN, RBE_MAX);
+        e.gm  = e.hfe / e.rbe;
         const on = bjtStates[idx];
-        const g = 1/(on ? RBE : ROFF);
+        const g = 1/(on ? e.rbe : ROFF);
         stampConductance(G, I, e.a, e.b, g);
         // Collector-base leakage, stamped unconditionally: the CB junction is
         // reverse-biased and leaking whatever the B-E junction is doing, and
@@ -811,6 +854,19 @@ const Simulation = (() => {
           const IcSatActual = Math.max(0, (1/RSAT)*((vSink-vSrc) - e.vceSat));
           if (IcSatActual > IcActiveWouldBe) { satStates[idx] = false; changed = true; }
         }
+
+        // Refresh the Ic estimate that next iteration's r_pi = hFE*Vt/Ic will
+        // be computed from. A meaningful swing in Ic changes r_pi enough to
+        // shift the operating point again, so it counts toward `changed` the
+        // same as an on/off flip does — otherwise the loop could exit on a
+        // stale first-guess r_pi from the RBE seed.
+        const newIc = satStates[idx]
+          ? Math.max(0, (1/RSAT)*(vSink - vSrc - e.vceSat))
+          : Math.max(0, e.gm*((va-vb) - e.Vf)) + (e.Icbo||0);
+        const icFloor = Math.max(e.Icbo || 0, 1e-9);
+        const clampedIc = Utils.clamp(newIc, icFloor, IC_ESTIMATE_CEILING);
+        if (Math.abs(clampedIc - icEstimate[idx]) > icEstimate[idx] * 0.05) changed = true;
+        icEstimate[idx] = clampedIc;
       });
       if (!changed) break;
     }
@@ -829,7 +885,7 @@ const Simulation = (() => {
       const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
       const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
       const on = bjtStates[idx];
-      const g = 1/(on ? RBE : ROFF);
+      const g = 1/(on ? e.rbe : ROFF);
       const Ib = on ? Math.max(0, g*((va-vb) - e.Vf)) : 0;
       const vSink = netIndex.has(e.icSink) ? V[netIndex.get(e.icSink)] : fixed.get(e.icSink);
       const vSrc  = netIndex.has(e.icSrc)  ? V[netIndex.get(e.icSrc)]  : fixed.get(e.icSrc);
@@ -864,7 +920,10 @@ const Simulation = (() => {
   //     frequency shaping is handled separately by the biquads.
   //   - Transistors use the hybrid-pi small-signal model: r_pi between base and
   //     emitter, plus a gm*Vbe controlled current source into the collector.
-  //     r_pi = hFE/gm is bias-dependent, unlike the DC solve's fixed RBE.
+  //     r_pi = hFE*Vt/Ic here is computed fresh from THIS solve's own Ic — the
+  //     DC solve's r_pi (bjtEdges' e.rbe) is also bias-dependent now, but as a
+  //     relaxation estimate carried over from solveNetVoltages rather than
+  //     recomputed inside this pass.
   //   - Diodes contribute their small-signal resistance Vt/I only when actually
   //     conducting; an off diode is an open, which is what a clipping pair
   //     sitting at 0V DC should be.
@@ -878,7 +937,8 @@ const Simulation = (() => {
   // volume/tone/fuzz behaviour emerging from the surrounding network instead
   // of from a per-use-case rule. See CLAUDE.md's note on the AC solve.
   const CAP_AC_SHORT_R = 0.01; // ohms — a coupling cap across the audio band
-  const VT            = 0.026; // thermal voltage, same as the audio engine uses
+  // VT (thermal voltage) is declared once, above, near RBE — solveNetVoltages'
+  // bias-dependent r_pi and this small-signal solve's r_pi both use it.
 
   function solveSmallSignal(placed, nets, inputNet, acGroundNets) {
     if (inputNet == null) return null;

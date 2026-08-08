@@ -321,6 +321,10 @@ const Board = (() => {
     // Only the top rail is fed by the permanent supply — the bottom rail
     // stays user-controlled (per the workbench doc) and is never dimmed
     // here, regardless of the permanent supply's state.
+    //
+    // The rails are fixed hardware: minus is ALWAYS the upper row and plus
+    // ALWAYS the lower one, whatever reverse_polarity says. What reverses is
+    // which rail each supply LEAD reaches — see trace-overlay.js.
     const permOff = isTop && typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.getPermanentState().power.power_on===false;
     const traceBlue = permOff ? 'rgba(130,130,120,0.45)' : c.railBlue;
     const traceRed  = permOff ? 'rgba(130,130,120,0.45)' : c.railRed;
@@ -1080,6 +1084,13 @@ const Board = (() => {
       WorkbenchStrip.setPermanentState(layout.permanentDevices);
     }
     render();
+    // The power leads spanning the strip and the board are drawn by
+    // TraceOverlay, on its own canvas above both — and which rail each one
+    // lands on depends on the reverse_polarity we just loaded. Editing that
+    // property re-renders the overlay (see properties-panel.js), but loading
+    // a file did not, so a saved positive-ground circuit came up showing
+    // normal-polarity leads until something else happened to repaint.
+    if (typeof TraceOverlay !== 'undefined' && TraceOverlay.render) TraceOverlay.render();
   }
   function getLayoutData(){
     const permanentDevices = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getPermanentState)

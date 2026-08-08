@@ -32,12 +32,6 @@
       "default": 500
     },
     {
-      "key": "reverse_polarity",
-      "label": "Reverse Polarity",
-      "type": "boolean",
-      "default": false
-    },
-    {
       "key": "battery_sag",
       "label": "Battery Sag",
       "type": "range",

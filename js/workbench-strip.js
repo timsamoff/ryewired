@@ -194,6 +194,10 @@ const WorkbenchStrip = (() => {
     const powerTraceStart = h/2 + 24; // just below the power block
     drawTrace(inputX(), jackTraceStart, inputX(), h);
     drawTrace(outputX(), jackTraceStart, outputX(), h);
+    // These stubs only cross the strip. The run from here down to whichever
+    // rail each lead actually reaches — and the polarity swap that decides
+    // which one that is — belongs to TraceOverlay, which sits above both
+    // canvases and can span them.
     drawTrace(powerMinusX(), powerTraceStart, powerMinusX(), h, 'rgba(43,87,154,0.45)');
     drawTrace(powerPlusX(),  powerTraceStart, powerPlusX(),  h, 'rgba(176,32,46,0.45)');
 
