@@ -19,9 +19,9 @@
       ],
       "props": {
         "model": "NKT275",
-        "hfe": 70,
+        "hfe": 60,
         "pinout": "EBC",
-        "leakage": 100000,
+        "leakage": 10000,
         "leakage__unit": "µA",
         "title": "Q1"
       }
@@ -45,9 +45,9 @@
       ],
       "props": {
         "model": "NKT275",
-        "hfe": 120,
+        "hfe": 60,
         "pinout": "EBC",
-        "leakage": 200000,
+        "leakage": 10000,
         "leakage__unit": "µA",
         "title": "Q2"
       }
@@ -153,7 +153,7 @@
       "props": {
         "resistance": 500000,
         "taper": "Audio/Log (A)",
-        "wiper": 0.29,
+        "wiper": 0.71,
         "resistance__unit": "kΩ",
         "title": "Volume"
       }
@@ -198,7 +198,7 @@
       "props": {
         "resistance": 1000,
         "taper": "Linear (B)",
-        "wiper": 0.5,
+        "wiper": 0.4,
         "resistance__unit": "kΩ",
         "title": "Fuzz"
       }
