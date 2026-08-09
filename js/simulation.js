@@ -1385,24 +1385,6 @@ const Simulation = (() => {
   function onUpdate(fn)  { _onUpdate=fn; }
   function onTopologyChange(fn) { _onTopologyChange=fn; }
 
-  // Whether two specific holes are on the same electrical net right now —
-  // reuses buildNetMap() exactly as tick() does (same wires, same closed-
-  // switch handling), so this always matches what the simulation itself
-  // would consider connected.
-  //
-  // Currently UNUSED. It was written for AudioEngine to check whether an
-  // engaged bypass has a complete Input->Output path, but AudioEngine
-  // answers that from its own walk instead (walk.reachedOutput), which is
-  // strictly better: it means a real component-mediated path exists, not
-  // just electrical continuity through a wire. Kept as a public query
-  // helper; delete it if nothing has picked it up.
-  function hasElectricalPath(rowA, colA, rowB, colB) {
-    const placed = Board.getPlaced();
-    const wires  = Board.getWires();
-    const nets   = buildNetMap(placed, wires);
-    return nets.find(nets.key(rowA, colA)) === nets.find(nets.key(rowB, colB));
-  }
-
   // Voltage at a given hole, from the most recent tick's solve. Per the
   // doc, empty/no-voltage nodes (including "sim hasn't ticked yet") read
   // as 0V rather than null/blank — matches probing an unpowered real board.
@@ -1417,5 +1399,5 @@ const Simulation = (() => {
   // solveSmallSignal). Null until the first tick, or if there's no input.
   function getSmallSignalV() { return _lastSmallSignal; }
 
-  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,notifyStateChange,hasElectricalPath,getVoltageAt,getSmallSignalV,buildNetMap };
+  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,notifyStateChange,getVoltageAt,getSmallSignalV,buildNetMap };
 })();
