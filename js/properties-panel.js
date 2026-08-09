@@ -255,6 +255,22 @@ const PropertiesPanel = (() => {
         const pm = def.model_params?.[inst.props.model];
         if (pm) placeholder = pm.hfe;
       }
+      if (prop.key==='idss') {
+        const pm = def.model_params?.[inst.props.model];
+        if (pm) placeholder = pm.idss_ma;
+      }
+      if (prop.key==='vgs_off') {
+        const pm = def.model_params?.[inst.props.model];
+        if (pm) placeholder = pm.vgs_off;
+      }
+      if (prop.key==='vgs_th') {
+        const pm = def.model_params?.[inst.props.model];
+        if (pm) placeholder = pm.vgs_th;
+      }
+      if (prop.key==='k' && def.behavior?.type==='mosfet_n') {
+        const pm = def.model_params?.[inst.props.model];
+        if (pm) placeholder = pm.k;
+      }
       if (prop.type==='value_unit') {
         unitLabel = inst.props[prop.key+'__unit'] || prop.default_unit || (prop.units&&prop.units[0]?.label);
         // Older saved circuits may have a leakage value (or just a model

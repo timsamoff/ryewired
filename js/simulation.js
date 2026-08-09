@@ -236,7 +236,7 @@ const Simulation = (() => {
       }
     }
 
-    const { netVoltage, diodeCurrents, bjtCurrents } = solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges);
+    const { netVoltage, diodeCurrents, bjtCurrents, jfetCurrents, mosfetCurrents } = solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges);
     _lastNets = nets; _lastNetVoltage = netVoltage;
 
     // Sanity check: in this DC-only model (no inductors, and caps correctly
@@ -293,7 +293,7 @@ const Simulation = (() => {
       if (inst.failed) continue;
       const def = ComponentRegistry.getById(inst.defId);
       if (!def) continue;
-      try { solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, bjtCurrents); }
+      try { solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, bjtCurrents, jfetCurrents, mosfetCurrents); }
       catch(e) { console.warn('[Sim]', e.message); }
     }
 
@@ -320,7 +320,7 @@ const Simulation = (() => {
   }
 
   // ── Component solver ─────────────────────────────────────────────────────────
-  function solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, bjtCurrents) {
+  function solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, bjtCurrents, jfetCurrents, mosfetCurrents) {
     const btype = def.behavior?.type;
 
     switch(btype) {
@@ -464,6 +464,31 @@ const Simulation = (() => {
         inst._vceHeadroom = Utils.clamp(((c?.vce ?? 3) - vceSatP) / headroomRefPnp, 0, 1);
         setOutputSwing(inst, nets, netVoltage, vceSatP, true);
         if (Ic > IcMax) fail(inst, def, 'over_current');
+        break;
+      }
+
+      case 'jfet_n': {
+        const mk = inst.props.model || 'J201';
+        const pm = def.model_params?.[mk] || {};
+        const IdMax = (pm.max_id_ma || 20) / 1000;
+        const c = jfetCurrents?.get(inst);
+        const Id = c?.Id || 0;
+        inst._current = Id;
+        inst._triode = !!c?.triode;
+        if (Id > IdMax) fail(inst, def, 'over_current');
+        break;
+      }
+
+      case 'mosfet_n': {
+        const mk = inst.props.model || '2N7000';
+        const pm = def.model_params?.[mk] || {};
+        const IdMax = (pm.max_id_ma || 200) / 1000;
+        const c = mosfetCurrents?.get(inst);
+        const Id = c?.Id || 0;
+        inst._current = Id;
+        inst._triode = !!c?.triode;
+        inst._on = !!c?.on;
+        if (Id > IdMax) fail(inst, def, 'over_current');
         break;
       }
 
@@ -629,6 +654,8 @@ const Simulation = (() => {
     const resistorEdges = [...extraResistorEdges]; // {a,b,R}
     const diodeEdges    = []; // {a,b,Vf,inst}  a=anode net, b=cathode net
     const bjtEdges      = []; // {a,b,Vf,inst,hfe,collector,pnp}  a/b = B-E junction's anode/cathode nets (base/emitter for NPN, emitter/base for PNP)
+    const jfetEdges     = []; // {gateNet,sourceNet,drainNet,inst,idss,vgsOff}  N-channel only for now
+    const mosfetEdges   = []; // {gateNet,sourceNet,drainNet,inst,vgsTh,k}  N-channel enhancement-mode only for now
 
     for (const inst of placed) {
       if (inst.failed) continue;
@@ -714,6 +741,54 @@ const Simulation = (() => {
         // HFE_REF_IC/HFE_ROLLOFF_FLOOR above for why they're not the same.
         bjtEdges.push({ a, b, Vf, inst, hfeRated: hfe, hfe, gm: hfe/RBE, rbe: RBE, icSrc, icSink, pnp, Icbo, vceSat,
                         baseNet, collectorNet });
+
+      } else if (btype === 'jfet_n') {
+        // Voltage-controlled, unlike a BJT: the gate draws no DC current
+        // (ideal — real gate leakage is picoamps, negligible at this
+        // model's precision, so it's not stamped at all), and drain current
+        // is a smooth function of Vgs with no on/off threshold to relax
+        // toward. That means no bjtStates-style boolean state is needed
+        // here — only the current ESTIMATE (see jfetIdEstimate below) needs
+        // relaxation, because Id depends on Vgs which depends on the very
+        // node voltages being solved for.
+        const mk = inst.props.model || 'J201';
+        const pm = def.model_params?.[mk] || {};
+        const idssMa = parseFloat(inst.props.idss) || pm.idss_ma || 2.0;
+        const idss = idssMa / 1000; // mA -> A
+        const vgsOff = parseFloat(inst.props.vgs_off) || pm.vgs_off || -0.7;
+        // Per-pinout leg order — unlike a BJT, the gate isn't always the
+        // middle leg: BF245A's real TO-92 lead order is Gate-Source-Drain,
+        // confirmed against its datasheet ("1. Gate 2. Source 3. Drain").
+        const JFET_PINOUTS = { SGD: [0,1,2], DGS: [2,1,0], GSD: [1,0,2] }; // [sourceLegIdx, gateLegIdx, drainLegIdx]
+        const [sIdx, gIdx, dIdx] = JFET_PINOUTS[inst.props.pinout] || JFET_PINOUTS.SGD;
+        const gateNet = netOf(inst.legs[gIdx].row, inst.legs[gIdx].col);
+        const sourceNet = netOf(inst.legs[sIdx].row, inst.legs[sIdx].col);
+        const drainNet = netOf(inst.legs[dIdx].row, inst.legs[dIdx].col);
+        const vdsSat = 0.2; // volts — floor for Vds once the device enters triode/ohmic region, same role as BJT's VCESAT_FALLBACK
+        jfetEdges.push({ inst, gateNet, sourceNet, drainNet, idss, vgsOff, vdsSat });
+
+      } else if (btype === 'mosfet_n') {
+        // Enhancement-mode N-channel MOSFET. Like a JFET, gate draws no DC
+        // current and Id is a voltage-controlled current source — but with a
+        // real, hard threshold (Vgs < Vth means fully OFF, Id=0 exactly, not
+        // a smooth asymptote the way a JFET's pinch-off is). Built as its
+        // own edge type rather than sharing the JFET's, deliberately: the
+        // JFET stamp's sign convention took real back-and-forth to get
+        // right (see stampJfetId's comment), and copying it here BY ANALOGY
+        // without independently re-deriving would risk repeating exactly
+        // that class of bug. This edge type gets its own stamp function,
+        // verified against its own hand-solved reference circuits.
+        const mk = inst.props.model || '2N7000';
+        const pm = def.model_params?.[mk] || {};
+        const vgsTh = parseFloat(inst.props.vgs_th) || pm.vgs_th || 2.0;
+        const k = parseFloat(inst.props.k) || pm.k || 0.02;
+        const MOSFET_PINOUTS = { DGS: [2,1,0], SGD: [0,1,2] }; // [sourceLegIdx, gateLegIdx, drainLegIdx]
+        const [msIdx, mgIdx, mdIdx] = MOSFET_PINOUTS[inst.props.pinout] || MOSFET_PINOUTS.DGS;
+        const gateNetM = netOf(inst.legs[mgIdx].row, inst.legs[mgIdx].col);
+        const sourceNetM = netOf(inst.legs[msIdx].row, inst.legs[msIdx].col);
+        const drainNetM = netOf(inst.legs[mdIdx].row, inst.legs[mdIdx].col);
+        const vdsSatM = 0.1; // volts — floor for Vds once fully into triode, same role as BJT's VCESAT_FALLBACK
+        mosfetEdges.push({ inst, gateNet: gateNetM, sourceNet: sourceNetM, drainNet: drainNetM, vgsTh, k, vdsSat: vdsSatM });
       }
     }
 
@@ -722,12 +797,16 @@ const Simulation = (() => {
     resistorEdges.forEach(e => { register(e.a); register(e.b); });
     diodeEdges.forEach(e => { register(e.a); register(e.b); });
     bjtEdges.forEach(e => { register(e.a); register(e.b); register(e.icSrc); register(e.icSink); });
+    jfetEdges.forEach(e => { register(e.gateNet); register(e.sourceNet); register(e.drainNet); });
+    mosfetEdges.forEach(e => { register(e.gateNet); register(e.sourceNet); register(e.drainNet); });
 
     const N = netIndex.size;
     const netVoltage = new Map(fixed);
     const diodeCurrents = new Map();
     const bjtCurrents = new Map(); // inst -> { Ib, Ic }
-    if (N === 0) return { netVoltage, diodeCurrents, bjtCurrents };
+    const jfetCurrents = new Map(); // inst -> { Id, vgs, vds, triode }
+    const mosfetCurrents = new Map(); // inst -> { Id, vgs, vds, on, triode }
+    if (N === 0) return { netVoltage, diodeCurrents, bjtCurrents, jfetCurrents, mosfetCurrents };
 
     function stampConductance(G, I, a, b, g) {
       const ai = netIndex.has(a) ? netIndex.get(a) : -1;
@@ -772,6 +851,140 @@ const Simulation = (() => {
         I[sinkIdx] += gm*e.Vf;
       }
     }
+    // Newton linearization around this iteration's operating point:
+    //   Id ≈ idAtOp + gm*(Vgs-vgsOp) + gds*(Vds-vdsOp)
+    // where idAtOp is the ACTUAL current at that point (not just the
+    // derivatives there) — dropping it makes Id evaluate to exactly 0
+    // whenever Vgs/Vds sit at their own operating-point estimates, which
+    // iteration 0's seed (vgsOp=vdsOp=0) trivially satisfies before anything
+    // has been solved, so the loop found a spurious zero-current fixed point
+    // and never moved. gds (dId/dVds) is only nonzero in the triode region —
+    // saturation's ideal square law has no Vds dependence, so gds=0 recovers
+    // that case from the same code path.
+    //
+    // Physical current direction: Id flows INTO the drain from the external
+    // circuit, through the channel, OUT of the JFET at the source terminal
+    // and back INTO the source node (which then typically drains to ground
+    // through a resistor). The drain and source rows are NOT mirror images
+    // of each other under this convention — current LEAVES the drain row
+    // (into the JFET) but ENTERS the source row (from the JFET), so the
+    // source row's coefficients on the controlling variables (gate, drain)
+    // carry the OPPOSITE sign from the drain row's. Getting this backwards
+    // was a real bug found here: the source row's controlling coefficients
+    // were stamped with the same sign as the drain row's (by incorrect
+    // analogy), which satisfied the row equation internally — G[row].V = I
+    // held exactly — while representing a current balance that doesn't match
+    // real KCL. That produced a stable, fast-converging fixed point (2-3
+    // iterations) that was still wrong by >10x versus a hand-solved
+    // reference (self-bias JFET stage, Vdd=0.70V, Rd=100, Rs=1000: true
+    // Id=388.9uA, buggy solve converged to 1358.5uA) — internal consistency
+    // of the linear system is necessary but not sufficient for correctness;
+    // it has to be checked against the real KCL current independently.
+    // Confirmed fixed by verifying Id is now continuous crossing the
+    // saturation/triode boundary (the two formulas meet algebraically there
+    // by construction) rather than jumping, and matches three independent
+    // hand-solved saturation-region circuits plus the boundary-region value.
+    function stampJfetId(G, I, e, gm, vgsOp, idAtOp, gds, vdsOp) {
+      gds = gds || 0; vdsOp = vdsOp || 0;
+      const gIdx = netIndex.has(e.gateNet)   ? netIndex.get(e.gateNet)   : -1;
+      const sIdx = netIndex.has(e.sourceNet) ? netIndex.get(e.sourceNet) : -1;
+      const dIdx = netIndex.has(e.drainNet)  ? netIndex.get(e.drainNet)  : -1;
+      const gFixed = fixed.has(e.gateNet), sFixed = fixed.has(e.sourceNet), dFixed = fixed.has(e.drainNet);
+      const gV = gFixed ? fixed.get(e.gateNet) : 0, sV = sFixed ? fixed.get(e.sourceNet) : 0, dV = dFixed ? fixed.get(e.drainNet) : 0;
+      // Id(op) - gm*vgsOp - gds*vdsOp — the part of the two-variable Newton
+      // linearization that doesn't depend on the solved Vg/Vd/Vs.
+      const constTerm = idAtOp - gm * vgsOp - gds * vdsOp;
+
+      const terms = [[gm, gIdx, gFixed, gV], [gds, dIdx, dFixed, dV]];
+      // Row(drain): current entering the drain node from the JFET is +Id.
+      if (dIdx >= 0) {
+        for (const [g, cIdx, cFixed, cV] of terms) {
+          if (!g) continue;
+          if (cIdx>=0) G[dIdx][cIdx] += g; else if (cFixed) I[dIdx] -= g*cV;
+          if (sIdx>=0) G[dIdx][sIdx] -= g; else if (sFixed) I[dIdx] += g*sV;
+        }
+        I[dIdx] -= constTerm;
+      }
+      // Row(source): current entering the source node FROM the JFET is +Id
+      // (current flows in at drain, through the channel, out at source, back
+      // INTO this node — opposite direction from the drain row's own "current
+      // leaving into the JFET"). Confirmed against a hand-solved triode-region
+      // circuit: the earlier +gm/+gds here (mirroring the drain row's sign
+      // instead of properly deriving the reversed current direction) satisfied
+      // the linearized system internally but violated real KCL through Rs by
+      // >10x — self-consistent with its own (wrong) equation, so the
+      // relaxation loop converged cleanly to a state that doesn't solve the
+      // actual circuit. Undetected by the earlier saturation-only tests
+      // because every one of them held the gate at a FIXED node (via Rg to
+      // ground), so this coefficient's bug never appeared in the live matrix,
+      // only through the (differently-coded) fixed-node branch below.
+      if (sIdx >= 0) {
+        for (const [g, cIdx, cFixed, cV] of terms) {
+          if (!g) continue;
+          if (cIdx>=0) G[sIdx][cIdx] -= g; else if (cFixed) I[sIdx] += g*cV;
+          G[sIdx][sIdx] += g;
+        }
+        I[sIdx] += constTerm;
+      }
+    }
+
+    // stampMosfetId — independently derived for the enhancement-mode N-channel
+    // MOSFET, not copied from stampJfetId. The device equation is different
+    // (hard threshold Vgs(th), square-law with the standard MOSFET convention
+    // Id = k*(Vgs-Vth)^2 in saturation and Id = k*[2*(Vgs-Vth)*Vds - Vds^2] in
+    // triode — no 1/2 factor the way JFET's Idss/Vp form has one, since k here
+    // is fit directly from a datasheet gm/Id point via k = Id/Vov^2), so gm and
+    // gds are re-derived from this device's own partials, not reused.
+    //   gm  = dId/dVgs = 2*k*(Vgs-Vth)              [sat]   = 2*k*Vds        [triode]
+    //   gds = dId/dVds = 0                          [sat]   = 2*k*(Vgs-Vth-Vds) [triode]
+    // Newton linearization: Id ≈ idAtOp + gm*(Vgs-vgsOp) + gds*(Vds-vdsOp),
+    // same reasoning as JFET's stamp (dropping idAtOp gives a spurious Id=0
+    // fixed point at the zero seed) but re-stated here rather than assumed.
+    //
+    // Physical current direction is the same physical fact for any 3-terminal
+    // FET regardless of channel doping: current enters the DRAIN node from the
+    // external circuit, flows through the channel, and re-enters the external
+    // circuit AT the source node. That means the source row's coefficients on
+    // the controlling variables (gate, drain) must carry the opposite sign
+    // from the drain row's — this was verified the hard way for JFET (a same-
+    // sign source row was self-consistent, G·V=I held, but wrong by >10x
+    // against real KCL). Applying that here as a starting hypothesis, but
+    // proving it independently below with a hand-solved MOSFET reference
+    // circuit and a direct KCL cross-check (Id from the device formula vs.
+    // Id implied by Ohm's law through the source resistor), exactly the way
+    // the JFET bug was actually caught — not assuming it carries over just
+    // because the device family is similar.
+    function stampMosfetId(G, I, e, gm, vgsOp, idAtOp, gds, vdsOp) {
+      gds = gds || 0; vdsOp = vdsOp || 0;
+      const gIdx = netIndex.has(e.gateNet)   ? netIndex.get(e.gateNet)   : -1;
+      const sIdx = netIndex.has(e.sourceNet) ? netIndex.get(e.sourceNet) : -1;
+      const dIdx = netIndex.has(e.drainNet)  ? netIndex.get(e.drainNet)  : -1;
+      const gFixed = fixed.has(e.gateNet), sFixed = fixed.has(e.sourceNet), dFixed = fixed.has(e.drainNet);
+      const gV = gFixed ? fixed.get(e.gateNet) : 0, sV = sFixed ? fixed.get(e.sourceNet) : 0, dV = dFixed ? fixed.get(e.drainNet) : 0;
+      const constTerm = idAtOp - gm * vgsOp - gds * vdsOp;
+
+      const terms = [[gm, gIdx, gFixed, gV], [gds, dIdx, dFixed, dV]];
+      // Row(drain): current entering the drain node from the MOSFET is +Id.
+      if (dIdx >= 0) {
+        for (const [g, cIdx, cFixed, cV] of terms) {
+          if (!g) continue;
+          if (cIdx>=0) G[dIdx][cIdx] += g; else if (cFixed) I[dIdx] -= g*cV;
+          if (sIdx>=0) G[dIdx][sIdx] -= g; else if (sFixed) I[dIdx] += g*sV;
+        }
+        I[dIdx] -= constTerm;
+      }
+      // Row(source): current entering the source node FROM the MOSFET is +Id,
+      // opposite direction from the drain row, so the controlling-coefficient
+      // signs flip here (self-term stays positive on both rows).
+      if (sIdx >= 0) {
+        for (const [g, cIdx, cFixed, cV] of terms) {
+          if (!g) continue;
+          if (cIdx>=0) G[sIdx][cIdx] -= g; else if (cFixed) I[sIdx] += g*cV;
+          G[sIdx][sIdx] += g;
+        }
+        I[sIdx] += constTerm;
+      }
+    }
 
     let states = diodeEdges.map(() => false);
     let bjtStates = bjtEdges.map(() => false);
@@ -812,6 +1025,30 @@ const Simulation = (() => {
     // to look up its own full rated hFE, even though the Ib driving it is
     // three-plus orders of magnitude below any realistic hFE test current).
     let ibEstimate = bjtEdges.map(() => 1e-9);
+    // JFET's own relaxation state: Vgs/Vds estimates (what stampJfetId
+    // linearizes around each iteration) and whether the device is in the
+    // triode/ohmic region rather than saturation (same role as satStates for
+    // a BJT — this model uses the real two-region square-law/Shichman-Hodges
+    // equations, continuous by construction at the boundary, rather than an
+    // approximation that would jump there). Seeded at 0V (Vgs=0, i.e. full
+    // Idss; Vds=0) since a gate network typically starts near the source's
+    // own voltage before any bias resistor divides it down.
+    let jfetVgsEstimate = jfetEdges.map(() => 0);
+    let jfetVdsEstimate = jfetEdges.map(() => 0);
+    let jfetTriode = jfetEdges.map(() => false);
+    // MOSFET's own relaxation state. Unlike the JFET's smooth pinch-off, an
+    // enhancement-mode device is hard-OFF below Vgs(th) (Id=0 exactly), so a
+    // Vgs seed of 0 starts every device off — the same "starts off, has to
+    // turn on as the solve progresses" shape as a BJT's B-E junction, not
+    // JFET's "starts at full Idss" shape. Committed on/off state (mosfetOn)
+    // uses the same two-consecutive-agreement hysteresis as bjtStates/
+    // bjtProposed, for the same reason: a hard threshold sitting exactly on a
+    // feedback boundary can flip every iteration otherwise.
+    let mosfetVgsEstimate = mosfetEdges.map(() => 0);
+    let mosfetVdsEstimate = mosfetEdges.map(() => 0);
+    let mosfetTriode = mosfetEdges.map(() => false);
+    let mosfetOn = mosfetEdges.map(() => false);
+    let mosfetProposed = mosfetEdges.map(() => false);
     let V = new Array(N).fill(0);
 
     for (let iter=0; iter<15; iter++) {
@@ -887,6 +1124,73 @@ const Simulation = (() => {
         // relaxation loop picks that up on the next iteration. That's the
         // real mechanism, rather than a separate hardcoded "off" leakage.
       });
+      jfetEdges.forEach((e, idx) => {
+        if (e.gateNet==null || e.sourceNet==null || e.drainNet==null) return;
+        // Saturation: Id = Idss*(1 - Vgs/Vp)^2 for Vp <= Vgs <= 0 (N-channel,
+        // Vp = e.vgsOff is negative). Clamped so a Vgs estimate that strays
+        // past pinch-off (Vgs < Vp, device fully off) or past 0 (forward
+        // gate-source, not a normal operating region for a JFET used as an
+        // amplifier) doesn't produce a negative or runaway gm.
+        //
+        // Triode (Shichman-Hodges): Id = k*[(Vgs-Vp)*Vds - Vds^2/2], where
+        // k = 2*Idss/Vp^2. Chosen over a plain Rds_on approximation because
+        // that approximation is only correct AT the saturation boundary by
+        // construction, not smoothly either side of it — measured as a ~20%
+        // current jump right at the boundary on a swept test circuit. This
+        // formula reduces ALGEBRAICALLY to the saturation formula above when
+        // Vds = Vgs-Vp (substitute and simplify), so the two regions meet
+        // with no discontinuity.
+        const vgsOp = Utils.clamp(jfetVgsEstimate[idx], e.vgsOff, 0);
+        const vdsOp = Math.max(0, jfetVdsEstimate[idx]);
+        const k = 2 * e.idss / (e.vgsOff * e.vgsOff);
+        let gm, gds, idAtOp;
+        if (jfetTriode[idx]) {
+          gm  = Math.max(0, k * vdsOp);
+          gds = k * (vgsOp - e.vgsOff - vdsOp);
+          idAtOp = Math.max(0, k * ((vgsOp - e.vgsOff) * vdsOp - vdsOp * vdsOp / 2));
+        } else {
+          const ratio = 1 - vgsOp / e.vgsOff;
+          gm  = Math.max(0, (2 * e.idss / Math.abs(e.vgsOff)) * ratio);
+          gds = 0; // ideal saturation: Id independent of Vds (no channel-length modulation in this model)
+          idAtOp = e.idss * ratio * ratio;
+        }
+        e.gm = gm;
+        // Newton linearization, NOT a small-signal AC stamp: Id ≈ Id(op) +
+        // gm*(Vgs-vgsOp) + gds*(Vds-vdsOp). Dropping the Id(op) constant (an
+        // earlier version of this stamp did) makes Id evaluate to exactly 0
+        // whenever Vgs/Vds sit exactly at their own operating-point
+        // estimates — which iteration 0's seed (vgsOp=vdsOp=0) trivially
+        // satisfies before anything has been solved, so the whole relaxation
+        // loop found a spurious zero-current fixed point and never moved,
+        // confirmed on a hand-solved self-bias test circuit (expected
+        // ~0.39mA, got 0).
+        stampJfetId(G, I, e, gm, vgsOp, idAtOp, gds, vdsOp);
+      });
+      mosfetEdges.forEach((e, idx) => {
+        if (e.gateNet==null || e.sourceNet==null || e.drainNet==null) return;
+        if (!mosfetOn[idx]) return; // below threshold: Id=0 exactly, no stamp at all (not even a zero-gm one) — same as an off diode/BJT junction
+        // Saturation: Id = k*(Vgs-Vth)^2 for Vgs >= Vth. Triode (standard
+        // MOSFET square law, the enhancement-mode analogue of JFET's
+        // Shichman-Hodges form): Id = k*[2*(Vgs-Vth)*Vds - Vds^2]. Substituting
+        // Vds = Vgs-Vth into the triode formula gives k*(Vgs-Vth)^2, the same
+        // saturation value, so the two meet with no discontinuity at the
+        // boundary — verified below against a hand-solved reference rather
+        // than assumed from the algebra alone.
+        const vov = Math.max(0, mosfetVgsEstimate[idx] - e.vgsTh);
+        const vdsOp = Math.max(0, mosfetVdsEstimate[idx]);
+        let gm, gds, idAtOp;
+        if (mosfetTriode[idx]) {
+          gm  = 2 * e.k * vdsOp;
+          gds = 2 * e.k * (vov - vdsOp);
+          idAtOp = Math.max(0, e.k * (2 * vov * vdsOp - vdsOp * vdsOp));
+        } else {
+          gm  = 2 * e.k * vov;
+          gds = 0; // ideal saturation: no channel-length modulation in this model
+          idAtOp = e.k * vov * vov;
+        }
+        e.gm = gm;
+        stampMosfetId(G, I, e, gm, mosfetVgsEstimate[idx], idAtOp, gds, vdsOp);
+      });
 
       V = gaussianSolve(G, I);
 
@@ -960,6 +1264,65 @@ const Simulation = (() => {
         if (Math.abs(clampedIb - ibEstimate[idx]) > ibEstimate[idx] * 0.05) changed = true;
         ibEstimate[idx] = clampedIb;
       });
+      jfetEdges.forEach((e, idx) => {
+        if (e.gateNet==null || e.sourceNet==null || e.drainNet==null) return;
+        const vg = netIndex.has(e.gateNet)   ? V[netIndex.get(e.gateNet)]   : fixed.get(e.gateNet);
+        const vs = netIndex.has(e.sourceNet) ? V[netIndex.get(e.sourceNet)] : fixed.get(e.sourceNet);
+        const vd = netIndex.has(e.drainNet)  ? V[netIndex.get(e.drainNet)]  : fixed.get(e.drainNet);
+        const vgs = vg - vs, vds = vd - vs;
+
+        const newVgs = Utils.clamp(vgs, e.vgsOff, 0);
+        if (Math.abs(newVgs - jfetVgsEstimate[idx]) > 0.01) changed = true; // volts, not a ratio — Vgs sits in a narrow range so an absolute threshold reads better than BJT's relative one
+        jfetVgsEstimate[idx] = newVgs;
+
+        const newVds = Math.max(0, vds); // triode's formula assumes Vds>=0; a negative solve here means the region guess needs correcting next iteration anyway
+        if (Math.abs(newVds - jfetVdsEstimate[idx]) > 0.01) changed = true;
+        jfetVdsEstimate[idx] = newVds;
+
+        // Region check: saturation requires Vds >= Vgs - Vp (equivalently
+        // Vds >= |Vp| - |Vgs| for this sign convention). Below that, the
+        // channel hasn't fully pinched off and triode applies instead — same
+        // "does the external circuit actually support this operating point"
+        // check as a BJT's saturation boundary.
+        const vdsSatBoundary = newVgs - e.vgsOff;
+        const shouldBeTriode = vds < vdsSatBoundary;
+        if (shouldBeTriode !== jfetTriode[idx]) { jfetTriode[idx] = shouldBeTriode; changed = true; }
+      });
+      mosfetEdges.forEach((e, idx) => {
+        if (e.gateNet==null || e.sourceNet==null || e.drainNet==null) return;
+        const vg = netIndex.has(e.gateNet)   ? V[netIndex.get(e.gateNet)]   : fixed.get(e.gateNet);
+        const vs = netIndex.has(e.sourceNet) ? V[netIndex.get(e.sourceNet)] : fixed.get(e.sourceNet);
+        const vd = netIndex.has(e.drainNet)  ? V[netIndex.get(e.drainNet)]  : fixed.get(e.drainNet);
+        const vgs = vg - vs, vds = vd - vs;
+
+        const newVgs = Math.max(0, vgs); // negative Vgs is a normal off condition (not clamped away like JFET's asymptotic Vp — a MOSFET simply has zero overdrive there)
+        if (Math.abs(newVgs - mosfetVgsEstimate[idx]) > 0.01) changed = true;
+        mosfetVgsEstimate[idx] = newVgs;
+
+        const newVds = Math.max(0, vds);
+        if (Math.abs(newVds - mosfetVdsEstimate[idx]) > 0.01) changed = true;
+        mosfetVdsEstimate[idx] = newVds;
+
+        // On/off, committed with the same one-iteration-delay hysteresis as
+        // bjtStates (see its declaration for why): a proposed flip only takes
+        // effect once the SAME proposal repeats on the next iteration, so a
+        // hard threshold sitting on a feedback boundary can't flip every pass.
+        const shouldBeOn = vgs > e.vgsTh;
+        let committedOn = mosfetOn[idx];
+        if (shouldBeOn === mosfetProposed[idx]) {
+          if (shouldBeOn !== committedOn) { committedOn = shouldBeOn; changed = true; }
+        } else {
+          changed = true;
+        }
+        mosfetProposed[idx] = shouldBeOn;
+        mosfetOn[idx] = committedOn;
+
+        // Region check: saturation requires Vds >= Vgs-Vth (the overdrive).
+        // Below that the channel hasn't fully pinched off and triode applies.
+        const vdsSatBoundary = Math.max(0, newVgs - e.vgsTh);
+        const shouldBeTriode = vds < vdsSatBoundary;
+        if (shouldBeTriode !== mosfetTriode[idx]) { mosfetTriode[idx] = shouldBeTriode; changed = true; }
+      });
       if (!changed) break;
     }
 
@@ -995,8 +1358,43 @@ const Simulation = (() => {
       Ic += (e.Icbo || 0); // leaks even with the junction off
       bjtCurrents.set(e.inst, { Ib, Ic, vce, saturated: satStates[idx] && on });
     });
+    jfetEdges.forEach((e, idx) => {
+      if (e.gateNet==null || e.sourceNet==null || e.drainNet==null) { jfetCurrents.set(e.inst, { Id:0, vgs:0, vds:0, triode:false }); return; }
+      const vg = netIndex.has(e.gateNet)   ? V[netIndex.get(e.gateNet)]   : fixed.get(e.gateNet);
+      const vs = netIndex.has(e.sourceNet) ? V[netIndex.get(e.sourceNet)] : fixed.get(e.sourceNet);
+      const vd = netIndex.has(e.drainNet)  ? V[netIndex.get(e.drainNet)]  : fixed.get(e.drainNet);
+      const vgs = vg - vs, vds = vd - vs;
+      const vgsClamped = Utils.clamp(vgs, e.vgsOff, 0);
+      const vdsClamped = Math.max(0, vds);
+      const k = 2 * e.idss / (e.vgsOff * e.vgsOff);
+      let Id;
+      if (jfetTriode[idx]) {
+        Id = Math.max(0, k * ((vgsClamped - e.vgsOff) * vdsClamped - vdsClamped * vdsClamped / 2));
+      } else {
+        const ratio = 1 - vgsClamped / e.vgsOff;
+        Id = Math.max(0, e.idss * ratio * ratio);
+      }
+      jfetCurrents.set(e.inst, { Id, vgs, vds, triode: jfetTriode[idx] });
+    });
+    mosfetEdges.forEach((e, idx) => {
+      if (e.gateNet==null || e.sourceNet==null || e.drainNet==null) { mosfetCurrents.set(e.inst, { Id:0, vgs:0, vds:0, on:false, triode:false }); return; }
+      const vg = netIndex.has(e.gateNet)   ? V[netIndex.get(e.gateNet)]   : fixed.get(e.gateNet);
+      const vs = netIndex.has(e.sourceNet) ? V[netIndex.get(e.sourceNet)] : fixed.get(e.sourceNet);
+      const vd = netIndex.has(e.drainNet)  ? V[netIndex.get(e.drainNet)]  : fixed.get(e.drainNet);
+      const vgs = vg - vs, vds = vd - vs;
+      const on = mosfetOn[idx];
+      let Id = 0;
+      if (on) {
+        const vov = Math.max(0, vgs - e.vgsTh);
+        const vdsClamped = Math.max(0, vds);
+        Id = mosfetTriode[idx]
+          ? Math.max(0, e.k * (2 * vov * vdsClamped - vdsClamped * vdsClamped))
+          : Math.max(0, e.k * vov * vov);
+      }
+      mosfetCurrents.set(e.inst, { Id, vgs, vds, on, triode: mosfetTriode[idx] });
+    });
 
-    return { netVoltage, diodeCurrents, bjtCurrents };
+    return { netVoltage, diodeCurrents, bjtCurrents, jfetCurrents, mosfetCurrents };
   }
 
   // ── Small-signal (AC) solve ───────────────────────────────────────────────
@@ -1315,7 +1713,7 @@ const Simulation = (() => {
       if (inst.failed) continue;
       const def = ComponentRegistry.getById(inst.defId);
       const bt = def?.behavior?.type;
-      if (bt !== 'bjt_npn' && bt !== 'bjt_pnp' && bt !== 'diode' && bt !== 'led') continue;
+      if (bt !== 'bjt_npn' && bt !== 'bjt_pnp' && bt !== 'jfet_n' && bt !== 'mosfet_n' && bt !== 'diode' && bt !== 'led') continue;
       for (let i = 0; i < inst.legs.length; i++) {
         const n = nets.find(nets.key(inst.legs[i].row, inst.legs[i].col));
         if (exempt.has(n) || (legsOnNet.get(n) || 0) > 1) continue;

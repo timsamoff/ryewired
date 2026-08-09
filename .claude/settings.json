@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node \"C:\\\\Users\\\\Tim\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Tim-Documents-Ryewired\\\\ae109dae-2f5e-49d0-b25c-472280ba76f7\\\\scratchpad\\\\mosfet-sat.js\")",
+      "Bash(node \"C:\\\\Users\\\\Tim\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Tim-Documents-Ryewired\\\\ae109dae-2f5e-49d0-b25c-472280ba76f7\\\\scratchpad\\\\final-verify.js\")"
+    ]
+  }
+}

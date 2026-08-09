@@ -1,0 +1,101 @@
+{
+  "id": "transistor_jfet_n",
+  "label": "N-Channel JFET",
+  "category": "semiconductor",
+  "symbol": "Q",
+  "description": "N-channel junction field-effect transistor. Voltage-controlled: the gate draws no DC current, drain current is set by gate-source voltage.",
+  "legs": 3,
+  "leg_span": 2,
+  "leg_labels": [
+    "S",
+    "G",
+    "D"
+  ],
+  "properties": [
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "select",
+      "options": [
+        "J201",
+        "MPF102",
+        "2SK30A",
+        "BF245A"
+      ],
+      "default": "J201"
+    },
+    {
+      "key": "idss",
+      "label": "Idss (Vgs=0 drain current) — optional, overrides model's rating",
+      "type": "value_unit",
+      "default": "",
+      "default_unit": "mA",
+      "units": [
+        { "label": "µA", "factor": 0.001 },
+        { "label": "mA", "factor": 1 }
+      ]
+    },
+    {
+      "key": "vgs_off",
+      "label": "Vgs(off) (pinch-off voltage) — optional, overrides model's rating",
+      "type": "number",
+      "default": ""
+    },
+    {
+      "key": "pinout",
+      "label": "Pinout (left to right)",
+      "type": "select",
+      "options": [
+        "SGD",
+        "DGS",
+        "GSD"
+      ],
+      "default": "SGD"
+    }
+  ],
+  "model_params": {
+    "J201": {
+      "idss_ma": 0.45,
+      "vgs_off": -0.65,
+      "max_id_ma": 20,
+      "max_vds": 40
+    },
+    "MPF102": {
+      "idss_ma": 6.3,
+      "vgs_off": -2.0,
+      "max_id_ma": 20,
+      "max_vds": 25
+    },
+    "2SK30A": {
+      "idss_ma": 1.4,
+      "vgs_off": -1.4,
+      "max_id_ma": 10,
+      "max_vds": 50
+    },
+    "BF245A": {
+      "idss_ma": 3.6,
+      "vgs_off": -1.0,
+      "max_id_ma": 10,
+      "max_vds": 30
+    }
+  },
+  "behavior": {
+    "type": "jfet_n"
+  },
+  "failure_modes": {
+    "over_current": {
+      "result": "burn",
+      "message": "Drain current exceeded maximum rating. The JFET is destroyed. Check the drain load for too little resistance."
+    },
+    "over_voltage": {
+      "result": "burn",
+      "message": "Vds exceeded breakdown voltage. Use a device rated for higher voltage, or reduce the supply."
+    }
+  },
+  "visual": {
+    "body_color": "#111111",
+    "body_width": 48,
+    "body_height": 30,
+    "lead_length": 12
+  }
+}

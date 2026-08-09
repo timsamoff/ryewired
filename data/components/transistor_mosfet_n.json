@@ -1,0 +1,81 @@
+{
+  "id": "transistor_mosfet_n",
+  "label": "N-Channel MOSFET",
+  "category": "semiconductor",
+  "symbol": "Q",
+  "description": "N-channel enhancement-mode MOSFET. Voltage-controlled: the gate draws no DC current, drain current is zero below the gate threshold voltage and rises with the square of gate overdrive above it.",
+  "legs": 3,
+  "leg_span": 2,
+  "leg_labels": [
+    "D",
+    "G",
+    "S"
+  ],
+  "properties": [
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "select",
+      "options": [
+        "2N7000",
+        "BS170"
+      ],
+      "default": "2N7000"
+    },
+    {
+      "key": "vgs_th",
+      "label": "Vgs(th) (gate threshold voltage) — optional, overrides model's rating",
+      "type": "number",
+      "default": ""
+    },
+    {
+      "key": "k",
+      "label": "k (transconductance coefficient) — optional, overrides model's rating",
+      "type": "number",
+      "default": ""
+    },
+    {
+      "key": "pinout",
+      "label": "Pinout (left to right)",
+      "type": "select",
+      "options": [
+        "DGS",
+        "SGD"
+      ],
+      "default": "DGS"
+    }
+  ],
+  "model_params": {
+    "2N7000": {
+      "vgs_th": 2.1,
+      "k": 0.128,
+      "max_id_ma": 200,
+      "max_vds": 60
+    },
+    "BS170": {
+      "vgs_th": 2.0,
+      "k": 0.040,
+      "max_id_ma": 500,
+      "max_vds": 60
+    }
+  },
+  "behavior": {
+    "type": "mosfet_n"
+  },
+  "failure_modes": {
+    "over_current": {
+      "result": "burn",
+      "message": "Drain current exceeded maximum rating. The MOSFET is destroyed. Check the drain load for too little resistance."
+    },
+    "over_voltage": {
+      "result": "burn",
+      "message": "Vds exceeded breakdown voltage. Use a device rated for higher voltage, or reduce the supply."
+    }
+  },
+  "visual": {
+    "body_color": "#111111",
+    "body_width": 48,
+    "body_height": 30,
+    "lead_length": 12
+  }
+}

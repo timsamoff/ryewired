@@ -176,6 +176,47 @@ const Shapes = (() => {
     ctx.fillText(pinout[2],hw*0.55,hh*0.55);
   }
 
+  // A JFET's package looks like an ordinary silicon transistor's (J201
+  // ships TO-92, same as most small BJTs), so this reuses that body shape —
+  // but the pin labels are S/G/D, not E/B/C, so it can't just call
+  // drawTransistor with a relabeled pinout array: that function's germanium
+  // tab-side logic is keyed specifically on 'E', which has no JFET meaning.
+  function drawJfet(ctx,def,inst,bw,bh){
+    const hw=bw/2, hh=bh/2;
+    const JFET_LABELS = { SGD:['S','G','D'], DGS:['D','G','S'], GSD:['G','S','D'] };
+    const pinout = JFET_LABELS[inst.props?.pinout] || JFET_LABELS.SGD;
+    ctx.fillStyle='#111';ctx.beginPath();
+    ctx.ellipse(0,hh,hw,bh,0,Math.PI,Math.PI*2);
+    ctx.lineTo(-hw,hh);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=0.8;ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(-hw,hh);ctx.lineTo(hw,hh);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.65)';
+    ctx.font=`bold ${Math.max(6,hw*0.24)}px IBM Plex Mono,monospace`;ctx.textAlign='center';
+    ctx.fillText(pinout[0],-hw*0.55,hh*0.55);
+    ctx.fillText(pinout[1],0,hh*0.55);
+    ctx.fillText(pinout[2],hw*0.55,hh*0.55);
+  }
+
+  // Same TO-92 body as drawJfet — the pin labels differ (D/G/S, and only two
+  // pinout options rather than JFET's three, per transistor_mosfet_n.json).
+  function drawMosfet(ctx,def,inst,bw,bh){
+    const hw=bw/2, hh=bh/2;
+    const MOSFET_LABELS = { DGS:['D','G','S'], SGD:['S','G','D'] };
+    const pinout = MOSFET_LABELS[inst.props?.pinout] || MOSFET_LABELS.DGS;
+    ctx.fillStyle='#111';ctx.beginPath();
+    ctx.ellipse(0,hh,hw,bh,0,Math.PI,Math.PI*2);
+    ctx.lineTo(-hw,hh);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=0.8;ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(-hw,hh);ctx.lineTo(hw,hh);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.65)';
+    ctx.font=`bold ${Math.max(6,hw*0.24)}px IBM Plex Mono,monospace`;ctx.textAlign='center';
+    ctx.fillText(pinout[0],-hw*0.55,hh*0.55);
+    ctx.fillText(pinout[1],0,hh*0.55);
+    ctx.fillText(pinout[2],hw*0.55,hh*0.55);
+  }
+
   function drawSwitch(ctx,bw,bh,onColor,offColor,closed){
     ctx.fillStyle='#3a3a3a';roundRect(ctx,-bw/2,-bh/2,bw,bh,3);ctx.fill();
     ctx.strokeStyle=closed?onColor:offColor;ctx.lineWidth=2.5;
@@ -240,6 +281,8 @@ const Shapes = (() => {
       case 'diode':          drawDiode(ctx,def,inst,bw,bh); break;
       case 'transistor_npn':
       case 'transistor_pnp': drawTransistor(ctx,def,inst,col,bw,bh); break;
+      case 'transistor_jfet_n': drawJfet(ctx,def,inst,bw,bh); break;
+      case 'transistor_mosfet_n': drawMosfet(ctx,def,inst,bw,bh); break;
       case 'switch_spst':    drawSwitch(ctx,bw,bh,theme?.success||'#33cc66',theme?.alert||'#e6394a',Utils.isSwitchClosed(inst)); break;
       case 'power_supply':   drawPower(ctx,col,bw,bh,inst.props.voltage,!!inst.props.reverse_polarity,ang); break;
       case 'signal_generator':drawSigGen(ctx,col,bw,bh,inst.props.waveform,theme?.scopeTrace); break;
