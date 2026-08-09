@@ -130,6 +130,49 @@ for (const c of components) c.legs.forEach(l => bump(l.row, l.col));
 for (const w of wires) { bump(w.r1, w.c1); bump(w.r2, w.c2); }
 for (const [k, n] of strip) if (n > 5) err(`column strip ${k} has ${n} connections but only 5 holes`);
 
+// ── 6b. Two 2-leg parts must not share a column strip with no anchor ───────
+// A column strip bonds rows 5-9 (or 0-4) together into one net, so two legs
+// landing in the same strip a row apart ARE connected — but nothing on
+// screen shows that, unlike a wire, which is a visible traceable line.
+// Device-to-rail-resistor strips (rule 5: "connect to power and ground
+// vertically") are exempt on purpose — every bundled reference circuit does
+// this, and it's unambiguous because a 3-leg device's terminal anchors the
+// strip's meaning; anything else landing there is obviously feeding or
+// loading that terminal. The genuinely ambiguous case is two 2-leg parts
+// (typically a resistor divider's midpoint) sharing a strip with NO 3-leg
+// device anywhere in it — nothing marks that connection as deliberate rather
+// than accidental. Confirmed on a real MOSFET gate-bias divider where R1 and
+// R2's midpoint was left as bare column-bonding instead of an explicit
+// jumper. Flag a strip only when it holds 2+ different component instances
+// AND none of them is a 3-leg part AND no wire touches the strip.
+const stripOwners  = new Map(); // key -> Set of instanceIds
+const stripHasWire = new Map(); // key -> bool
+const stripHas3Leg = new Map(); // key -> bool
+const stripKey = (r, c) => isRail(r) ? null : `${halfOf(r)}:${c}`;
+for (const c of components) {
+  const d = defs[c.defId];
+  const is3Leg = (d?.legs || 2) >= 3;
+  c.legs.forEach(l => {
+    const k = stripKey(l.row, l.col);
+    if (!k) return;
+    if (!stripOwners.has(k)) stripOwners.set(k, new Set());
+    stripOwners.get(k).add(c.instanceId);
+    if (is3Leg) stripHas3Leg.set(k, true);
+  });
+}
+for (const w of wires) {
+  for (const [r, cc] of [[w.r1, w.c1], [w.r2, w.c2]]) {
+    const k = stripKey(r, cc);
+    if (k) stripHasWire.set(k, true);
+  }
+}
+for (const [k, owners] of stripOwners) {
+  if (owners.size > 1 && !stripHas3Leg.get(k) && !stripHasWire.get(k)) {
+    const names = [...owners].map(id => nameOf(components.find(c => c.instanceId === id)));
+    err(`column strip ${k} silently joins ${names.join(' + ')} with no wire and no anchoring device — give one part its own strip and run an explicit jumper to the other (or to a rail) instead of relying on column-bonding alone`);
+  }
+}
+
 // ── 7. Conventions ──────────────────────────────────────────────────────────
 for (const w of wires) {
   if ((isRail(w.r1) || isRail(w.r2)) && w.color && w.color.toLowerCase() !== '#000000') {

@@ -1,0 +1,140 @@
+{
+  "components": [
+    {
+      "instanceId": "M1MOS",
+      "defId": "transistor_mosfet_n",
+      "legs": [
+        {
+          "row": 6,
+          "col": 44
+        },
+        {
+          "row": 6,
+          "col": 45
+        },
+        {
+          "row": 6,
+          "col": 46
+        }
+      ],
+      "props": {
+        "model": "2N7000",
+        "pinout": "DGS",
+        "title": "M1"
+      }
+    },
+    {
+      "instanceId": "R101",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 7,
+          "col": 42
+        },
+        {
+          "row": 7,
+          "col": 45
+        }
+      ],
+      "props": {
+        "resistance": 2900000,
+        "resistance__unit": "MΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R1"
+      }
+    },
+    {
+      "instanceId": "R201",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 8,
+          "col": 45
+        },
+        {
+          "row": 8,
+          "col": 48
+        }
+      ],
+      "props": {
+        "resistance": 1000000,
+        "resistance__unit": "MΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R2"
+      }
+    },
+    {
+      "instanceId": "RD01",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 44
+        },
+        {
+          "row": "rtp",
+          "col": 44
+        }
+      ],
+      "props": {
+        "resistance": 820,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "Rd"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "WGRND",
+      "r1": 7,
+      "c1": 46,
+      "r2": "rtm",
+      "c2": 46,
+      "color": "#000000"
+    },
+    {
+      "id": "WKQMAM",
+      "r1": 7,
+      "c1": 48,
+      "r2": "rtm",
+      "c2": 48,
+      "color": "#ff9900"
+    },
+    {
+      "id": "WNESEA",
+      "r1": 6,
+      "c1": 42,
+      "r2": "rtp",
+      "c2": 42,
+      "color": "#ff3333"
+    }
+  ],
+  "permanentDevices": {
+    "power": {
+      "voltage": 9,
+      "current_limit_ma": 500,
+      "reverse_polarity": false,
+      "power_on": true,
+      "battery_sag": 0,
+      "internal_resistance": 1
+    },
+    "input": {
+      "waveform": "Sine",
+      "frequency": 440,
+      "amplitude": 0,
+      "dc_offset": 0,
+      "phase": 0,
+      "looping": true,
+      "audio_file": null,
+      "audio_source": "upload"
+    },
+    "output": {
+      "volume": 0,
+      "mute": true
+    }
+  }
+}
