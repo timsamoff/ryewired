@@ -191,7 +191,7 @@
       "max_ic_ma": 25,
       "max_vce": 25,
       "type": "germanium",
-      "icbo_na": 10000,
+      "icbo_na": 5000,
       "ft_mhz": 4,
       "ccb_pf": 3.5
     },
@@ -202,7 +202,7 @@
       "max_ic_ma": 50,
       "max_vce": 18,
       "type": "germanium",
-      "icbo_na": 12000,
+      "icbo_na": 15000,
       "ft_mhz": 1,
       "ccb_pf": 22
     },
@@ -213,7 +213,7 @@
       "max_ic_ma": 500,
       "max_vce": 32,
       "type": "germanium",
-      "icbo_na": 25000
+      "icbo_na": 10000
     },
     "AC187": {
       "hfe": 175,
@@ -231,7 +231,7 @@
       "max_ic_ma": 500,
       "max_vce": 40,
       "type": "germanium",
-      "icbo_na": 15000
+      "icbo_na": 500000
     },
     "MP38A": {
       "hfe": 65,
@@ -240,7 +240,7 @@
       "max_ic_ma": 20,
       "max_vce": 15,
       "type": "germanium",
-      "icbo_na": 30000,
+      "icbo_na": 75000,
       "ft_mhz": 2
     }
   },
