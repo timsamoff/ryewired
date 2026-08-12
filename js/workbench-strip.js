@@ -12,9 +12,19 @@ const WorkbenchStrip = (() => {
   let logoImg = null, logoReady = false;
   let _hoverTarget = null; // 'input' | 'output' | 'power' | 'switch' | null — drives the hover highlight
 
+  // amplitude 0.35: audio-engine.js's buildSource halves it again and treats
+  // 1.0 as 1 volt, so this lands at ~0.175V peak — mid-range for a real
+  // passive guitar pickup's normal-picking output (order 0.1-0.5V peak
+  // depending on pickup and attack). The previous default of 1.0 (~0.5V
+  // peak) sat at the loud/hard-picking end, hot enough that a gain-heavy
+  // stage's clip curve fully saturates and swallows small control changes
+  // (e.g. a Fuzz Face's Fuzz knob measured audibly inert at 0dB there, but
+  // recovers real movement below ~0.1 amplitude) — not a bug, but not
+  // representative of normal playing either. Existing saved .rw files keep
+  // whatever amplitude they were saved with; this only affects new circuits.
   const DEFAULT_PERMANENT_STATE = {
     power:  { voltage: 9, current_limit_ma: 500, reverse_polarity: false, power_on: true, battery_sag: 0, internal_resistance: 1 },
-    input:  { waveform: 'None', frequency: 440, amplitude: 1.0, dc_offset: 0, phase: 0, looping: true, audio_file: null, audio_source: 'upload' },
+    input:  { waveform: 'None', frequency: 440, amplitude: 0.35, dc_offset: 0, phase: 0, looping: true, audio_file: null, audio_source: 'upload' },
     output: { volume: 1.0, mute: false },
   };
   let permanentState = cloneState(DEFAULT_PERMANENT_STATE);

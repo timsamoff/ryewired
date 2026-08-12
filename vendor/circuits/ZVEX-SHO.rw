@@ -1,0 +1,183 @@
+{
+  "components": [
+    {
+      "instanceId": "CIN01",
+      "defId": "capacitor",
+      "legs": [
+        { "row": 5, "col": 55 },
+        { "row": 5, "col": 47 }
+      ],
+      "props": {
+        "capacitance": 1e-7,
+        "capacitance__unit": "µF",
+        "voltage_rating": "50V",
+        "type": "Film",
+        "tolerance": "10%",
+        "title": "C1"
+      }
+    },
+    {
+      "instanceId": "Q1MOS",
+      "defId": "transistor_mosfet_n",
+      "legs": [
+        { "row": 6, "col": 46 },
+        { "row": 6, "col": 47 },
+        { "row": 6, "col": 48 }
+      ],
+      "props": {
+        "model": "BS170",
+        "pinout": "DGS",
+        "title": "Q1"
+      }
+    },
+    {
+      "instanceId": "R101",
+      "defId": "resistor",
+      "legs": [
+        { "row": 7, "col": 49 },
+        { "row": "rtm", "col": 49 }
+      ],
+      "props": {
+        "resistance": 10000000,
+        "resistance__unit": "MΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R1"
+      }
+    },
+    {
+      "instanceId": "D101",
+      "defId": "diode",
+      "legs": [
+        { "row": 8, "col": 47 },
+        { "row": "rtm", "col": 47 }
+      ],
+      "props": {
+        "model": "1N4148",
+        "forward_voltage": 0.7,
+        "title": "D1"
+      }
+    },
+    {
+      "instanceId": "D201",
+      "defId": "diode",
+      "legs": [
+        { "row": 7, "col": 44 },
+        { "row": 8, "col": 45 }
+      ],
+      "props": {
+        "model": "1N4148",
+        "forward_voltage": 0.7,
+        "title": "D2"
+      }
+    },
+    {
+      "instanceId": "R301",
+      "defId": "resistor",
+      "legs": [
+        { "row": 5, "col": 46 },
+        { "row": "rtp", "col": 46 }
+      ],
+      "props": {
+        "resistance": 5100,
+        "resistance__unit": "kΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R3"
+      }
+    },
+    {
+      "instanceId": "C201",
+      "defId": "capacitor_electrolytic",
+      "legs": [
+        { "row": 8, "col": 44 },
+        { "row": 7, "col": 38 }
+      ],
+      "props": {
+        "capacitance": 1e-5,
+        "capacitance__unit": "µF",
+        "voltage_rating": "50V",
+        "tolerance": "20%",
+        "title": "C2"
+      }
+    },
+    {
+      "instanceId": "R201",
+      "defId": "resistor",
+      "legs": [
+        { "row": 5, "col": 45 },
+        { "row": 5, "col": 44 }
+      ],
+      "props": {
+        "resistance": 10000000,
+        "resistance__unit": "MΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R2"
+      }
+    },
+    {
+      "instanceId": "P101",
+      "defId": "potentiometer",
+      "legs": [
+        { "row": 7, "col": 40 },
+        { "row": 7, "col": 41 },
+        { "row": 7, "col": 42 }
+      ],
+      "props": {
+        "resistance": 5000,
+        "taper": "Linear (B)",
+        "wiper": 0.5,
+        "resistance__unit": "kΩ",
+        "title": "R4"
+      }
+    },
+    {
+      "instanceId": "R501",
+      "defId": "resistor",
+      "legs": [
+        { "row": 6, "col": 38 },
+        { "row": "rtm", "col": 38 }
+      ],
+      "props": {
+        "resistance": 100000,
+        "resistance__unit": "kΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R5"
+      }
+    }
+  ],
+  "wires": [
+    { "id": "WGATE1", "r1": 7, "c1": 47, "r2": 6, "c2": 45, "color": "#33cc66" },
+    { "id": "WGATE2", "r1": 7, "c1": 45, "r2": 5, "c2": 49, "color": "#33cc66" },
+    { "id": "WDRAIN1", "r1": 6, "c1": 44, "r2": 7, "c2": 46, "color": "#ff3333" },
+    { "id": "WRHEO", "r1": 6, "c1": 41, "r2": 6, "c2": 42, "color": "#000000" },
+    { "id": "WSRC1", "r1": 9, "c1": 48, "r2": 9, "c2": 40, "color": "#15b21f" },
+    { "id": "WOUT", "r1": 9, "c1": 38, "r2": 7, "c2": 6, "color": "#15b21f" }
+  ],
+  "permanentDevices": {
+    "power": {
+      "voltage": 9,
+      "current_limit_ma": 500,
+      "reverse_polarity": false,
+      "power_on": true,
+      "battery_sag": 0,
+      "internal_resistance": 1
+    },
+    "input": {
+      "waveform": "Audio File",
+      "frequency": 440,
+      "amplitude": 1,
+      "dc_offset": 0,
+      "phase": 0,
+      "looping": true,
+      "audio_file": "Electric Guitar Sample",
+      "audio_source": "electric_guitar_sample.wav"
+    },
+    "output": {
+      "volume": 0.5,
+      "mute": false
+    }
+  }
+}

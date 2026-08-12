@@ -1,0 +1,440 @@
+{
+  "components": [
+    {
+      "instanceId": "CIN01",
+      "defId": "capacitor",
+      "legs": [
+        {
+          "row": 7,
+          "col": 55
+        },
+        {
+          "row": 7,
+          "col": 52
+        }
+      ],
+      "props": {
+        "capacitance": 1e-7,
+        "capacitance__unit": "µF",
+        "voltage_rating": "50V",
+        "type": "Film",
+        "tolerance": "10%",
+        "title": "C1"
+      }
+    },
+    {
+      "instanceId": "R201",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": "rtp",
+          "col": 52
+        },
+        {
+          "row": 5,
+          "col": 52
+        }
+      ],
+      "props": {
+        "resistance": 2200000,
+        "resistance__unit": "MΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R2"
+      }
+    },
+    {
+      "instanceId": "R101",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 51
+        },
+        {
+          "row": "rtm",
+          "col": 51
+        }
+      ],
+      "props": {
+        "resistance": 10000000,
+        "resistance__unit": "MΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R1"
+      }
+    },
+    {
+      "instanceId": "R301",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 57
+        },
+        {
+          "row": "rtm",
+          "col": 57
+        }
+      ],
+      "props": {
+        "resistance": 2200000,
+        "resistance__unit": "MΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R3"
+      }
+    },
+    {
+      "instanceId": "Q1JFET",
+      "defId": "transistor_jfet_n",
+      "legs": [
+        {
+          "row": 6,
+          "col": 45
+        },
+        {
+          "row": 6,
+          "col": 46
+        },
+        {
+          "row": 6,
+          "col": 47
+        }
+      ],
+      "props": {
+        "model": "J201",
+        "pinout": "SGD",
+        "title": "Q1"
+      }
+    },
+    {
+      "instanceId": "R401",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 45
+        },
+        {
+          "row": "rtm",
+          "col": 45
+        }
+      ],
+      "props": {
+        "resistance": 10000,
+        "resistance__unit": "kΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R4"
+      }
+    },
+    {
+      "instanceId": "C201",
+      "defId": "capacitor",
+      "legs": [
+        {
+          "row": 7,
+          "col": 45
+        },
+        {
+          "row": 7,
+          "col": 42
+        }
+      ],
+      "props": {
+        "capacitance": 0.000001,
+        "capacitance__unit": "µF",
+        "voltage_rating": "50V",
+        "type": "Film",
+        "tolerance": "10%",
+        "title": "C2"
+      }
+    },
+    {
+      "instanceId": "R501",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 6,
+          "col": 42
+        },
+        {
+          "row": "rtm",
+          "col": 42
+        }
+      ],
+      "props": {
+        "resistance": 100000,
+        "resistance__unit": "kΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R5"
+      }
+    },
+    {
+      "instanceId": "Q2JFET",
+      "defId": "transistor_jfet_n",
+      "legs": [
+        {
+          "row": 7,
+          "col": 34
+        },
+        {
+          "row": 7,
+          "col": 35
+        },
+        {
+          "row": 7,
+          "col": 36
+        }
+      ],
+      "props": {
+        "model": "J201",
+        "pinout": "SGD",
+        "title": "Q1a"
+      }
+    },
+    {
+      "instanceId": "R601",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 34
+        },
+        {
+          "row": "rtm",
+          "col": 34
+        }
+      ],
+      "props": {
+        "resistance": 10000,
+        "resistance__unit": "kΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R6"
+      }
+    },
+    {
+      "instanceId": "C301",
+      "defId": "capacitor",
+      "legs": [
+        {
+          "row": 8,
+          "col": 34
+        },
+        {
+          "row": 8,
+          "col": 30
+        }
+      ],
+      "props": {
+        "capacitance": 0.000001,
+        "capacitance__unit": "µF",
+        "voltage_rating": "50V",
+        "type": "Film",
+        "tolerance": "10%",
+        "title": "C3"
+      }
+    },
+    {
+      "instanceId": "R701",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 7,
+          "col": 30
+        },
+        {
+          "row": "rtm",
+          "col": 30
+        }
+      ],
+      "props": {
+        "resistance": 100000,
+        "resistance__unit": "kΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R7"
+      }
+    },
+    {
+      "instanceId": "Q3JFET",
+      "defId": "transistor_jfet_n",
+      "legs": [
+        {
+          "row": 7,
+          "col": 23
+        },
+        {
+          "row": 7,
+          "col": 24
+        },
+        {
+          "row": 7,
+          "col": 25
+        }
+      ],
+      "props": {
+        "model": "J201",
+        "pinout": "SGD",
+        "title": "Q1b"
+      }
+    },
+    {
+      "instanceId": "R801",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 5,
+          "col": 23
+        },
+        {
+          "row": "rtm",
+          "col": 23
+        }
+      ],
+      "props": {
+        "resistance": 10000,
+        "resistance__unit": "kΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R8"
+      }
+    },
+    {
+      "instanceId": "C401",
+      "defId": "capacitor",
+      "legs": [
+        {
+          "row": 8,
+          "col": 23
+        },
+        {
+          "row": 8,
+          "col": 18
+        }
+      ],
+      "props": {
+        "capacitance": 0.000001,
+        "capacitance__unit": "µF",
+        "voltage_rating": "50V",
+        "type": "Film",
+        "tolerance": "10%",
+        "title": "C4"
+      }
+    },
+    {
+      "instanceId": "R901",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 7,
+          "col": 18
+        },
+        {
+          "row": "rtm",
+          "col": 18
+        }
+      ],
+      "props": {
+        "resistance": 100000,
+        "resistance__unit": "kΩ",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R9"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "WDR1",
+      "r1": 5,
+      "c1": 47,
+      "r2": "rtp",
+      "c2": 47,
+      "color": "#000000"
+    },
+    {
+      "id": "WDR2",
+      "r1": 5,
+      "c1": 36,
+      "r2": "rtp",
+      "c2": 36,
+      "color": "#000000"
+    },
+    {
+      "id": "WDR3",
+      "r1": 5,
+      "c1": 25,
+      "r2": "rtp",
+      "c2": 25,
+      "color": "#000000"
+    },
+    {
+      "id": "WBUSLINK",
+      "r1": 8,
+      "c1": 52,
+      "r2": 8,
+      "c2": 57,
+      "color": "#33cc66"
+    },
+    {
+      "id": "WBUSLINK2",
+      "r1": 6,
+      "c1": 52,
+      "r2": 6,
+      "c2": 51,
+      "color": "#33cc66"
+    },
+    {
+      "id": "WGATE1",
+      "r1": 7,
+      "c1": 51,
+      "r2": 7,
+      "c2": 46,
+      "color": "#33cc66"
+    },
+    {
+      "id": "WGATE2",
+      "r1": 8,
+      "c1": 51,
+      "r2": 8,
+      "c2": 35,
+      "color": "#33cc66"
+    },
+    {
+      "id": "WGATE3",
+      "r1": 9,
+      "c1": 51,
+      "r2": 9,
+      "c2": 24,
+      "color": "#33cc66"
+    }
+  ],
+  "permanentDevices": {
+    "power": {
+      "voltage": 9,
+      "current_limit_ma": 500,
+      "reverse_polarity": false,
+      "power_on": true,
+      "battery_sag": 0,
+      "internal_resistance": 1
+    },
+    "input": {
+      "waveform": "Audio File",
+      "frequency": 440,
+      "amplitude": 1,
+      "dc_offset": 0,
+      "phase": 0,
+      "looping": true,
+      "audio_file": "Electric Guitar Sample",
+      "audio_source": "electric_guitar_sample.wav"
+    },
+    "output": {
+      "volume": 0.5,
+      "mute": false
+    }
+  }
+}

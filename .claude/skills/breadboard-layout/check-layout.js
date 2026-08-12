@@ -130,46 +130,116 @@ for (const c of components) c.legs.forEach(l => bump(l.row, l.col));
 for (const w of wires) { bump(w.r1, w.c1); bump(w.r2, w.c2); }
 for (const [k, n] of strip) if (n > 5) err(`column strip ${k} has ${n} connections but only 5 holes`);
 
-// ── 6b. Two 2-leg parts must not share a column strip with no anchor ───────
+// ── 6b. A part sharing a strip must actually terminate there ───────────────
 // A column strip bonds rows 5-9 (or 0-4) together into one net, so two legs
 // landing in the same strip a row apart ARE connected — but nothing on
 // screen shows that, unlike a wire, which is a visible traceable line.
-// Device-to-rail-resistor strips (rule 5: "connect to power and ground
-// vertically") are exempt on purpose — every bundled reference circuit does
-// this, and it's unambiguous because a 3-leg device's terminal anchors the
-// strip's meaning; anything else landing there is obviously feeding or
-// loading that terminal. The genuinely ambiguous case is two 2-leg parts
-// (typically a resistor divider's midpoint) sharing a strip with NO 3-leg
-// device anywhere in it — nothing marks that connection as deliberate rather
-// than accidental. Confirmed on a real MOSFET gate-bias divider where R1 and
-// R2's midpoint was left as bare column-bonding instead of an explicit
-// jumper. Flag a strip only when it holds 2+ different component instances
-// AND none of them is a 3-leg part AND no wire touches the strip.
-const stripOwners  = new Map(); // key -> Set of instanceIds
-const stripHasWire = new Map(); // key -> bool
-const stripHas3Leg = new Map(); // key -> bool
-const stripKey = (r, c) => isRail(r) ? null : `${halfOf(r)}:${c}`;
-for (const c of components) {
-  const d = defs[c.defId];
-  const is3Leg = (d?.legs || 2) >= 3;
-  c.legs.forEach(l => {
-    const k = stripKey(l.row, l.col);
-    if (!k) return;
-    if (!stripOwners.has(k)) stripOwners.set(k, new Set());
-    stripOwners.get(k).add(c.instanceId);
-    if (is3Leg) stripHas3Leg.set(k, true);
-  });
-}
-for (const w of wires) {
-  for (const [r, cc] of [[w.r1, w.c1], [w.r2, w.c2]]) {
-    const k = stripKey(r, cc);
-    if (k) stripHasWire.set(k, true);
+//
+// The test isn't a headcount (tried that twice and got it wrong both
+// directions — see git history). It's whether every part sharing the strip
+// is actually DOING something to that strip's net, versus merely passing
+// through it on the way to somewhere else. A part's FAR leg (the one not on
+// the shared strip) makes its presence legible in any of three ways:
+//   - It lands on a rail. Feeding/loading the net from supply or ground —
+//     rule 5's canonical vertical connection, used throughout every bundled
+//     reference circuit.
+//   - It lands on the SAME net as the strip itself (a divider's second arm,
+//     reached via a wire elsewhere). Also fine — both arms of a divider
+//     genuinely belong to the node they're dividing.
+//   - It has an explicit WIRE touching its own hole, even if that wire runs
+//     off to a totally different net. The wire itself is the visible marker
+//     of intent this whole check exists to require — found on both
+//     ELECTRA-DISTORTION's input cap (couples straight into Q1's base
+//     column, far leg wired to the Input connection point) and LPB-1's
+//     inter-stage coupling cap (far leg wired onward to the next stage).
+//     Neither is a coincidence; both are marked as deliberate by the wire.
+// A part fails this only when its far leg is a bare, unwired dead end on a
+// net unrelated to the strip — that's the real "looks like an accident"
+// case: a JFET follower's source strip held the transistor's source, its Rs
+// (terminates on a rail, fine) AND an output coupling cap whose far leg was
+// a plain unwired hole on a completely separate output-resistor's net. The
+// cap had no business being silently folded into the source strip at all.
+// Net identity is computed the same way the app's own solver builds nets:
+// union-find over column-bonding (within a half) plus explicit wires.
+{
+  const parent = new Map();
+  const find = (k) => { while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); } return k; };
+  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+  const netKey = (r, c) => isRail(r) ? `rail:${r}` : `${halfOf(r)}:${c}`;
+  const ensure = (k) => { if (!parent.has(k)) parent.set(k, k); return k; };
+  for (const c of components) c.legs.forEach(l => ensure(netKey(l.row, l.col)));
+  for (const w of wires) {
+    const ka = ensure(netKey(w.r1, w.c1)), kb = ensure(netKey(w.r2, w.c2));
+    union(ka, kb);
   }
-}
-for (const [k, owners] of stripOwners) {
-  if (owners.size > 1 && !stripHas3Leg.get(k) && !stripHasWire.get(k)) {
-    const names = [...owners].map(id => nameOf(components.find(c => c.instanceId === id)));
-    err(`column strip ${k} silently joins ${names.join(' + ')} with no wire and no anchoring device — give one part its own strip and run an explicit jumper to the other (or to a rail) instead of relying on column-bonding alone`);
+
+  const stripOwners = new Map(); // strip key -> Set of instanceIds
+  const netHasWire   = new Set(); // union-find root -> a wire touches this net SOMEWHERE
+  const stripKey = (r, c) => isRail(r) ? null : `${halfOf(r)}:${c}`;
+  for (const c of components) {
+    c.legs.forEach(l => {
+      const k = stripKey(l.row, l.col);
+      if (!k) return;
+      if (!stripOwners.has(k)) stripOwners.set(k, new Set());
+      stripOwners.get(k).add(c.instanceId);
+    });
+  }
+  // A net counts as "marked deliberate" if a wire touches it ANYWHERE, not
+  // just at the exact hole a leg sits in — a leg reaches the wire through
+  // column-bonding just as validly as sitting directly on it. This is what
+  // a plain per-hole check missed: FUZZ-FACE-NPN's output cap lands on
+  // (7,30), which has no wire in that exact hole, but bonds (same column,
+  // top half) to (9,30), which IS one end of a standard row-9-to-row-4
+  // channel crossing onward to the Volume pot in the bottom half. Checking
+  // the hole alone flagged a completely correctly-wired reference circuit.
+  for (const w of wires) {
+    netHasWire.add(find(netKey(w.r1, w.c1)));
+    netHasWire.add(find(netKey(w.r2, w.c2)));
+  }
+  // Same idea for the fixed Input/Output connection points. A capacitor's
+  // two legs are never unioned to each other (same rule the app's own
+  // solver uses — see CLAUDE.md's net model), so this can't be "does the
+  // net itself touch column 55" — it has to be "does some component with a
+  // leg on THIS net also have a (different) leg at column 55 or 6". That's
+  // exactly what a coupling cap looks like: one leg on the net it's
+  // injecting into, the other leg at the fixed I/O point. ELECTRA-
+  // DISTORTION's feedback resistor shares its base-side strip with Input
+  // Cap, whose OTHER leg is at column 55 — that's what marks the base net
+  // as deliberately reached, not the base leg's own net identity.
+  const netTouchesIO = new Set();
+  for (const c of components) {
+    const hasIOLeg = c.legs.some(l => l.col === IO_COLS.input || l.col === IO_COLS.output);
+    if (!hasIOLeg) continue;
+    c.legs.forEach(l => {
+      if (l.col === IO_COLS.input || l.col === IO_COLS.output) return;
+      netTouchesIO.add(find(netKey(l.row, l.col)));
+    });
+  }
+
+  for (const [k, owners] of stripOwners) {
+    if (owners.size < 2) continue;
+    // stripKey and netKey use the identical format for non-rail rows
+    // (`${halfOf}:${col}`), so the strip's own key IS its net's union-find
+    // key — no need to reconstruct a row/col pair from the string.
+    const stripNet = find(k);
+    for (const id of owners) {
+      const c = components.find(cc => cc.instanceId === id);
+      const d = defs[c.defId];
+      if ((d?.legs || 2) >= 3) continue; // the anchoring device itself never needs to justify being on its own terminal
+      const stray = c.legs.some(l => {
+        if (l.col === IO_COLS.input || l.col === IO_COLS.output) return false; // fixed workbench connection point, no wire needed to justify it
+        const legNet = find(netKey(l.row, l.col));
+        if (legNet.startsWith('rail:')) return false;
+        if (legNet === stripNet) return false;
+        if (netHasWire.has(legNet) || netTouchesIO.has(legNet)) return false; // marked deliberate elsewhere on this net
+        return true;
+      });
+      if (stray) {
+        const names = [...owners].map(oid => nameOf(components.find(cc => cc.instanceId === oid)));
+        err(`column strip ${k}: ${nameOf(c)} shares this strip with ${names.filter(n=>n!==nameOf(c)).join(', ')} but its other leg is an unwired dead end on a different, unrelated net — give it its own strip and run an explicit jumper instead of relying on column-bonding alone`);
+        break;
+      }
+    }
   }
 }
 

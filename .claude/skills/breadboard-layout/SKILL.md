@@ -36,6 +36,8 @@ node .claude/skills/breadboard-layout/check-layout.js <file.rw>
 
 **6. Use resistors as the long-distance element.** Resistors are the one part you can reasonably stretch, exactly as you would bend leads on a real board. The reference stretches the 8.2k across 8 columns and the 100k across 7. Do not stretch transistors or pots.
 
+**7. A part can move to a completely different, otherwise-empty region of the board if a jumper carries its net there deliberately.** This isn't a last resort — a real hand-built Tillman Boost layout put the output coupling cap in the BOTTOM half, far from the rest of the (top-half) circuit, reached by one clean `(9,c)`-to-`(4,c)` crossing carrying the drain net down first. It reads fine, because the crossing itself is straight and there's exactly one wire to trace, not a tangle. Reach for this when a stage is cramped and the natural next columns are already full, rather than stretching a resistor further than reasonable or stacking a fourth thing into a column strip.
+
 ## Hard rules
 
 These are the ones `check-layout.js` enforces:
@@ -53,6 +55,7 @@ These are the ones `check-layout.js` enforces:
 - **Black wires for ground**, colors for signal. The reference uses `#000000` for all three rail-to-ground jumpers and varied colors elsewhere so crossings stay distinguishable.
 - **Title the parts that matter.** `props.title` of `Q1`, `Q2`, `Fuzz`, `Volume` makes both the properties panel and any diagnostic output readable. Untitled parts show up as instance IDs like `RV44FO8`.
 - **Keep the whole circuit between the connection points**, roughly columns 28 to 46 for a two-transistor pedal. Do not crowd against column 0 or 62.
+- **A schematic's second "ground" symbol (a separate signal-ground return, distinct from the main ground) has no real second net on this board** — there's one ground rail. Don't leave a component's leg dangling to represent it (a real, unwired dead end, which the layout checker will also flag as a stray leg per the silent-sharing rule). Wire that part directly rail-to-rail instead (`rtp` to `rtm` for a decoupling cap in that position) — it's both more honest about what the part is actually doing on a one-ground-rail board, and leaves nothing floating in the netlist.
 
 ## After laying out, check the electrical result too
 

@@ -1490,6 +1490,51 @@ const Simulation = (() => {
         if (pnp) vccs.push({ p: eN, q: bN, src: cN, sink: eN, gm });
         else     vccs.push({ p: bN, q: eN, src: eN, sink: cN, gm });
 
+      } else if (bt === 'jfet_n' && L.length >= 3) {
+        // Gate draws no DC current, so unlike a BJT's base there is no
+        // rpi edge at all here — the gate is a true open circuit into this
+        // network, reached only through the gm-controlled current source
+        // below. gm at the DC operating point comes from the saturation
+        // square law Id=Idss*(1-Vgs/Vp)^2, solved for gm algebraically
+        // rather than needing Vgs itself: ratio=sqrt(Id/Idss)=1-Vgs/Vp, so
+        // gm=(2*Idss/|Vp|)*ratio=2*sqrt(Idss*Id)/|Vp|. Verified against the
+        // DC solver's own e.gm (computed per-iteration inside
+        // solveNetVoltages, not otherwise available here) on two real
+        // circuits: J201 at Id=0.1341mA reproduced gm to 5 significant
+        // figures. Triode-region gm would differ (2*k*Vds instead), but
+        // small-signal gain is only meaningful for a stage actually
+        // amplifying in saturation, so this is the right region to model.
+        const pm = def.model_params?.[inst.props.model] || {};
+        const idss = parseFloat(inst.props.idss) ? parseFloat(inst.props.idss)/1000 : (pm.idss_ma||0.45)/1000;
+        const vgsOff = parseFloat(inst.props.vgs_off) || pm.vgs_off || -0.65;
+        const Id = Math.max(inst._current || 0, 1e-9);
+        const gm = 2 * Math.sqrt(idss * Id) / Math.abs(vgsOff);
+        const JFET_PINOUTS = { SGD: [0,1,2], DGS: [2,1,0], GSD: [1,0,2] };
+        const [sIdx, gIdx, dIdx] = JFET_PINOUTS[inst.props.pinout] || JFET_PINOUTS.SGD;
+        const gN = netOf(L[gIdx].row, L[gIdx].col);
+        const sN = netOf(L[sIdx].row, L[sIdx].col);
+        const dN = netOf(L[dIdx].row, L[dIdx].col);
+        // Current direction matches stampJfetId: enters drain, leaves via
+        // source, controlled by Vgs (gate relative to source).
+        vccs.push({ p: gN, q: sN, src: dN, sink: sN, gm });
+
+      } else if (bt === 'mosfet_n' && L.length >= 3) {
+        // Same reasoning as the JFET case above, but for the enhancement-
+        // mode square law Id=k*(Vgs-Vth)^2: Vov=sqrt(Id/k), gm=2*k*Vov=
+        // 2*sqrt(k*Id) — again solved without needing Vgs directly.
+        // Verified against the DC solver's own gm on a real 2N7000 circuit
+        // (Id=5.4473mA) to 6 significant figures.
+        const pm = def.model_params?.[inst.props.model] || {};
+        const k = parseFloat(inst.props.k) || pm.k || 0.02;
+        const Id = Math.max(inst._current || 0, 1e-9);
+        const gm = 2 * Math.sqrt(k * Id);
+        const MOSFET_PINOUTS = { DGS: [2,1,0], SGD: [0,1,2] };
+        const [sIdx, gIdx, dIdx] = MOSFET_PINOUTS[inst.props.pinout] || MOSFET_PINOUTS.DGS;
+        const gN = netOf(L[gIdx].row, L[gIdx].col);
+        const sN = netOf(L[sIdx].row, L[sIdx].col);
+        const dN = netOf(L[dIdx].row, L[dIdx].col);
+        vccs.push({ p: gN, q: sN, src: dN, sink: sN, gm });
+
       } else if (bt === 'switch_spst') {
         // Already unioned into one net by buildNetMap when closed; open
         // switches correctly leave the two sides unconnected.
@@ -1530,7 +1575,25 @@ const Simulation = (() => {
       }
       if (ki>=0) {
         if (pi>=0) G[ki][pi] += v.gm; else if (fixed.has(v.p)) I[ki] -= v.gm*fixed.get(v.p);
-        if (qi>=0) G[ki][qi] -= v.gm; else if (fixed.has(v.q)) I[ki] += v.gm*fixed.get(v.q);
+        // qi===ki (q and sink are the SAME node) needs +=, not the general
+        // case's -=. This is a real, narrow sign bug, found and fixed via a
+        // hand-solved JFET source follower (gate driven, source is both the
+        // controlling voltage's "-" terminal AND where current arrives —
+        // exactly this collision). With -=gm the follower solved to a
+        // physically impossible 1.09x gain (a follower can never exceed
+        // unity gain); with +=gm it correctly gives 0.9295, matching
+        // gm*Rs/(1+gm*Rs) by hand to 6 figures. The qi!==ki case (an
+        // emitter-degeneration BJT stage's G[collector][emitter] term, a
+        // DIFFERENT verified circuit) needs the ORIGINAL -=gm — confirmed
+        // by hand-solving Rc/(re+Re) and getting a match only with -=gm
+        // there. Do not "simplify" this back to one uniform sign for all
+        // qi>=0: the two cases are genuinely different accumulations and
+        // conflating them breaks one to fix the other, as happened here.
+        // The mirror case on the OTHER block (si block's pi===si, e.g. a
+        // gate tied directly to its own drain) is NOT handled — no circuit
+        // in this codebase exercises that topology, so it's left as the
+        // block's original code rather than guessing a fix nothing can verify.
+        if (qi>=0) G[ki][qi] += (qi===ki ? v.gm : -v.gm); else if (fixed.has(v.q)) I[ki] += v.gm*fixed.get(v.q);
       }
     }
 

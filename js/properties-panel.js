@@ -32,7 +32,7 @@ const PropertiesPanel = (() => {
         { key:'waveform', label:'Audio Source', type:'select', default:'None',
           options:['None','Sine','Square','Triangle','Sawtooth','White Noise','Pink Noise','Audio File'] },
         { key:'frequency', label:'Frequency (Hz)', type:'number', default:440, min:1, max:20000 },
-        { key:'amplitude', label:'Amplitude (V)', type:'number', default:1.0, min:0.01, max:12 },
+        { key:'amplitude', label:'Amplitude (V)', type:'number', default:0.35, min:0.01, max:12 },
         { key:'dc_offset', label:'DC Offset (V)', type:'number', default:0, min:-12, max:12 },
         { key:'phase', label:'Phase (°)', type:'number', default:0, min:0, max:360 },
         { key:'looping', label:'Loop Audio File', type:'boolean', default:true },

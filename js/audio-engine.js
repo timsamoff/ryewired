@@ -586,35 +586,49 @@ const AudioEngine = (() => {
         const def = ComponentRegistry.getById(inst.defId);
         if (!def) continue;
         const pairs = signalLegPairs(inst, def);
-        let entryNet = null, otherNet = null;
+        // Every pair that touches the net being expanded gets its own
+        // stage, not just the first match. A potentiometer's wiper
+        // genuinely feeds BOTH outer legs at once in a real circuit; a
+        // JFET/MOSFET's gate genuinely controls current at BOTH the source
+        // AND the drain simultaneously (Id modulates both terminals, that's
+        // what "3-terminal device" means electrically). Taking only the
+        // first match and marking the instance used stalled the walk one
+        // hop short of the output on a real common-source stage (Tillman
+        // Boost): signalLegPairs offers gate->source before gate->drain,
+        // the walk expanded from the gate, matched gate->source first,
+        // and Q1 was marked used before gate->drain ever got a chance —
+        // so the amplified drain signal, the actual output, was never
+        // built at all. Building every match fixes that without needing
+        // to guess a "right" pair order per topology.
+        let matchedAny = false;
         for (const pair of pairs) {
           const netA = nets.find(nets.key(pair[0].row, pair[0].col));
           const netB = nets.find(nets.key(pair[1].row, pair[1].col));
-          if (netA === net && netB !== net) { entryNet = netA; otherNet = netB; break; }
-          if (netB === net && netA !== net) { entryNet = netB; otherNet = netA; break; }
+          let entryNet = null, otherNet = null;
+          if (netA === net && netB !== net) { entryNet = netA; otherNet = netB; }
+          else if (netB === net && netA !== net) { entryNet = netB; otherNet = netA; }
+          else continue; // this pair doesn't touch the net we're expanding from
+          matchedAny = true;
+
+          const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet, groundNet, supplyNet);
+          const exitBus = busIn(otherNet); // arriving at the far net, so pre-clamp
+          if (built) {
+            entryBus.connect(built.in);
+            // A stage may be more than two nodes (a transistor is pre-gain,
+            // shaper, post-gain), and every one of them has to be tracked or
+            // stop()/refreshTopology leaks it.
+            if (built.nodes) allNodes.push(...built.nodes);
+            else { allNodes.push(built.in); if (built.out !== built.in) allNodes.push(built.out); }
+            built.out.connect(exitBus);
+          } else {
+            // no audio-shaping effect (e.g. a lone series resistor, or an
+            // LED) — signal passes through unchanged onto the far bus.
+            entryBus.connect(exitBus);
+          }
+
+          if (!isAcGround(otherNet) && !visitedNets.has(otherNet)) { visitedNets.add(otherNet); frontier.push(otherNet); }
         }
-        if (otherNet == null) continue; // no matching pair touches the net we're expanding from
-
-        used.add(inst.instanceId);
-        stageCount++;
-
-        const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet, groundNet, supplyNet);
-        const exitBus = busIn(otherNet); // arriving at the far net, so pre-clamp
-        if (built) {
-          entryBus.connect(built.in);
-          // A stage may be more than two nodes (a transistor is pre-gain,
-          // shaper, post-gain), and every one of them has to be tracked or
-          // stop()/refreshTopology leaks it.
-          if (built.nodes) allNodes.push(...built.nodes);
-          else { allNodes.push(built.in); if (built.out !== built.in) allNodes.push(built.out); }
-          built.out.connect(exitBus);
-        } else {
-          // no audio-shaping effect (e.g. a lone series resistor, or an
-          // LED) — signal passes through unchanged onto the far bus.
-          entryBus.connect(exitBus);
-        }
-
-        if (!isAcGround(otherNet) && !visitedNets.has(otherNet)) { visitedNets.add(otherNet); frontier.push(otherNet); }
+        if (matchedAny) { used.add(inst.instanceId); stageCount++; }
       }
     }
 
@@ -651,6 +665,25 @@ const AudioEngine = (() => {
         const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
         const cIdx = eIdx === 0 ? 2 : 0;
         return [[inst.legs[1], inst.legs[cIdx]]]; // base -> collector
+      }
+      case 'jfet_n': case 'mosfet_n': {
+        // Gate draws no DC current, so unlike a BJT the gate itself never
+        // carries the traced signal onward on its own — the walk has to
+        // hop gate->source (a follower) or gate->drain (common-source).
+        // Offering BOTH pairs and letting the walk's own net-matching pick
+        // whichever one actually touches the net being expanded from is
+        // the same pattern the potentiometer case already uses (wiper <->
+        // either outer leg): the walk tries each pair, keeps the one whose
+        // entryNet matches, and buildAudioStage below reads the real
+        // gain/orientation off the small-signal solve rather than assuming
+        // which topology this device is wired as.
+        if (inst.legs.length < 3) return [];
+        const PINOUTS = def.behavior.type === 'jfet_n'
+          ? { SGD: [0,1,2], DGS: [2,1,0], GSD: [1,0,2] }   // [sourceIdx, gateIdx, drainIdx]
+          : { DGS: [2,1,0], SGD: [0,1,2] };
+        const fallback = def.behavior.type === 'jfet_n' ? 'SGD' : 'DGS';
+        const [sIdx, gIdx, dIdx] = PINOUTS[inst.props.pinout] || PINOUTS[fallback];
+        return [[inst.legs[gIdx], inst.legs[sIdx]], [inst.legs[gIdx], inst.legs[dIdx]]];
       }
       default: return [];
     }
@@ -949,6 +982,40 @@ const AudioEngine = (() => {
         const post = ctx.createGain(); post.gain.value = scale;
         pre.connect(sh); sh.connect(post);
         _liveGainStages.push({ inst, g: pre, sh, post, nets, placed, groundNet });
+        return { in: pre, out: post, nodes: [pre, sh, post] };
+      }
+      case 'jfet_n': case 'mosfet_n': {
+        // entryNet is always the gate here (signalLegPairs only offers
+        // gate->source and gate->drain pairs), exitNet is whichever of
+        // source/drain the walk actually matched — so gain is simply
+        // netGain(gate, exit), no need to re-derive source/drain identity
+        // from the pinout here.
+        const gain = netGain(entryNet, exitNet);
+        // No per-device swing tracking exists yet for JFET/MOSFET (unlike
+        // BJT's setOutputSwing) — that's real, unbuilt scope, not something
+        // to fake here. Falls back to a simple, SYMMETRIC estimate: how far
+        // the exit net's actual DC voltage sits from the nearer of 0V or
+        // the supply rail, which at least keeps clipping in the right
+        // ballpark instead of clipping at an arbitrary fixed threshold.
+        // Found by matching exitNet back to whichever of this instance's
+        // OWN legs sits on it — Simulation only exposes voltage by
+        // row/col, not by net, so there's no direct net->voltage lookup.
+        const exitLeg = inst.legs.find(l => nets.find(nets.key(l.row, l.col)) === exitNet);
+        const vExit = (exitLeg && typeof Simulation !== 'undefined' && Simulation.getVoltageAt)
+          ? Simulation.getVoltageAt(exitLeg.row, exitLeg.col) : null;
+        const supply = (typeof WorkbenchStrip !== 'undefined')
+          ? parseFloat(WorkbenchStrip.getPermanentState()?.power?.voltage) : NaN;
+        let clip = 1;
+        if (Number.isFinite(vExit) && Number.isFinite(supply) && supply > 0) {
+          clip = Math.max(Math.min(vExit, supply - vExit), 1e-3);
+        }
+        const scale = Math.max(clip, 1e-3) / 0.9;
+        const g  = Number.isFinite(gain) ? gain : 1;
+        const pre  = ctx.createGain(); pre.gain.value  = g / scale;
+        const sh   = ctx.createWaveShaper(); sh.oversample = CLIP_OVERSAMPLE;
+        sh.curve   = makeClipCurve(clip / scale);
+        const post = ctx.createGain(); post.gain.value = scale;
+        pre.connect(sh); sh.connect(post);
         return { in: pre, out: post, nodes: [pre, sh, post] };
       }
       case 'diode': {

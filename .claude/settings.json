@@ -15,7 +15,10 @@
       "Bash(node \"C:\\\\Users\\\\Tim\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Tim-Documents-Ryewired\\\\ae109dae-2f5e-49d0-b25c-472280ba76f7\\\\scratchpad\\\\diagnose-rw.js\" vendor/circuits/JFET-TEST.rw)",
       "Bash(node \"C:\\\\Users\\\\Tim\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Tim-Documents-Ryewired\\\\ae109dae-2f5e-49d0-b25c-472280ba76f7\\\\scratchpad\\\\verify-test-circuits.js\")",
       "Edit(/.claude/skills/breadboard-layout/**)",
-      "Bash(node --check .claude/skills/breadboard-layout/check-layout.js)"
+      "Bash(node --check .claude/skills/breadboard-layout/check-layout.js)",
+      "Bash(node .claude/skills/breadboard-layout/check-layout.js vendor/circuits/JFET-SPLITTER.rw --verbose)",
+      "Bash(node \"C:\\\\Users\\\\Tim\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Tim-Documents-Ryewired\\\\ae109dae-2f5e-49d0-b25c-472280ba76f7\\\\scratchpad\\\\verify-splitter.js\")",
+      "Bash(node -e \"console.log\\(JSON.stringify\\(JSON.parse\\(require\\('fs'\\).readFileSync\\('vendor/circuits/JFET-SPLITTER.rw','utf8'\\)\\).wires, null, 2\\)\\)\")"
     ]
   }
 }
