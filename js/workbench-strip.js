@@ -22,10 +22,21 @@ const WorkbenchStrip = (() => {
   // recovers real movement below ~0.1 amplitude) — not a bug, but not
   // representative of normal playing either. Existing saved .rw files keep
   // whatever amplitude they were saved with; this only affects new circuits.
+  // source_impedance / load_impedance: Open work item 6 (input/output
+  // impedance). Input was previously an ideal zero-impedance voltage source
+  // and Output had no load at all — neither exists in real life. Defaults
+  // (10k source, 1M load) approximate a passive guitar pickup's DC output
+  // resistance driving a high-impedance downstream pedal/amp input, the
+  // common case this app models. A real pickup's impedance also rises with
+  // frequency from coil inductance, which this app has no inductor
+  // component for yet, so this is a resistance-only approximation (also
+  // noted in CLAUDE.md's Open work item 6). Consumed by solveAcNetwork,
+  // which stamps them as a Thevenin source resistor and a load resistor to
+  // AC ground rather than treating Input/Output as ideal.
   const DEFAULT_PERMANENT_STATE = {
     power:  { voltage: 9, current_limit_ma: 500, reverse_polarity: false, power_on: true, battery_sag: 0, internal_resistance: 1 },
-    input:  { waveform: 'None', frequency: 440, amplitude: 0.35, dc_offset: 0, phase: 0, looping: true, audio_file: null, audio_source: 'upload' },
-    output: { volume: 1.0, mute: false },
+    input:  { waveform: 'None', frequency: 440, amplitude: 0.35, dc_offset: 0, phase: 0, looping: true, audio_file: null, audio_source: 'upload', source_impedance: 10000 },
+    output: { volume: 1.0, mute: false, load_impedance: 1000000 },
   };
   let permanentState = cloneState(DEFAULT_PERMANENT_STATE);
   function cloneState(s) { return JSON.parse(JSON.stringify(s)); }

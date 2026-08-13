@@ -1627,6 +1627,262 @@ const Simulation = (() => {
     return x;
   }
 
+  // ── Real AC solve: complex-admittance small-signal network at ONE frequency
+  // (item 8's fix, step 2) ───────────────────────────────────────────────────
+  // A deliberate near-duplicate of solveSmallSignal above, not a shared
+  // helper — per CLAUDE.md's "surgical fixes over rewrites", the existing
+  // function is proven correct (extensively hand-verified this session) and
+  // is NOT touched here. Refactoring the two into one parametrized function
+  // would risk the working one to build the new one; a second explicit
+  // function costs some duplication but keeps both readable and keeps the
+  // proven one's git history/blame clean.
+  //
+  // The real difference from solveSmallSignal: EVERY conductance here is
+  // complex (re/im), and a capacitor's admittance is the actual jwC instead
+  // of the fixed CAP_AC_SHORT_R near-short. Solving this at many frequencies
+  // (the caller's job) is what finally gives coupling caps and any other
+  // frequency-dependent element a real transfer function, instead of the
+  // fixed-shape pattern-matching acLoadResistance does in audio-engine.js.
+  //
+  // gm terms (BJT/JFET/MOSFET controlled sources) stay REAL — this project's
+  // hybrid-pi model has no frequency dependence in gm itself (no Cbe/Cbc
+  // modeled), only the capacitors introduce frequency dependence. Lifted
+  // into complex form via cReal() so they combine with the complex resistor/
+  // capacitor admittances in the same matrix.
+  // sourceImpedance/loadImpedance: item 6 (input/output impedance). Zero
+  // (the default when a caller doesn't pass one) reproduces the old ideal-
+  // source/no-load behavior exactly, so existing callers that don't know
+  // about this yet keep working unchanged.
+  //
+  // A source with nonzero output impedance can't be a FIXED node — that
+  // would make it an ideal source again, impedance and all downstream
+  // loading be damned. It has to be a real Thevenin equivalent: an ideal 1V
+  // node, connected through a resistor to the ACTUAL driven net, which
+  // becomes a free node like any other. Same pattern this codebase's DC
+  // solver already uses for battery internal resistance (see _battery's
+  // virtualPos in solveNetVoltages) — a synthetic fixed node plus a real
+  // resistor edge, not a special-cased fixed voltage.
+  function solveAcNetwork(placed, nets, inputNet, acGroundNets, freqHz, sourceImpedance = 0, outputNet = null, loadImpedance = 0) {
+    if (inputNet == null) return null;
+    const w = 2 * Math.PI * freqHz;
+    const netOf = (row, col) => nets.find(nets.key(row, col));
+
+    const fixed = new Map();
+    for (const n of acGroundNets) if (n != null) fixed.set(n, cReal(0));
+    if (fixed.has(inputNet)) return null;
+
+    const edges = []; // { a, b, Y } — Y is a complex admittance
+    const vccs  = []; // { p, q, src, sink, gm } — gm is REAL (see above); lifted to complex at stamp time
+
+    if (sourceImpedance > 0) {
+      // inputNet is now a FREE node, driven through Rsrc from an ideal 1V
+      // node — exactly the shape a real source with output impedance has.
+      const idealSrc = '__ac_source_ideal__';
+      fixed.set(idealSrc, cReal(1));
+      edges.push({ a: idealSrc, b: inputNet, Y: cReal(1 / sourceImpedance) });
+    } else {
+      fixed.set(inputNet, cReal(1)); // ideal source, unchanged from before this parameter existed
+    }
+    if (outputNet != null && loadImpedance > 0 && !fixed.has(outputNet)) {
+      // A load resistor from the output net to AC ground. Reuses whichever
+      // AC-ground net is already fixed at 0 — a real load returns to the
+      // same reference everything else in the circuit does.
+      const acGroundNet = acGroundNets.find(n => n != null);
+      if (acGroundNet != null) edges.push({ a: outputNet, b: acGroundNet, Y: cReal(1 / loadImpedance) });
+    }
+
+    for (const inst of placed) {
+      if (inst.failed) continue;
+      const def = ComponentRegistry.getById(inst.defId);
+      const bt  = def?.behavior?.type;
+      const L   = inst.legs;
+
+      if (bt === 'resistor' && L.length >= 2) {
+        const R = resolvedValue(inst, 'resistance', 1000);
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
+                     Y: cReal(1 / Math.max(R, 1e-6)) });
+
+      } else if (bt === 'potentiometer' && L.length >= 3) {
+        const Rt = parseFloat(inst.props.resistance) || 100000;
+        const parsedW = parseFloat(inst.props.wiper);
+        const wpos = Number.isNaN(parsedW) ? 0.5 : parsedW;
+        const pos = (inst.props.taper||'').includes('Audio') ? Math.pow(wpos,2) : wpos;
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[1].row, L[1].col), Y: cReal(1/Math.max(Rt*pos, 1)) });
+        edges.push({ a: netOf(L[1].row, L[1].col), b: netOf(L[2].row, L[2].col), Y: cReal(1/Math.max(Rt*(1-pos), 1)) });
+
+      } else if (bt === 'capacitor' && L.length >= 2) {
+        // The actual point of this function: a real, frequency-dependent
+        // admittance instead of solveSmallSignal's fixed near-short.
+        const C = resolvedValue(inst, 'capacitance', 1e-6);
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
+                     Y: capAdmittance(C, w) });
+
+      } else if (bt === 'capacitor_electrolytic' && L.length >= 2) {
+        const C = resolvedValue(inst, 'capacitance', 1e-6);
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
+                     Y: capAdmittance(C, w) });
+
+      } else if ((bt === 'diode' || bt === 'led') && L.length >= 2) {
+        const I = inst._current || 0;
+        if (I <= 0) continue;
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
+                     Y: cReal(I / VT) });
+
+      } else if ((bt === 'bjt_npn' || bt === 'bjt_pnp') && L.length >= 3) {
+        const pnp = bt === 'bjt_pnp';
+        const pm  = def.model_params?.[inst.props.model] || {};
+        const hfe = parseFloat(inst.props.hfe) || pm.hfe || 100;
+        const Ic  = Math.max(inst._current || 0, 1e-6);
+        const gm  = Ic / VT;
+        const rpi = Math.max(hfe / gm, 1);
+        const eIdx = (inst.props.pinout === 'CBE') ? 2 : 0;
+        const cIdx = eIdx === 0 ? 2 : 0;
+        const bN = netOf(L[1].row, L[1].col);
+        const eN = netOf(L[eIdx].row, L[eIdx].col);
+        const cN = netOf(L[cIdx].row, L[cIdx].col);
+        edges.push({ a: bN, b: eN, Y: cReal(1/rpi) });
+        if (pnp) vccs.push({ p: eN, q: bN, src: cN, sink: eN, gm });
+        else     vccs.push({ p: bN, q: eN, src: eN, sink: cN, gm });
+
+      } else if (bt === 'jfet_n' && L.length >= 3) {
+        const pm = def.model_params?.[inst.props.model] || {};
+        const idss = parseFloat(inst.props.idss) ? parseFloat(inst.props.idss)/1000 : (pm.idss_ma||0.45)/1000;
+        const vgsOff = parseFloat(inst.props.vgs_off) || pm.vgs_off || -0.65;
+        const Id = Math.max(inst._current || 0, 1e-9);
+        const gm = 2 * Math.sqrt(idss * Id) / Math.abs(vgsOff);
+        const JFET_PINOUTS = { SGD: [0,1,2], DGS: [2,1,0], GSD: [1,0,2] };
+        const [sIdx, gIdx, dIdx] = JFET_PINOUTS[inst.props.pinout] || JFET_PINOUTS.SGD;
+        const gN = netOf(L[gIdx].row, L[gIdx].col);
+        const sN = netOf(L[sIdx].row, L[sIdx].col);
+        const dN = netOf(L[dIdx].row, L[dIdx].col);
+        vccs.push({ p: gN, q: sN, src: dN, sink: sN, gm });
+
+      } else if (bt === 'mosfet_n' && L.length >= 3) {
+        const pm = def.model_params?.[inst.props.model] || {};
+        const k = parseFloat(inst.props.k) || pm.k || 0.02;
+        const Id = Math.max(inst._current || 0, 1e-9);
+        const gm = 2 * Math.sqrt(k * Id);
+        const MOSFET_PINOUTS = { DGS: [2,1,0], SGD: [0,1,2] };
+        const [sIdx, gIdx, dIdx] = MOSFET_PINOUTS[inst.props.pinout] || MOSFET_PINOUTS.DGS;
+        const gN = netOf(L[gIdx].row, L[gIdx].col);
+        const sN = netOf(L[sIdx].row, L[sIdx].col);
+        const dN = netOf(L[dIdx].row, L[dIdx].col);
+        vccs.push({ p: gN, q: sN, src: dN, sink: sN, gm });
+
+      } else if (bt === 'switch_spst') {
+        // Already unioned into one net by buildNetMap when closed.
+      }
+    }
+
+    const idx = new Map();
+    const reg = n => { if (n != null && !fixed.has(n) && !idx.has(n)) idx.set(n, idx.size); };
+    for (const e of edges) { reg(e.a); reg(e.b); }
+    for (const v of vccs)  { reg(v.p); reg(v.q); reg(v.src); reg(v.sink); }
+
+    const N = idx.size;
+    const out = new Map(fixed);
+    if (N === 0) return out;
+
+    const G = Array.from({length:N}, () => new Array(N).fill(null).map(() => ({re:0,im:0})));
+    const I = new Array(N).fill(null).map(() => ({re:0,im:0}));
+    for (let i=0;i<N;i++) G[i][i] = cAdd(G[i][i], cReal(EPS));
+
+    for (const e of edges) {
+      if (e.a == null || e.b == null || e.a === e.b) continue;
+      const ai = idx.has(e.a) ? idx.get(e.a) : -1;
+      const bi = idx.has(e.b) ? idx.get(e.b) : -1;
+      if (ai>=0) G[ai][ai] = cAdd(G[ai][ai], e.Y);
+      if (bi>=0) G[bi][bi] = cAdd(G[bi][bi], e.Y);
+      if (ai>=0 && bi>=0) { G[ai][bi] = cSub(G[ai][bi], e.Y); G[bi][ai] = cSub(G[bi][ai], e.Y); }
+      else if (ai>=0 && fixed.has(e.b)) I[ai] = cAdd(I[ai], cMul(e.Y, fixed.get(e.b)));
+      else if (bi>=0 && fixed.has(e.a)) I[bi] = cAdd(I[bi], cMul(e.Y, fixed.get(e.a)));
+    }
+
+    // Same structure and the same qi===ki sign distinction as
+    // solveSmallSignal's verified vccs loop — see that function's comment
+    // for the full derivation and the hand-solved circuits that pinned down
+    // which sign belongs where. gm is real, lifted via cReal() per term.
+    for (const v of vccs) {
+      const gm = cReal(v.gm);
+      const pi = idx.has(v.p) ? idx.get(v.p) : -1, qi = idx.has(v.q) ? idx.get(v.q) : -1;
+      const si = idx.has(v.src) ? idx.get(v.src) : -1, ki = idx.has(v.sink) ? idx.get(v.sink) : -1;
+      if (si>=0) {
+        if (pi>=0) G[si][pi] = cSub(G[si][pi], gm); else if (fixed.has(v.p)) I[si] = cAdd(I[si], cMul(gm, fixed.get(v.p)));
+        if (qi>=0) G[si][qi] = cAdd(G[si][qi], gm); else if (fixed.has(v.q)) I[si] = cSub(I[si], cMul(gm, fixed.get(v.q)));
+      }
+      if (ki>=0) {
+        if (pi>=0) G[ki][pi] = cAdd(G[ki][pi], gm); else if (fixed.has(v.p)) I[ki] = cSub(I[ki], cMul(gm, fixed.get(v.p)));
+        if (qi>=0) G[ki][qi] = qi===ki ? cAdd(G[ki][qi], gm) : cSub(G[ki][qi], gm);
+        else if (fixed.has(v.q)) I[ki] = cAdd(I[ki], cMul(gm, fixed.get(v.q)));
+      }
+    }
+
+    const V = gaussianSolveComplex(G, I);
+    for (const [net, i] of idx) out.set(net, V[i]);
+    return out;
+  }
+
+  // ── Complex arithmetic + complex Gaussian solve (foundation for the real AC
+  // solve — item 8's fix) ────────────────────────────────────────────────────
+  // No external library, per this project's zero-dependency rule, so this is
+  // a small hand-rolled {re, im} pair type. Deliberately NOT wired into
+  // anything yet — this is step one of a multi-step build (see CLAUDE.md
+  // Open work item 8): verify the arithmetic and the solver are correct in
+  // isolation, against a hand-solvable RC filter's known closed-form
+  // frequency response, before any stamping code or consumer touches it.
+  //
+  // Why this is needed at all: solveSmallSignal (above) treats every
+  // capacitor as a fixed near-short (CAP_AC_SHORT_R), which is deliberate
+  // there — it only needs GAIN, and frequency shaping is handled separately
+  // by acLoadResistance + hardcoded biquad shapes in audio-engine.js. A real
+  // AC solve needs a capacitor's impedance to be 1/(jwC), which varies with
+  // frequency, so both the matrix entries and the solve itself have to work
+  // over complex numbers.
+  function cAdd(a, b) { return { re: a.re + b.re, im: a.im + b.im }; }
+  function cSub(a, b) { return { re: a.re - b.re, im: a.im - b.im }; }
+  function cMul(a, b) { return { re: a.re*b.re - a.im*b.im, im: a.re*b.im + a.im*b.re }; }
+  function cDiv(a, b) {
+    const d = b.re*b.re + b.im*b.im;
+    if (d === 0) return { re: 0, im: 0 }; // caller's job to keep denominators away from exactly zero (same convention as the real solver's EPS diagonal floor)
+    return { re: (a.re*b.re + a.im*b.im) / d, im: (a.im*b.re - a.re*b.im) / d };
+  }
+  function cAbs(a) { return Math.hypot(a.re, a.im); }
+  function cReal(x) { return { re: x, im: 0 }; } // lift a real number into complex, for mixing real conductances with complex ones in the same matrix
+
+  // Complex admittance of a capacitor at angular frequency w (rad/s): jwC.
+  // Returns {re:0, im: w*C}.
+  function capAdmittance(C, w) { return { re: 0, im: w * C }; }
+
+  // Same shape and pivoting strategy as gaussianSolve, over complex G/I.
+  // Kept as a fully separate function rather than a generic templated one —
+  // this codebase has no module system and no generics; a second explicit
+  // function is more readable here than parametrizing arithmetic ops through
+  // callbacks, and it means the real solver (proven correct all session)
+  // stays untouched by this change.
+  function gaussianSolveComplex(G, I) {
+    const n = I.length;
+    if (n === 0) return [];
+    const A = G.map(row => row.map(x => ({ re: x.re, im: x.im })));
+    const b = I.map(x => ({ re: x.re, im: x.im }));
+    for (let col = 0; col < n; col++) {
+      let piv = col;
+      for (let r = col+1; r < n; r++) if (cAbs(A[r][col]) > cAbs(A[piv][col])) piv = r;
+      if (cAbs(A[piv][col]) < 1e-15) continue;
+      [A[col], A[piv]] = [A[piv], A[col]];
+      [b[col], b[piv]] = [b[piv], b[col]];
+      for (let r = 0; r < n; r++) {
+        if (r === col) continue;
+        const f = cDiv(A[r][col], A[col][col]);
+        if (f.re === 0 && f.im === 0) continue;
+        for (let c = col; c < n; c++) A[r][c] = cSub(A[r][c], cMul(f, A[col][c]));
+        b[r] = cSub(b[r], cMul(f, b[col]));
+      }
+    }
+    const x = new Array(n).fill(null).map(() => ({ re: 0, im: 0 }));
+    for (let i = 0; i < n; i++) x[i] = cAbs(A[i][i]) > 1e-15 ? cDiv(b[i], A[i][i]) : { re: 0, im: 0 };
+    return x;
+  }
+
   // ── Net map (union-find) ──────────────────────────────────────────────────────
   // Prefers a component's tolerance-resolved actual value (see
   // components-registry.js's applyToleranceRoll) over its nominal one — this
@@ -1860,5 +2116,5 @@ const Simulation = (() => {
   // solveSmallSignal). Null until the first tick, or if there's no input.
   function getSmallSignalV() { return _lastSmallSignal; }
 
-  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,notifyStateChange,getVoltageAt,getSmallSignalV,buildNetMap };
+  return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,notifyStateChange,getVoltageAt,getSmallSignalV,buildNetMap,solveAcNetwork };
 })();

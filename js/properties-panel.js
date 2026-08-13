@@ -37,6 +37,7 @@ const PropertiesPanel = (() => {
         { key:'phase', label:'Phase (°)', type:'number', default:0, min:0, max:360 },
         { key:'looping', label:'Loop Audio File', type:'boolean', default:true },
         { key:'audio_file', label:'Audio File', type:'permanent_audio_source', default:null },
+        { key:'source_impedance', label:'Source Impedance (Ω)', type:'number', default:10000, min:0, max:1000000 },
       ]
     },
     output: {
@@ -44,6 +45,7 @@ const PropertiesPanel = (() => {
       properties: [
         { key:'volume', label:'Master Volume', type:'range', min:0, max:1, step:0.01, default:1.0 },
         { key:'mute', label:'Mute', type:'boolean', default:false },
+        { key:'load_impedance', label:'Load Impedance (Ω)', type:'number', default:1000000, min:1, max:10000000 },
       ]
     }
   };

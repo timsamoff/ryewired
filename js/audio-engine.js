@@ -502,6 +502,16 @@ const AudioEngine = (() => {
     // build exactly the graph they did before.
     const isAcGround = net => net != null && (net === groundNet || net === supplyNet);
 
+    // Item 6/8 plumbing: the real source/load impedance, so findAcCorner can
+    // solve the ACTUAL network (including Input's Thevenin resistance and
+    // Output's load) instead of acLoadResistance's blind spot at those two
+    // points. 0 reproduces the old ideal-source/no-load behavior exactly —
+    // see solveAcNetwork's default parameters.
+    const input  = (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getPermanentState().input  : null;
+    const output = (typeof WorkbenchStrip !== 'undefined') ? WorkbenchStrip.getPermanentState().output : null;
+    const sourceImpedance = Math.max(0, parseFloat(input?.source_impedance) || 0);
+    const loadImpedance   = Math.max(0, parseFloat(output?.load_impedance) || 0);
+
     const netTaps  = new Map(); // net -> node to connect OUT FROM; also the Audio Probe tap (post-clamp)
     const netIns   = new Map(); // net -> node to connect INTO; same object as the tap unless a clamp sits on the net
     const allNodes = [];
@@ -610,7 +620,8 @@ const AudioEngine = (() => {
           else continue; // this pair doesn't touch the net we're expanding from
           matchedAny = true;
 
-          const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet, groundNet, supplyNet);
+          const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet, groundNet, supplyNet,
+            inputNet, outputNet, sourceImpedance, loadImpedance);
           const exitBus = busIn(otherNet); // arriving at the far net, so pre-clamp
           if (built) {
             entryBus.connect(built.in);
@@ -805,6 +816,74 @@ const AudioEngine = (() => {
   // now falls out of the small-signal network solve instead, so there is
   // nothing left to pattern-match. Don't reintroduce it.
 
+  // Finds the real -3dB corner frequency of a single-pole coupling/shunt
+  // stage by actually solving the network (Simulation.solveAcNetwork, item 8)
+  // at a handful of frequencies and bisecting toward the point where the
+  // magnitude has genuinely dropped 3dB from its passband value — rather
+  // than acLoadResistance's pattern-matched R feeding fc=1/(2piRC). This is
+  // additive infrastructure: NOT wired into buildAudioStage yet (see
+  // CLAUDE.md Open work item 8 for the current status and what remains).
+  //
+  // isHighpass tells the search which direction is "passband": true means
+  // low frequencies are attenuated and the reference point is taken HIGH
+  // (a coupling cap); false means high frequencies are attenuated and the
+  // reference is taken LOW (a resistor's shunt cap to ground).
+  //
+  // Bisects in LOG frequency space (corners can span 1Hz-20kHz, four
+  // decades, so a linear search would need an impractically fine step or
+  // miss the corner entirely) between the passband reference and a point far
+  // on the attenuated side, stopping once the bracket is tight enough that
+  // the reported fc is accurate to about 1%.
+  function findAcCorner(placed, nets, inputNet, acGroundNets, sourceImpedance, outputNet, loadImpedance, measureNet, isHighpass) {
+    if (typeof Simulation === 'undefined' || !Simulation.solveAcNetwork) return null;
+    const magAt = (freqHz) => {
+      const res = Simulation.solveAcNetwork(placed, nets, inputNet, acGroundNets, freqHz, sourceImpedance, outputNet, loadImpedance);
+      if (!res) return null;
+      const v = res.get(measureNet);
+      if (!v || !Number.isFinite(v.re) || !Number.isFinite(v.im)) return null;
+      return Math.hypot(v.re, v.im);
+    };
+
+    // Passband reference: far enough from any plausible corner (four
+    // decades either side of the audio band) that a single-pole response is
+    // essentially flat there.
+    const passbandFreq = isHighpass ? 200000 : 0.02;
+    const passbandMag = magAt(passbandFreq);
+    if (passbandMag == null || passbandMag < 1e-9) return null; // no signal reaches this net at all — not this function's problem to diagnose
+
+    const target = passbandMag / Math.SQRT2; // -3dB point
+
+    // Bracket: passband side vs. a point far on the attenuated side. If even
+    // the far point hasn't dropped below target, the corner (if any) sits
+    // outside the audio-relevant range — not an error, just nothing to find.
+    let lo = isHighpass ? 0.02 : passbandFreq === 0.02 ? 200000 : 200000; // lo = attenuated-side bound
+    let hi = passbandFreq;
+    if (isHighpass) { lo = 0.02; hi = passbandFreq; } else { lo = passbandFreq; hi = 200000; }
+    const loMag = magAt(lo);
+    if (loMag == null) return null;
+    // Normalize so `hi` is always the passband side and `lo` the attenuated
+    // side for the bisection below, regardless of highpass/lowpass.
+    let attenuatedFreq = isHighpass ? lo : hi;
+    let passFreq = isHighpass ? hi : lo;
+    const attenuatedMag = isHighpass ? loMag : magAt(hi);
+    if (attenuatedMag == null || attenuatedMag >= target) return null; // never actually crosses -3dB in range
+
+    // Bisect in log space for ~24 iterations — more than enough for four
+    // decades of range to converge to well under 1% of the true corner.
+    let a = Math.log10(Math.min(attenuatedFreq, passFreq));
+    let b = Math.log10(Math.max(attenuatedFreq, passFreq));
+    // a is always the attenuated side, b the passband side, in log space
+    // ordered so `attenuatedMag < target < passbandMag`.
+    if (attenuatedFreq > passFreq) { const t = a; a = b; b = t; }
+    for (let i = 0; i < 24; i++) {
+      const mid = (a + b) / 2;
+      const midMag = magAt(Math.pow(10, mid));
+      if (midMag == null) return null;
+      if (midMag < target) a = mid; else b = mid; // move the attenuated-side bound toward the crossing
+    }
+    return Math.pow(10, (a + b) / 2);
+  }
+
   // Voltage gain between two nets, taken straight from simulation.js's
   // small-signal solve. Every node in that solve carries its gain relative to
   // a 1V input drive, so the ratio between two nodes IS the gain of whatever
@@ -919,7 +998,8 @@ const AudioEngine = (() => {
     return { gain, clipPos, clipNeg };
   }
 
-  function buildAudioStage(ctx, inst, def, nets, placed, entryNet, exitNet, groundNet, supplyNet) {
+  function buildAudioStage(ctx, inst, def, nets, placed, entryNet, exitNet, groundNet, supplyNet,
+      inputNet, outputNet, sourceImpedance, loadImpedance) {
     switch (def.behavior?.type) {
       case 'resistor': {
         // Net-based RC pairing: a capacitor shunting one of this resistor's
@@ -938,9 +1018,20 @@ const AudioEngine = (() => {
           return (aTouches && b===groundNet) || (bTouches && a===groundNet);
         });
         if (!cap) return null; // lone series resistor: no filtering effect, transparent
+        // Real fc from the actual network (item 8: findAcCorner solves at
+        // several frequencies and bisects to the true -3dB point, feedback
+        // and loading included), falling back to the plain RC formula only
+        // when the AC solve genuinely can't find a corner (e.g. this stage
+        // sits outside the traced path from Input, or the solve is
+        // unavailable) — same "derive, warn, fall back" shape the coupling
+        // cap case below has used since the acLoadResistance fix.
+        const acFc = (inputNet != null)
+          ? findAcCorner(placed, nets, inputNet, [groundNet, supplyNet].filter(n=>n!=null),
+              sourceImpedance, outputNet, loadImpedance, exitNet, false)
+          : null;
         const R = resolvedValue(inst, 'resistance', 10000);
         const C = resolvedValue(cap, 'capacitance', 0.000001);
-        const fc = 1 / (2 * Math.PI * R * C);
+        const fc = acFc != null ? acFc : 1 / (2 * Math.PI * R * C);
         const f = ctx.createBiquadFilter();
         f.type = 'lowpass'; f.frequency.value = Utils.clamp(fc, 10, 20000); f.Q.value = 0.707;
         return { in: f, out: f };
@@ -1052,24 +1143,41 @@ const AudioEngine = (() => {
         // That is almost certainly the long-standing "lacks low-end
         // heaviness" complaint, which had been attributed to unmodelled
         // input/output impedance instead.
-        const C     = resolvedValue(inst, 'capacitance', 0.000001);
-        const rSrc  = acLoadResistance(entryNet, nets, placed, groundNet, supplyNet, inst.instanceId);
-        const rLoad = acLoadResistance(exitNet,  nets, placed, groundNet, supplyNet, inst.instanceId);
+        const C = resolvedValue(inst, 'capacitance', 0.000001);
+        // Real fc from the actual network (item 8), same as the lowpass
+        // case above — findAcCorner solves the whole traced circuit
+        // (feedback, loading, AND now Input's source impedance / Output's
+        // load impedance, which acLoadResistance structurally can't see at
+        // all) and bisects to the true -3dB point, rather than
+        // acLoadResistance's 3-shape pattern match. Falls back to the old
+        // path only when the AC solve can't find a corner in-band.
+        const acFc = (inputNet != null)
+          ? findAcCorner(placed, nets, inputNet, [groundNet, supplyNet].filter(n=>n!=null),
+              sourceImpedance, outputNet, loadImpedance, exitNet, true)
+          : null;
 
-        let R;
-        if (rSrc == null && rLoad == null) {
-          // Nothing recognisable on either side. Warn rather than silently
-          // substituting a number and presenting the result as if it meant
-          // something.
-          R = CAP_REFERENCE_FALLBACK_R;
-          console.warn(`[Audio] Coupling cap ${inst.props?.title || inst.instanceId}: ` +
-            `couldn't derive a load impedance from the netlist, falling back to ` +
-            `${CAP_REFERENCE_FALLBACK_R}Ω — its corner frequency is a guess.`);
+        let fc;
+        if (acFc != null) {
+          fc = acFc;
         } else {
-          R = (rSrc || 0) + (rLoad || 0);
+          const rSrc  = acLoadResistance(entryNet, nets, placed, groundNet, supplyNet, inst.instanceId);
+          const rLoad = acLoadResistance(exitNet,  nets, placed, groundNet, supplyNet, inst.instanceId);
+          let R;
+          if (rSrc == null && rLoad == null) {
+            // Nothing recognisable on either side, and the real AC solve
+            // couldn't find a corner either. Warn rather than silently
+            // substituting a number and presenting the result as if it
+            // meant something.
+            R = CAP_REFERENCE_FALLBACK_R;
+            console.warn(`[Audio] Coupling cap ${inst.props?.title || inst.instanceId}: ` +
+              `couldn't derive a load impedance from the netlist, falling back to ` +
+              `${CAP_REFERENCE_FALLBACK_R}Ω — its corner frequency is a guess.`);
+          } else {
+            R = (rSrc || 0) + (rLoad || 0);
+          }
+          fc = 1 / (2 * Math.PI * Math.max(R, 1) * C);
         }
 
-        const fc = 1 / (2 * Math.PI * Math.max(R, 1) * C);
         const f  = ctx.createBiquadFilter();
         f.type = 'highpass'; f.frequency.value = Utils.clamp(fc, 10, 20000);
         return { in: f, out: f };
