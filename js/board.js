@@ -626,6 +626,7 @@ const Board = (() => {
     canvas=canvasEl;ctx=canvas.getContext('2d');
     _layout=buildLayout();initCanvas();
     canvas.addEventListener('mousemove',onMouseMove);
+    canvas.addEventListener('mouseleave',()=>{ if(typeof Tooltip!=='undefined') Tooltip.hide(); });
     canvas.addEventListener('mousedown',onMouseDown);
     canvas.addEventListener('mouseup',onMouseUp);
     canvas.addEventListener('click',onClick);
@@ -644,6 +645,39 @@ const Board = (() => {
     if(typeof currentTool==='function' && currentTool()==='probe' && typeof AudioEngine!=='undefined'){
       AudioEngine.probeHover(_hoverHole?_hoverHole.row:null, _hoverHole?_hoverHole.col:null);
     }
+    // Hover tooltip: only while idle (not dragging/wiring — a tooltip during
+    // a drag would just be clutter following the dragged part around), and
+    // only the topmost hit component under the cursor, matching what a
+    // click there would actually select.
+    if (typeof Tooltip !== 'undefined') {
+      const idle = !Wire.isWiring() && _dragMode === 'idle';
+      const hovered = idle ? hitTestComp(x,y) : null;
+      if (hovered) {
+        const def = ComponentRegistry.getById(hovered.defId);
+        const title = hovered.props?.title, model = hovered.props?.model;
+        // A named part still shows its model alongside the name ("Q1
+        // (2N5088)") — a title alone doesn't say WHICH transistor/diode/JFET
+        // it is, and that's often the thing worth knowing at a glance. Any
+        // component with a model prop gets this, not just transistors —
+        // diodes, JFETs and MOSFETs all have one too, and the rule "model
+        // exists -> show it" doesn't need a hardcoded type list that has to
+        // be remembered every time a new model-bearing part is added.
+        const base = title
+          ? (model ? `${title} (${model})` : title)
+          : (model || def?.label || def?.id || '');
+        // Value-bearing passives get their actual value prefixed ("2.2µF
+        // Capacitor (Electrolytic)", "1kΩ R4") — the tooltip's whole point
+        // is a fast at-a-glance read, and "what's it called" alone leaves
+        // out the one fact that's usually most useful. Only resistor/
+        // capacitor/potentiometer have one obvious "the value" prop; every
+        // other type (transistors, diodes, switches...) falls through
+        // unchanged, same as before.
+        const text = prefixWithValue(hovered, def, base);
+        Tooltip.show(hovered.instanceId, text, e.clientX, e.clientY);
+      } else {
+        Tooltip.hide();
+      }
+    }
     if(Wire.isWiring()){render(x,y);return;}
     if(_dragMode==='comp-pending'){if(Math.hypot(x-_dragStartX,y-_dragStartY)>DRAG_THRESHOLD){_dragMode='comp-dragging';document.body.classList.add('dragging');}}
     if(_dragMode==='comp-dragging'){_dragOffsetX=x-_dragStartX;_dragOffsetY=y-_dragStartY;}
@@ -654,6 +688,24 @@ const Board = (() => {
     const coordEl=document.getElementById('status-coords');
     if(coordEl) coordEl.textContent=_hoverHole?(typeof _hoverHole.row==='number'?rowDisplayLabel(_hoverHole.row):_hoverHole.row)+(COLS-_hoverHole.col):'';
     render(x,y);
+  }
+
+  // Prefixes a tooltip label with the component's real value ("2.2µF
+  // Capacitor (Electrolytic)", "1kΩ R4") for the three passive types where
+  // there's one unambiguous "the value" prop. Reads the NOMINAL value the
+  // user actually set (props[key]), not the tolerance-rolled *_actual —
+  // this is "what did I set this to", a quick-glance readout, not a
+  // simulation input, so the user's own chosen number is more useful here
+  // than a randomized real-world variance.
+  const VALUE_PROP_BY_BEHAVIOR = { resistor: 'resistance', capacitor: 'capacitance', potentiometer: 'resistance' };
+  function prefixWithValue(inst, def, label) {
+    const behaviorType = def?.behavior?.type;
+    const key = VALUE_PROP_BY_BEHAVIOR[behaviorType];
+    if (!key) return label;
+    const raw = parseFloat(inst.props?.[key]);
+    if (!Number.isFinite(raw)) return label;
+    const formatted = key === 'capacitance' ? Utils.formatCapacitance(raw) : Utils.formatResistance(raw);
+    return `${formatted} ${label}`;
   }
 
   function updateLegDrag(){

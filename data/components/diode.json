@@ -9,9 +9,12 @@
   "polarized": true,
   "leg_labels": ["A", "K"],
   "properties": [
-    { "key": "model", "label": "Model", "type": "select", "options": ["1N4148","1N4001","1N34A (Germanium)","BAT41 (Schottky)","1N5817 (Schottky)"], "default": "1N4148" },
-    { "key": "forward_voltage", "label": "Forward Voltage (V)", "type": "number", "default": 0.7 },
-    { "key": "leakage", "label": "Leakage (IR, µA) — optional", "type": "number", "default": "" }
+    { "key": "model", "label": "Model", "type": "select", "options": ["1N4148","1N4001","1N34A (Germanium)","BAT41 (Schottky)","1N5817 (Schottky)"], "default": "1N4148",
+      "hint": "The real diode part this simulates — sets its forward voltage, leakage, and clipping character automatically." },
+    { "key": "forward_voltage", "label": "Forward Voltage (V)", "type": "number", "default": 0.7,
+      "hint": "The voltage it takes to turn this diode on and let current flow — this is what shapes clipping/distortion character. Leave blank to use the selected Model's real rating." },
+    { "key": "leakage", "label": "Leakage (IR, µA) — optional", "type": "number", "default": "",
+      "hint": "A tiny amount of current that sneaks through even when the diode is supposed to be off. Usually negligible — leave blank to use the Model's real rating." }
   ],
   "model_params": {
     "1N4148":         { "vf": 0.7,  "max_current_ma": 200,  "type": "silicon",   "leakage_ua": 0.025 },

@@ -26,13 +26,15 @@
         "NKT275",
         "2N1309"
       ],
-      "default": "2N3906"
+      "default": "2N3906",
+      "hint": "The real transistor part this simulates — sets its gain, saturation voltage, and other ratings automatically."
     },
     {
       "key": "hfe",
       "label": "hFE (gain) — optional, overrides model's rating",
       "type": "number",
-      "default": ""
+      "default": "",
+      "hint": "How much the base current gets amplified into collector current — higher means more gain. Leave blank to use the selected Model's real rating."
     },
     {
       "key": "pinout",
@@ -42,7 +44,8 @@
         "EBC",
         "CBE"
       ],
-      "default": "EBC"
+      "default": "EBC",
+      "hint": "Which physical leg is Emitter/Base/Collector, left to right — matches how the real part's datasheet orders its leads."
     },
     {
       "key": "leakage",
@@ -59,7 +62,8 @@
           "label": "µA",
           "factor": 1000
         }
-      ]
+      ],
+      "hint": "A small current that leaks through even when the transistor is off. Usually tiny for silicon, much larger for germanium — part of what gives old fuzz pedals their character. Leave blank to use the Model's real rating."
     }
   ],
   "model_params": {

@@ -17,7 +17,8 @@
         {"label":"Ω","factor":1},
         {"label":"kΩ","factor":1e3},
         {"label":"MΩ","factor":1e6}
-      ]
+      ],
+      "hint": "The pot's full end-to-end resistance — how much total resistance the wiper sweeps across as you turn it."
     },
     {
       "key": "taper",
@@ -28,7 +29,8 @@
         "Audio/Log (A)",
         "Reverse Audio (C)"
       ],
-      "default": "Linear (B)"
+      "default": "Linear (B)",
+      "hint": "How resistance changes as you turn the knob. Linear is even throughout; Audio/Log matches how the ear perceives loudness, common for volume controls."
     },
     {
       "key": "wiper",
@@ -38,7 +40,8 @@
       "max": 1,
       "step": 0.01,
       "default": 0.5,
-      "live": true
+      "live": true,
+      "hint": "The knob's current position, from fully counter-clockwise (0) to fully clockwise (1)."
     }
   ],
   "behavior": {

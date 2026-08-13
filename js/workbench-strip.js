@@ -514,16 +514,26 @@ function fillHalf(active, left) {
     if (hit === 'power' || hit === 'input' || hit === 'output') { _onSelectPermanent?.(hit); return; }
   }
 
+  // Fixed short label per target — unlike a placed component, these aren't
+  // user-titled, so there's no title/model fallback chain to run, just one
+  // name each.
+  const HOVER_LABELS = { power: 'Power Supply', input: 'Signal Input', output: 'Signal Output', switch: 'Bypass Switch' };
+
   function onMouseMove(e){
     const {x,y} = eventToCanvasXY(e);
     const hit = hitTest(x,y);
     canvas.style.cursor = hit ? 'pointer' : 'default';
     if (hit !== _hoverTarget) { _hoverTarget = hit; render(); }
+    if (typeof Tooltip !== 'undefined') {
+      if (hit) Tooltip.show(hit, HOVER_LABELS[hit], e.clientX, e.clientY);
+      else Tooltip.hide();
+    }
   }
 
   function onMouseLeave(){
     if (_hoverTarget) { _hoverTarget = null; render(); }
     canvas.style.cursor = 'default';
+    if (typeof Tooltip !== 'undefined') Tooltip.hide();
   }
 
   return {

@@ -9,10 +9,14 @@
   "polarized": false,
   "properties": [
     { "key": "capacitance", "label": "Capacitance", "type": "value_unit", "default": 0.000000001, "default_unit": "nF",
-      "units": [ {"label":"pF","factor":1e-12}, {"label":"nF","factor":1e-9}, {"label":"µF","factor":1e-6}, {"label":"mF","factor":1e-3} ] },
-    { "key": "voltage_rating", "label": "Voltage Rating", "type": "select", "options": ["16V","25V","50V","100V","250V","630V"], "default": "50V" },
-    { "key": "type", "label": "Type", "type": "select", "options": ["Film","Ceramic","Monolithic"], "default": "Film" },
-    { "key": "tolerance", "label": "Tolerance", "type": "select", "options": ["1%", "2%", "5%", "10%", "20%"], "default": "5%" }
+      "units": [ {"label":"pF","factor":1e-12}, {"label":"nF","factor":1e-9}, {"label":"µF","factor":1e-6}, {"label":"mF","factor":1e-3} ],
+      "hint": "How much charge this capacitor can store — sets which frequencies it blocks or passes in a filter or coupling stage." },
+    { "key": "voltage_rating", "label": "Voltage Rating", "type": "select", "options": ["16V","25V","50V","100V","250V","630V"], "default": "50V",
+      "hint": "The most voltage this capacitor can safely handle before it fails." },
+    { "key": "type", "label": "Type", "type": "select", "options": ["Film","Ceramic","Monolithic"], "default": "Film",
+      "hint": "The capacitor's construction — mainly affects real-world size and cost, not the simulated behavior here." },
+    { "key": "tolerance", "label": "Tolerance", "type": "select", "options": ["1%", "2%", "5%", "10%", "20%"], "default": "5%",
+      "hint": "How close the real capacitor is likely to be to its stated value — a real part is never exact." }
   ],
   "behavior": { "type": "capacitor" },
   "failure_modes": {

@@ -6,6 +6,20 @@ const PropertiesPanel = (() => {
   let _currentWire = null;
   let _currentPermanentKind = null; // 'power' | 'input' | 'output' | null
 
+  // A range slider's live readout defaults to "value*100%", correct for a
+  // 0-1 fraction like volume/battery_sag/wiper. A field with a real unit
+  // (amplitude in V, phase in °) needs its own value and unit shown instead
+  // — "35%" for a 0.35V amplitude reads as nonsense. `prop.unit` opts a
+  // field into this; omitting it keeps the original percentage behavior for
+  // every existing 0-1 range field unchanged.
+  function formatRangeValue(prop, value) {
+    if (prop?.unit) {
+      const decimals = (prop.step && prop.step < 1) ? 2 : 0;
+      return Number(value).toFixed(decimals) + prop.unit;
+    }
+    return Math.round(value * 100) + '%';
+  }
+
   // Property schemas for the permanent workbench devices (Phase 1 of the
   // "Future Workbench Architecture" doc). These mirror the same `properties`
   // array shape used by component JSON files, specifically so buildPropField()
@@ -18,34 +32,51 @@ const PropertiesPanel = (() => {
     power: {
       label: 'Power Supply', symbol: '9V',
       properties: [
-        { key:'power_on', label:'Power On', type:'boolean', default:true },
-        { key:'voltage', label:'Voltage (V)', type:'number', default:9, min:1, max:24 },
-        { key:'current_limit_ma', label:'Current Limit (mA)', type:'number', default:500 },
-        { key:'reverse_polarity', label:'Reverse Polarity', type:'boolean', default:false },
-        { key:'battery_sag', label:'Battery Sag', type:'range', min:0, max:1, step:0.01, default:0 },
-        { key:'internal_resistance', label:'Internal Resistance (Ω)', type:'number', default:1, min:0 },
+        { key:'power_on', label:'Power On', type:'boolean', default:true,
+          hint:'Turns the circuit\'s power on or off, like unplugging the battery.' },
+        { key:'voltage', label:'Voltage (V)', type:'number', default:9, min:1, max:24,
+          hint:'The supply voltage powering the circuit — 9V is standard for most pedals.' },
+        { key:'current_limit_ma', label:'Current Limit (mA)', type:'number', default:500,
+          hint:'The most current the supply can deliver before it can\'t keep up, like a battery running low under heavy load.' },
+        { key:'reverse_polarity', label:'Reverse Polarity', type:'boolean', default:false,
+          hint:'Swaps + and −, simulating a battery or power adapter plugged in backwards.' },
+        { key:'battery_sag', label:'Battery Sag', type:'range', min:0, max:1, step:0.01, default:0,
+          hint:'How much the supply voltage dips under load as you play — higher settings mimic a tired battery, audibly compressing and "browning out" on loud playing.' },
+        { key:'internal_resistance', label:'Internal Resistance (Ω)', type:'number', default:1, min:0,
+          hint:'How much the supply\'s own resistance limits current — higher values make Battery Sag more pronounced.' },
       ]
     },
     input: {
       label: 'Input', symbol: 'IN',
       properties: [
         { key:'waveform', label:'Audio Source', type:'select', default:'None',
-          options:['None','Sine','Square','Triangle','Sawtooth','White Noise','Pink Noise','Audio File'] },
-        { key:'frequency', label:'Frequency (Hz)', type:'number', default:440, min:1, max:20000 },
-        { key:'amplitude', label:'Amplitude (V)', type:'number', default:0.35, min:0.01, max:12 },
-        { key:'dc_offset', label:'DC Offset (V)', type:'number', default:0, min:-12, max:12 },
-        { key:'phase', label:'Phase (°)', type:'number', default:0, min:0, max:360 },
-        { key:'looping', label:'Loop Audio File', type:'boolean', default:true },
-        { key:'audio_file', label:'Audio File', type:'permanent_audio_source', default:null },
-        { key:'source_impedance', label:'Source Impedance (Ω)', type:'number', default:10000, min:0, max:1000000 },
+          options:['None','Sine','Square','Triangle','Sawtooth','White Noise','Pink Noise','Audio File'],
+          hint:'What signal to feed into the circuit — a test tone, noise, or a real recorded guitar sample.' },
+        { key:'source_impedance', label:'Source Impedance (Ω)', type:'number', default:10000, min:0, max:1000000,
+          hint:'How "stiff" the thing feeding this circuit is, like a guitar pickup\'s output. Lower values act more like an ideal source that isn\'t affected by what it\'s plugged into; a real passive pickup is typically around 6,000–12,000Ω.' },
+        { key:'frequency', label:'Frequency (Hz)', type:'number', default:440, min:1, max:20000,
+          hint:'The pitch of the test tone. A guitar\'s low E string is about 82Hz; middle A is 440Hz.' },
+        { key:'amplitude', label:'Amplitude (V)', type:'range', min:0.01, max:12, step:0.01, default:0.35, unit:'V',
+          hint:'How loud/hard the input signal hits the circuit — like picking softly versus digging in.' },
+        { key:'dc_offset', label:'DC Offset (V)', type:'number', default:0, min:-12, max:12,
+          hint:'Shifts the whole signal up or down by a fixed voltage. Rarely needed — mainly useful for testing bias-sensitive circuits.' },
+        { key:'phase', label:'Phase (°)', type:'range', min:0, max:360, step:1, default:0, unit:'°',
+          hint:'Shifts where in its cycle the test tone starts. Mostly useful for comparing two signals — won\'t audibly change a single tone on its own.' },
+        { key:'looping', label:'Loop Audio File', type:'boolean', default:true,
+          hint:'Restarts the audio file from the beginning when it finishes playing.' },
+        { key:'audio_file', label:'Audio File', type:'permanent_audio_source', default:null,
+          hint:'The recorded sample to play through the circuit when Audio Source is set to "Audio File".' },
       ]
     },
     output: {
       label: 'Output', symbol: 'OUT',
       properties: [
-        { key:'volume', label:'Master Volume', type:'range', min:0, max:1, step:0.01, default:1.0 },
-        { key:'mute', label:'Mute', type:'boolean', default:false },
-        { key:'load_impedance', label:'Load Impedance (Ω)', type:'number', default:1000000, min:1, max:10000000 },
+        { key:'load_impedance', label:'Load Impedance (Ω)', type:'number', default:1000000, min:1, max:10000000,
+          hint:'How much whatever is plugged in downstream (an amp, another pedal) "pulls" on this circuit\'s output. Very high values (1,000,000Ω+) barely affect the sound; lower values can noticeably darken the tone, like plugging into a cheap mixer input.' },
+        { key:'volume', label:'Master Volume', type:'range', min:0, max:1, step:0.01, default:1.0,
+          hint:'The overall listening volume — doesn\'t affect the circuit itself, just how loud you hear the result.' },
+        { key:'mute', label:'Mute', type:'boolean', default:false,
+          hint:'Silences the output without stopping the simulation.' },
       ]
     }
   };
@@ -171,7 +202,7 @@ const PropertiesPanel = (() => {
 
     if (prop?.type==='range') {
       const v = document.getElementById(`rval-${key}`);
-      if (v) v.textContent = Math.round(parseFloat(rawVal)*100)+'%';
+      if (v) v.textContent = formatRangeValue(prop, parseFloat(rawVal));
     }
 
     WorkbenchStrip.render();
@@ -424,6 +455,21 @@ const PropertiesPanel = (() => {
 
   // ── Field builders ───────────────────────────────────────────────────────────
   function buildPropField(prop, value, placeholder, unitLabel) {
+    const html = buildPropFieldInner(prop, value, placeholder, unitLabel);
+    // Single choke point for the hover tooltip on every property's label,
+    // rather than repeating a title= attribute in each case below (which a
+    // future new field type would have to remember to add too). prop.hint
+    // is the short description text; a field with none renders exactly as
+    // before (no title= at all — an empty tooltip would be worse than none).
+    if (!prop.hint) return html;
+    return html.replace('class="prop-label"', `class="prop-label" title="${escapeAttr(prop.hint)}"`);
+  }
+
+  function escapeAttr(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  }
+
+  function buildPropFieldInner(prop, value, placeholder, unitLabel) {
     switch (prop.type) {
       case 'number': {
         return `
@@ -508,7 +554,7 @@ const PropertiesPanel = (() => {
             <div class="prop-range-wrap">
               <input type="range" data-key="${prop.key}"
                 min="${prop.min}" max="${prop.max}" step="${prop.step}" value="${value}">
-              <span class="prop-range-value" id="rval-${prop.key}">${Math.round(value*100)}%</span>
+              <span class="prop-range-value" id="rval-${prop.key}">${formatRangeValue(prop, value)}</span>
             </div>
           </div>`;
       case 'audio_file':

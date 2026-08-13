@@ -504,6 +504,23 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
 .prop-delete-btn i { font-size: 11px; line-height: 1; }
 .prop-delete-btn:hover { background: var(--alert); color: var(--text-on-alert); border-color: var(--alert); }
 
+/* ── Hover tooltip (canvas components / workbench strip) ─────────────────── */
+/* Canvas has no native per-shape title=, so this is a single floating div
+   repositioned/relabeled by js/tooltip.js as the mouse moves. z-index above
+   the board but below the confirm modal, since a tooltip should never
+   outlast a modal opening over it (Tooltip.hide() is called defensively
+   wherever that could happen, but the stacking order is the last line of
+   defense). pointer-events:none so it never itself becomes the hover target
+   and flickers the tooltip it's part of. */
+#hover-tooltip {
+  position: fixed; z-index: 900; pointer-events: none;
+  background: var(--bg-elevated); color: var(--text-primary);
+  border: 1px solid var(--border-light); border-radius: var(--radius-sm);
+  padding: 4px 8px; font-family: var(--font-ui); font-size: 12px;
+  white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+#hover-tooltip.hidden { display: none; }
+
 /* ── Confirm modal ────────────────────────────────────────────────────────── */
 
 #confirm-overlay {

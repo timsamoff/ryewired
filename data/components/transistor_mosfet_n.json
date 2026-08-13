@@ -20,19 +20,22 @@
         "2N7000",
         "BS170"
       ],
-      "default": "2N7000"
+      "default": "2N7000",
+      "hint": "The real MOSFET part this simulates — sets its threshold voltage and transconductance automatically."
     },
     {
       "key": "vgs_th",
       "label": "Vgs(th) (gate threshold voltage) — optional, overrides model's rating",
       "type": "number",
-      "default": ""
+      "default": "",
+      "hint": "The gate voltage needed before this MOSFET starts conducting at all. Leave blank to use the selected Model's real rating."
     },
     {
       "key": "k",
       "label": "k (transconductance coefficient) — optional, overrides model's rating",
       "type": "number",
-      "default": ""
+      "default": "",
+      "hint": "How strongly drain current increases once the gate voltage is past threshold — higher means more gain. Leave blank to use the selected Model's real rating."
     },
     {
       "key": "pinout",
@@ -42,7 +45,8 @@
         "DGS",
         "SGD"
       ],
-      "default": "DGS"
+      "default": "DGS",
+      "hint": "Which physical leg is Drain/Gate/Source, left to right — matches how the real part's datasheet orders its leads."
     }
   ],
   "model_params": {

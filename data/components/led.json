@@ -8,9 +8,12 @@
   "leg_span": 2,
   "polarized": true,
   "properties": [
-    { "key": "color", "label": "Color", "type": "select", "options": ["Red","Green","Blue","Yellow","White","Orange","UV"], "default": "Red" },
-    { "key": "forward_voltage", "label": "Forward Voltage (V)", "type": "number", "default": 2.0 },
-    { "key": "max_current_ma", "label": "Max Current (mA)", "type": "number", "default": 20 }
+    { "key": "color", "label": "Color", "type": "select", "options": ["Red","Green","Blue","Yellow","White","Orange","UV"], "default": "Red",
+      "hint": "Sets the LED's actual turn-on voltage — different colors need different amounts of voltage to light up." },
+    { "key": "forward_voltage", "label": "Forward Voltage (V)", "type": "number", "default": 2.0,
+      "hint": "The voltage it takes to turn this LED on. Set automatically by Color — override only for a specific real part." },
+    { "key": "max_current_ma", "label": "Max Current (mA)", "type": "number", "default": 20,
+      "hint": "The most current this LED can safely handle. Always pair an LED with a series resistor to keep current below this." }
   ],
   "behavior": { "type": "led" },
   "failure_modes": {

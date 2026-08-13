@@ -22,7 +22,8 @@
         "2SK30A",
         "BF245A"
       ],
-      "default": "J201"
+      "default": "J201",
+      "hint": "The real JFET part this simulates — sets its Idss and pinch-off voltage automatically."
     },
     {
       "key": "idss",
@@ -33,13 +34,15 @@
       "units": [
         { "label": "µA", "factor": 0.001 },
         { "label": "mA", "factor": 1 }
-      ]
+      ],
+      "hint": "The maximum current this JFET conducts when its gate isn't restricting it at all. Leave blank to use the selected Model's real rating."
     },
     {
       "key": "vgs_off",
       "label": "Vgs(off) (pinch-off voltage) — optional, overrides model's rating",
       "type": "number",
-      "default": ""
+      "default": "",
+      "hint": "The gate voltage at which this JFET shuts off completely. Leave blank to use the selected Model's real rating."
     },
     {
       "key": "pinout",
@@ -50,7 +53,8 @@
         "DGS",
         "GSD"
       ],
-      "default": "SGD"
+      "default": "SGD",
+      "hint": "Which physical leg is Source/Gate/Drain, left to right — matches how the real part's datasheet orders its leads."
     }
   ],
   "model_params": {

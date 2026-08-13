@@ -8,10 +8,14 @@
   "leg_span": 2,
   "leg_labels": ["OUT", "GND"],
   "properties": [
-    { "key": "waveform", "label": "Waveform", "type": "select", "options": ["Sine","Square","Sawtooth","Triangle","White Noise","Pink Noise","Audio File"], "default": "Sine" },
-    { "key": "frequency", "label": "Frequency (Hz)", "type": "number", "default": 440, "min": 1, "max": 20000 },
-    { "key": "amplitude", "label": "Amplitude (V)", "type": "number", "default": 1.0, "min": 0.01, "max": 12 },
-    { "key": "audio_file", "label": "Audio File", "type": "audio_file", "default": null }
+    { "key": "waveform", "label": "Waveform", "type": "select", "options": ["Sine","Square","Sawtooth","Triangle","White Noise","Pink Noise","Audio File"], "default": "Sine",
+      "hint": "The shape of the test signal this generator produces." },
+    { "key": "frequency", "label": "Frequency (Hz)", "type": "number", "default": 440, "min": 1, "max": 20000,
+      "hint": "The pitch of the test tone. A guitar's low E string is about 82Hz; middle A is 440Hz." },
+    { "key": "amplitude", "label": "Amplitude (V)", "type": "number", "default": 1.0, "min": 0.01, "max": 12,
+      "hint": "How loud/hard this signal hits the circuit — like picking softly versus digging in." },
+    { "key": "audio_file", "label": "Audio File", "type": "audio_file", "default": null,
+      "hint": "The recorded sample to play when Waveform is set to \"Audio File\"." }
   ],
   "behavior": { "type": "signal_generator" },
   "failure_modes": {},

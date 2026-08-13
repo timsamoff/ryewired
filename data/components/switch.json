@@ -7,8 +7,10 @@
   "legs": 2,
   "leg_span": 2,
   "properties": [
-    { "key": "type", "label": "Action", "type": "select", "options": ["Latching","Momentary (NO)","Momentary (NC)"], "default": "Latching" },
-    { "key": "state", "label": "Initial State", "type": "select", "options": ["Open","Closed"], "default": "Open" }
+    { "key": "type", "label": "Action", "type": "select", "options": ["Latching","Momentary (NO)","Momentary (NC)"], "default": "Latching",
+      "hint": "How the switch behaves when clicked: Latching stays in the new position; Momentary springs back when released (Normally Open = off until held, Normally Closed = on until held)." },
+    { "key": "state", "label": "Initial State", "type": "select", "options": ["Open","Closed"], "default": "Open",
+      "hint": "Whether the switch starts open (circuit broken) or closed (circuit connected) when the board loads." }
   ],
   "behavior": { "type": "switch_spst" },
   "failure_modes": {},
