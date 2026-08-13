@@ -8,3 +8,4 @@ out/
 *.log
 CLAUDE.md
 .claude/
+docs/
