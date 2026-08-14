@@ -697,14 +697,24 @@ const Board = (() => {
   // this is "what did I set this to", a quick-glance readout, not a
   // simulation input, so the user's own chosen number is more useful here
   // than a randomized real-world variance.
-  const VALUE_PROP_BY_BEHAVIOR = { resistor: 'resistance', capacitor: 'capacitance', potentiometer: 'resistance' };
+  const VALUE_PROP_BY_BEHAVIOR = { resistor: 'resistance', capacitor: 'capacitance', potentiometer: 'resistance', zener_diode: 'zener_voltage' };
   function prefixWithValue(inst, def, label) {
     const behaviorType = def?.behavior?.type;
     const key = VALUE_PROP_BY_BEHAVIOR[behaviorType];
     if (!key) return label;
-    const raw = parseFloat(inst.props?.[key]);
+    let raw = parseFloat(inst.props?.[key]);
+    // zener_voltage is normally left blank (the model's rated Vz applies) —
+    // unlike resistance/capacitance, which are always a real typed-in
+    // value, so falling back to model_params here is what makes this
+    // prefix show up for the common case instead of only the rare
+    // manually-overridden one.
+    if (!Number.isFinite(raw) && behaviorType === 'zener_diode') {
+      raw = def.model_params?.[inst.props?.model]?.vz;
+    }
     if (!Number.isFinite(raw)) return label;
-    const formatted = key === 'capacitance' ? Utils.formatCapacitance(raw) : Utils.formatResistance(raw);
+    const formatted = key === 'capacitance' ? Utils.formatCapacitance(raw)
+                     : key === 'zener_voltage' ? `${(Math.round(raw*10)/10)}V`
+                     : Utils.formatResistance(raw);
     return `${formatted} ${label}`;
   }
 

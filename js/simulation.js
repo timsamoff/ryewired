@@ -234,7 +234,7 @@ const Simulation = (() => {
       }
     }
 
-    const { netVoltage, diodeCurrents, bjtCurrents, jfetCurrents, mosfetCurrents } = solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges);
+    const { netVoltage, diodeCurrents, zenerCurrents, bjtCurrents, jfetCurrents, mosfetCurrents } = solveNetVoltages(placed, nets, fixedNodes, extraResistorEdges);
     _lastNets = nets; _lastNetVoltage = netVoltage;
 
     // Sanity check: in this DC-only model (no inductors, and caps correctly
@@ -291,7 +291,7 @@ const Simulation = (() => {
       if (inst.failed) continue;
       const def = ComponentRegistry.getById(inst.defId);
       if (!def) continue;
-      try { solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, bjtCurrents, jfetCurrents, mosfetCurrents); }
+      try { solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, zenerCurrents, bjtCurrents, jfetCurrents, mosfetCurrents); }
       catch(e) { console.warn('[Sim]', e.message); }
     }
 
@@ -318,7 +318,7 @@ const Simulation = (() => {
   }
 
   // ── Component solver ─────────────────────────────────────────────────────────
-  function solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, bjtCurrents, jfetCurrents, mosfetCurrents) {
+  function solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, zenerCurrents, bjtCurrents, jfetCurrents, mosfetCurrents) {
     const btype = def.behavior?.type;
 
     switch(btype) {
@@ -362,6 +362,26 @@ const Simulation = (() => {
         // the LED's 1.5x headroom) — it fires right at the rated max.
         const threshold = ImA * (def.failure_modes?.over_current?.threshold_multiplier || 1);
         if (I > threshold) fail(inst, def, 'over_current');
+        break;
+      }
+
+      case 'zener_diode': {
+        const mk  = inst.props.model || '1N4742A';
+        const pm  = def.model_params?.[mk] || {};
+        const IzmA = (pm.izm_ma || 150) / 1000;
+
+        // No reverse_voltage failure here, deliberately — unlike a signal
+        // diode, a Zener is DESIGNED to sit in reverse breakdown as its
+        // normal operating mode (that's the whole point of the part), so
+        // treating "in breakdown" as a fault would make the component
+        // impossible to use for what it's for. The only real failure mode
+        // is thermal: drawing more current than the part's rated Izm can
+        // dissipate, in EITHER direction (forward overcurrent is also
+        // possible, if unusual for how these are normally wired).
+        const zc = zenerCurrents?.get(inst) ?? { current: 0, state: 'off' };
+        inst._current = zc.current;
+        inst._zenerState = zc.state; // read back by solveSmallSignal, which has no netVoltage of its own to re-derive this from
+        if (zc.current > IzmA) fail(inst, def, 'over_current');
         break;
       }
 
@@ -651,6 +671,7 @@ const Simulation = (() => {
 
     const resistorEdges = [...extraResistorEdges]; // {a,b,R}
     const diodeEdges    = []; // {a,b,Vf,inst}  a=anode net, b=cathode net
+    const zenerEdges    = []; // {a,b,Vz,Zzt,inst}  a=anode net, b=cathode net — see the zener_diode state machine below
     const bjtEdges      = []; // {a,b,Vf,inst,hfe,collector,pnp}  a/b = B-E junction's anode/cathode nets (base/emitter for NPN, emitter/base for PNP)
     const jfetEdges     = []; // {gateNet,sourceNet,drainNet,inst,idss,vgsOff}  N-channel only for now
     const mosfetEdges   = []; // {gateNet,sourceNet,drainNet,inst,vgsTh,k}  N-channel enhancement-mode only for now
@@ -683,6 +704,22 @@ const Simulation = (() => {
         const a  = netOf(inst.legs[0].row, inst.legs[0].col);              // anode
         const b  = netOf(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col); // cathode
         diodeEdges.push({ a, b, Vf, inst });
+
+      } else if (btype === 'zener_diode') {
+        const mk  = inst.props.model || '1N4742A';
+        const pm  = def.model_params?.[mk] || {};
+        const Vz  = parseFloat(inst.props.zener_voltage) || pm.vz || 12;
+        // Zzt: real per-model dynamic impedance at the datasheet's rated test
+        // current (see CLAUDE.md/component notes) — this is what gives the
+        // clamped region a small, realistic upward slope with current
+        // instead of pinning dead-flat at Vz, same spirit as a real
+        // regulator's load-dependent output. Falls back to a generic 10ohm
+        // if a model's Zzt is somehow missing, rather than defaulting to 0
+        // (a literal short) or a huge number (defeating the clamp).
+        const Zzt = pm.zzt || 10;
+        const a   = netOf(inst.legs[0].row, inst.legs[0].col);              // anode
+        const b   = netOf(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col); // cathode
+        zenerEdges.push({ a, b, Vz, Zzt, inst });
 
       } else if (btype === 'bjt_npn' || btype === 'bjt_pnp') {
         const pnp = btype === 'bjt_pnp';
@@ -794,6 +831,7 @@ const Simulation = (() => {
     const register = net => { if (net!=null && !fixed.has(net) && !netIndex.has(net)) netIndex.set(net, netIndex.size); };
     resistorEdges.forEach(e => { register(e.a); register(e.b); });
     diodeEdges.forEach(e => { register(e.a); register(e.b); });
+    zenerEdges.forEach(e => { register(e.a); register(e.b); });
     bjtEdges.forEach(e => { register(e.a); register(e.b); register(e.icSrc); register(e.icSink); });
     jfetEdges.forEach(e => { register(e.gateNet); register(e.sourceNet); register(e.drainNet); });
     mosfetEdges.forEach(e => { register(e.gateNet); register(e.sourceNet); register(e.drainNet); });
@@ -801,10 +839,11 @@ const Simulation = (() => {
     const N = netIndex.size;
     const netVoltage = new Map(fixed);
     const diodeCurrents = new Map();
+    const zenerCurrents = new Map();
     const bjtCurrents = new Map(); // inst -> { Ib, Ic }
     const jfetCurrents = new Map(); // inst -> { Id, vgs, vds, triode }
     const mosfetCurrents = new Map(); // inst -> { Id, vgs, vds, on, triode }
-    if (N === 0) return { netVoltage, diodeCurrents, bjtCurrents, jfetCurrents, mosfetCurrents };
+    if (N === 0) return { netVoltage, diodeCurrents, zenerCurrents, bjtCurrents, jfetCurrents, mosfetCurrents };
 
     function stampConductance(G, I, a, b, g) {
       const ai = netIndex.has(a) ? netIndex.get(a) : -1;
@@ -985,6 +1024,16 @@ const Simulation = (() => {
     }
 
     let states = diodeEdges.map(() => false);
+    // Zener state is one of 'off' / 'forward' / 'clamped' — a real 3-region
+    // device, unlike the plain diode's on/off boolean. 'off': neither
+    // forward-biased past Vf nor reverse-biased past Vz — effectively open
+    // (ROFF), same as an off signal diode. 'forward': behaves exactly like a
+    // normal diode (RON, Vf) — a Zener conducts forward too, it's not
+    // reverse-only. 'clamped': in breakdown, stamped as a resistor of the
+    // model's real Zzt in series with a Vz source (see the zenerEdges loop
+    // below) — this is what gives the clamped output its small, realistic
+    // upward slope with current instead of a flat pin.
+    let zenerStates = zenerEdges.map(() => 'off');
     let bjtStates = bjtEdges.map(() => false);
     // bjtStates is committed with a one-iteration delay: a proposed flip only
     // takes effect once the SAME proposal repeats on the next iteration (see
@@ -1064,6 +1113,36 @@ const Simulation = (() => {
         const g = 1/(on ? RON : ROFF);
         stampConductance(G, I, e.a, e.b, g);
         if (on) stampCurrentSource(I, e.a, e.b, g*e.Vf);
+      });
+      zenerEdges.forEach((e, idx) => {
+        if (e.a==null || e.b==null || e.a===e.b) return;
+        const st = zenerStates[idx];
+        if (st === 'forward') {
+          // Identical to a plain diode's forward stamp — a Zener conducts
+          // forward just like any other silicon junction. Vf isn't in the
+          // per-model table (every part in this family sits close to the
+          // same ~0.9-1V forward drop at rated current per their datasheets'
+          // VF@IF=200mA spec), so a single representative constant is used
+          // here rather than adding a 6th per-model number for a region
+          // these parts are essentially never used in.
+          const g = 1/RON;
+          stampConductance(G, I, e.a, e.b, g);
+          stampCurrentSource(I, e.a, e.b, g*0.9);
+        } else if (st === 'clamped') {
+          // Mirror of the forward stamp: current flows CATHODE->ANODE in
+          // breakdown, so the (a,b) roles swap to (e.b,e.a) and Vf->Vz. g
+          // here is 1/Zzt (the model's real datasheet dynamic impedance at
+          // its rated test current), not 1/RON — this is what gives the
+          // clamped output a small, realistic upward slope with current
+          // instead of a flat pin at exactly Vz. Verified against a
+          // hand-derived closed-form shunt-regulator solution before this
+          // was wired in (see CLAUDE.md's Verification technique).
+          const g = 1/e.Zzt;
+          stampConductance(G, I, e.a, e.b, g);
+          stampCurrentSource(I, e.b, e.a, g*e.Vz);
+        } else {
+          stampConductance(G, I, e.a, e.b, 1/ROFF);
+        }
       });
       bjtEdges.forEach((e, idx) => {
         if (e.a==null || e.b==null || e.a===e.b) return;
@@ -1200,6 +1279,22 @@ const Simulation = (() => {
         const shouldBeOn = (va - vb) > e.Vf * 0.5;
         if (shouldBeOn !== states[idx]) { states[idx] = shouldBeOn; changed = true; }
       });
+      zenerEdges.forEach((e, idx) => {
+        if (e.a==null || e.b==null) return;
+        const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
+        const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
+        // Forward check mirrors the plain diode's own rule exactly (same
+        // 0.9V representative Vf used in the stamp above, same half-Vf
+        // hysteresis band). Clamped check requires the REVERSE voltage
+        // (vb-va, cathode above anode) to reach Vz — checked with NO margin
+        // subtracted, so breakdown engages right at the rated Zener voltage,
+        // matching how the datasheet defines Vz as the point the device
+        // starts conducting in reverse.
+        const shouldBeForward = (va - vb) > 0.9 * 0.5;
+        const shouldBeClamped = !shouldBeForward && (vb - va) > e.Vz;
+        const newState = shouldBeForward ? 'forward' : (shouldBeClamped ? 'clamped' : 'off');
+        if (newState !== zenerStates[idx]) { zenerStates[idx] = newState; changed = true; }
+      });
       bjtEdges.forEach((e, idx) => {
         if (e.a==null || e.b==null) return;
         const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
@@ -1333,6 +1428,24 @@ const Simulation = (() => {
       const g = 1/(on ? RON : ROFF);
       diodeCurrents.set(e.inst, on ? Math.max(0, g*((va-vb) - e.Vf)) : 0);
     });
+    zenerEdges.forEach((e, idx) => {
+      if (e.a==null || e.b==null) { zenerCurrents.set(e.inst, { current: 0, state: 'off' }); return; }
+      const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
+      const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
+      const st = zenerStates[idx];
+      // Magnitude only, regardless of direction — the over_current failure
+      // check downstream (see the zener_diode case in solveComponent) cares
+      // about how hard the device is being driven either way, not which
+      // direction the current happens to flow. `state` rides along too
+      // (rather than just the magnitude) because solveSmallSignal needs to
+      // know WHICH region the device is in to pick the right small-signal
+      // formula (exponential I/Vt when forward, linear 1/Zzt when clamped)
+      // — it has no netVoltage of its own to re-derive that from itself.
+      let current = 0;
+      if (st === 'forward') current = Math.max(0, (1/RON) * ((va-vb) - 0.9));
+      else if (st === 'clamped') current = Math.max(0, (1/e.Zzt) * ((vb-va) - e.Vz));
+      zenerCurrents.set(e.inst, { current, state: st });
+    });
     bjtEdges.forEach((e, idx) => {
       if (e.a==null || e.b==null) { bjtCurrents.set(e.inst, { Ib:0, Ic:0, vce:0, saturated:false }); return; }
       const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
@@ -1392,7 +1505,7 @@ const Simulation = (() => {
       mosfetCurrents.set(e.inst, { Id, vgs, vds, on, triode: mosfetTriode[idx] });
     });
 
-    return { netVoltage, diodeCurrents, bjtCurrents, jfetCurrents, mosfetCurrents };
+    return { netVoltage, diodeCurrents, zenerCurrents, bjtCurrents, jfetCurrents, mosfetCurrents };
   }
 
   // ── Small-signal (AC) solve ───────────────────────────────────────────────
@@ -1470,6 +1583,25 @@ const Simulation = (() => {
         if (I <= 0) continue; // off: open circuit, contributes nothing
         edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
                      G: I / VT }); // 1/(Vt/I)
+
+      } else if (bt === 'zener_diode' && L.length >= 2) {
+        // Off: open, contributes nothing, same as an off signal diode.
+        // Forward: same exponential small-signal treatment as a plain diode
+        // (I/Vt), since forward conduction is the same junction physics.
+        // Clamped: NOT exponential — this region is modeled in the DC solve
+        // as a fixed linear resistor (the model's real Zzt), so its
+        // small-signal conductance is just 1/Zzt directly, not I/Vt.
+        // `_zenerState` is set by solveComponent's zener_diode case during
+        // the DC pass this function always runs after — solveSmallSignal
+        // has no netVoltage of its own to re-derive which region the
+        // device is in, so it reads back what the DC solve already decided.
+        const I = inst._current || 0;
+        if (I <= 0) continue;
+        const mk = inst.props.model || '1N4742A';
+        const pm = def.model_params?.[mk] || {};
+        const clamped = inst._zenerState === 'clamped';
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
+                     G: clamped ? 1/(pm.zzt || 10) : I / VT });
 
       } else if ((bt === 'bjt_npn' || bt === 'bjt_pnp') && L.length >= 3) {
         const pnp = bt === 'bjt_pnp';
@@ -1725,6 +1857,20 @@ const Simulation = (() => {
         if (I <= 0) continue;
         edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
                      Y: cReal(I / VT) });
+
+      } else if (bt === 'zener_diode' && L.length >= 2) {
+        // Same reasoning as solveSmallSignal's zener_diode case: forward
+        // uses the exponential I/Vt small-signal conductance, clamped uses
+        // the model's real linear Zzt, and `_zenerState` (set by the DC
+        // pass in solveComponent) is what distinguishes the two, since this
+        // function has no netVoltage to re-derive it from either.
+        const I = inst._current || 0;
+        if (I <= 0) continue;
+        const mk = inst.props.model || '1N4742A';
+        const pm = def.model_params?.[mk] || {};
+        const clamped = inst._zenerState === 'clamped';
+        edges.push({ a: netOf(L[0].row, L[0].col), b: netOf(L[L.length-1].row, L[L.length-1].col),
+                     Y: cReal(clamped ? 1/(pm.zzt || 10) : I / VT) });
 
       } else if ((bt === 'bjt_npn' || bt === 'bjt_pnp') && L.length >= 3) {
         const pnp = bt === 'bjt_pnp';
@@ -2031,7 +2177,7 @@ const Simulation = (() => {
       if (inst.failed) continue;
       const def = ComponentRegistry.getById(inst.defId);
       const bt = def?.behavior?.type;
-      if (bt !== 'bjt_npn' && bt !== 'bjt_pnp' && bt !== 'jfet_n' && bt !== 'mosfet_n' && bt !== 'diode' && bt !== 'led') continue;
+      if (bt !== 'bjt_npn' && bt !== 'bjt_pnp' && bt !== 'jfet_n' && bt !== 'mosfet_n' && bt !== 'diode' && bt !== 'led' && bt !== 'zener_diode') continue;
       for (let i = 0; i < inst.legs.length; i++) {
         const n = nets.find(nets.key(inst.legs[i].row, inst.legs[i].col));
         if (exempt.has(n) || (legsOnNet.get(n) || 0) > 1) continue;

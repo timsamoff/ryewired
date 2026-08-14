@@ -312,6 +312,10 @@ const PropertiesPanel = (() => {
         const pm = def.model_params?.[inst.props.model];
         if (pm) placeholder = pm.k;
       }
+      if (prop.key==='zener_voltage') {
+        const pm = def.model_params?.[inst.props.model];
+        if (pm) placeholder = pm.vz;
+      }
       if (prop.type==='value_unit') {
         unitLabel = inst.props[prop.key+'__unit'] || prop.default_unit || (prop.units&&prop.units[0]?.label);
         // Older saved circuits may have a leakage value (or just a model

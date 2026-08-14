@@ -103,6 +103,9 @@ const ComponentRegistry = (() => {
         inst.props.leakage__unit = leak >= 1000 ? 'µA' : 'nA';
       }
     }
+    if ((def.properties||[]).some(p => p.key==='zener_voltage') && pm.vz != null) {
+      inst.props.zener_voltage = pm.vz;
+    }
   }
 
   // Resolves a component's real, simulated value from its nominal value +

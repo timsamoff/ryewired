@@ -1,0 +1,37 @@
+{
+  "id": "zener_diode",
+  "labelKey": "component.zener_diode.label",
+  "category": "semiconductor",
+  "symbol": "Z",
+  "descriptionKey": "component.zener_diode.description",
+  "legs": 2,
+  "leg_span": 2,
+  "polarized": true,
+  "leg_labels": ["A", "K"],
+  "properties": [
+    { "key": "model", "labelKey": "component.zener_diode.model.label", "type": "select",
+      "options": ["1N5227B", "1N4732A", "1N4733A", "1N4734A", "1N4739A", "1N4742A"], "default": "1N4742A",
+      "hintKey": "component.zener_diode.model.hint" },
+    { "key": "zener_voltage", "labelKey": "component.zener_diode.zener_voltage.label", "type": "number", "default": "",
+      "hintKey": "component.zener_diode.zener_voltage.hint" }
+  ],
+  "model_params": {
+    "1N5227B": { "vz": 3.6, "zzt": 24, "izm_ma": 138, "type": "silicon" },
+    "1N4732A": { "vz": 4.7, "zzt": 8,  "izm_ma": 193, "type": "silicon" },
+    "1N4733A": { "vz": 5.1, "zzt": 7,  "izm_ma": 178, "type": "silicon" },
+    "1N4734A": { "vz": 5.6, "zzt": 5,  "izm_ma": 162, "type": "silicon" },
+    "1N4739A": { "vz": 9.1, "zzt": 5,  "izm_ma": 100, "type": "silicon" },
+    "1N4742A": { "vz": 12,  "zzt": 9,  "izm_ma": 76,  "type": "silicon" }
+  },
+  "behavior": { "type": "zener_diode" },
+  "failure_modes": {
+    "over_current": { "result": "burn", "messageKey": "component.zener_diode.failure.over_current" }
+  },
+  "visual": {
+    "body_color": "#b5651d",
+    "cathode_color": "#111111",
+    "body_width": 18,
+    "body_height": 10,
+    "lead_length": 12
+  }
+}

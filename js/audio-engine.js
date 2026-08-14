@@ -542,7 +542,7 @@ const AudioEngine = (() => {
         if (inst.failed || inst.legs.length < 2) continue;
         const def = ComponentRegistry.getById(inst.defId);
         const bt  = def?.behavior?.type;
-        if (bt !== 'diode' && bt !== 'led') continue;
+        if (bt !== 'diode' && bt !== 'led' && bt !== 'zener_diode') continue;
         const anodeNet   = nets.find(nets.key(inst.legs[0].row, inst.legs[0].col));
         const cathodeNet = nets.find(nets.key(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col));
         let net = null, half = null;
@@ -551,7 +551,23 @@ const AudioEngine = (() => {
         else continue; // not a shunt-to-ground clipper; leave it to the walk as a series hop
 
         const entry = clampsByNet.get(net) || { pos: Infinity, neg: Infinity };
-        entry[half] = Math.min(entry[half], forwardVoltage(inst, def));
+        if (bt === 'zener_diode') {
+          // Unlike a plain diode/LED (which only ever conducts, and so only
+          // ever clamps, ONE direction), a single Zener clamps BOTH halves
+          // asymmetrically: it hard-limits at Vz on whichever half puts it
+          // into reverse breakdown, and soft-limits at its own forward drop
+          // on the other half — the same junction-orientation logic as the
+          // diode case above, just contributing to both `entry.pos` and
+          // `entry.neg` from one instance instead of only one of them. This
+          // is a real, common circuit (a single-Zener asymmetric clipper),
+          // not a hypothetical — worth getting right rather than only
+          // modeling the breakdown side.
+          const vz = zenerVoltage(inst, def);
+          if (half === 'pos') { entry.pos = Math.min(entry.pos, ZENER_VF); entry.neg = Math.min(entry.neg, vz); }
+          else                { entry.neg = Math.min(entry.neg, ZENER_VF); entry.pos = Math.min(entry.pos, vz); }
+        } else {
+          entry[half] = Math.min(entry[half], forwardVoltage(inst, def));
+        }
         clampsByNet.set(net, entry);
         used.add(inst.instanceId); // handled as a clamp, so never also built as a series stage
       }
@@ -667,7 +683,7 @@ const AudioEngine = (() => {
   // emitter is at AC ground; no emitter-degeneration modeling.
   function signalLegPairs(inst, def) {
     switch (def.behavior?.type) {
-      case 'resistor': case 'capacitor': case 'diode': case 'led':
+      case 'resistor': case 'capacitor': case 'diode': case 'led': case 'zener_diode':
         return inst.legs.length >= 2 ? [[inst.legs[0], inst.legs[inst.legs.length-1]]] : [];
       case 'potentiometer':
         return inst.legs.length >= 3 ? [[inst.legs[1], inst.legs[0]], [inst.legs[1], inst.legs[2]]] : []; // wiper <-> either outer leg
@@ -1128,6 +1144,39 @@ const AudioEngine = (() => {
         sh.curve = makeClipCurve(threshold);
         return { in: sh, out: sh };
       }
+      case 'zener_diode': {
+        // Unusual wiring (a Zener's normal role is the shunt-clamp case
+        // above, handled entirely separately before the graph walk even
+        // reaches here) but not invalid — if one ends up traced as an
+        // in-series stage, it should still clip at whatever its actual
+        // solved operating point says rather than silently falling through
+        // to buildAudioStage's generic default case (no clipping at all).
+        // `_zenerState`/`_current` are set by the same DC pass as every
+        // other component here (see simulation.js's zener_diode case).
+        const mk = inst.props.model || '1N4742A';
+        const pm = def.model_params?.[mk] || {};
+        const vz = zenerVoltage(inst, def);
+        const izmA = (pm.izm_ma || 150) / 1000;
+        const drive = Utils.clamp((inst._current || 0) / izmA, 0, 1);
+        // Clamped: threshold is Vz itself (scaled into the shaper's usable
+        // range below), same "harder-driven clips a bit sooner" softening
+        // as the plain diode case. Forward/off: same representative
+        // forward-drop threshold used throughout the zener_diode model.
+        const threshold = inst._zenerState === 'clamped'
+          ? Math.max(vz * (1 - drive*0.1), 0.5)
+          : Utils.clamp(ZENER_VF - drive*0.15, 0.15, ZENER_VF);
+        // A signal-diode threshold fits directly in the WaveShaper's [-1,1]
+        // domain (fractions of a volt), but Vz can be several volts (up to
+        // 12V for the parts this app ships) — same pre/post-scale pattern
+        // the transistor case above uses for exactly this reason.
+        const scale = Math.max(threshold, 1e-3) / 0.9;
+        const pre  = ctx.createGain(); pre.gain.value = 1 / scale;
+        const sh   = ctx.createWaveShaper(); sh.oversample = CLIP_OVERSAMPLE;
+        sh.curve   = makeClipCurve(threshold / scale);
+        const post = ctx.createGain(); post.gain.value = scale;
+        pre.connect(sh); sh.connect(post);
+        return { in: pre, out: post, nodes: [pre, sh, post] };
+      }
       case 'capacitor': {
         // A capacitor actually IN the traced series path (as opposed to
         // shunting to ground off a resistor, handled above) is a coupling
@@ -1219,6 +1268,19 @@ const AudioEngine = (() => {
     if (Number.isFinite(typed)) return typed;
     if (def.behavior?.type === 'led') return def.color_map?.[inst.props.color]?.vf ?? 2.0;
     return def.model_params?.[inst.props.model]?.vf ?? 0.7;
+  }
+
+  // A Zener's forward drop — used for the SOFT-clamp half of a shunt-Zener's
+  // asymmetric clamp (see the shunt-clipper loop). Not per-model in
+  // zener_diode.json (see simulation.js's zener_diode case for why: every
+  // part in this family sits close to the same ~0.9-1V forward drop, and
+  // these parts are essentially never run forward-biased in practice).
+  const ZENER_VF = 0.9;
+
+  function zenerVoltage(inst, def) {
+    const typed = parseFloat(inst.props.zener_voltage);
+    if (Number.isFinite(typed)) return typed;
+    return def.model_params?.[inst.props.model]?.vz ?? 12;
   }
 
   async function loadAudioFile(fileData) {

@@ -124,6 +124,20 @@ const Shapes = (() => {
     }
   }
 
+  // Zener: same glass-body silhouette and cathode-stripe layout as a plain
+  // diode, but with the real, distinct color scheme these parts actually
+  // ship in — a burnt-orange/amber body with a black cathode band, unlike a
+  // signal diode's near-black body and white band. Same body_color/
+  // cathode_color reads from def.visual as every other part's colors do,
+  // rather than hardcoding the hex here, so a future model with a different
+  // real-world color could override it without touching this function.
+  function drawZener(ctx,def,bw,bh){
+    const bodyColor = def.visual?.body_color || '#b5651d';
+    const cathodeColor = def.visual?.cathode_color || '#111111';
+    ctx.fillStyle=bodyColor;roundRect(ctx,-bw/2,-bh/2,bw,bh,2);ctx.fill();
+    ctx.fillStyle=cathodeColor;ctx.fillRect(bw/2-5,-bh/2,4,bh);
+  }
+
   // Germanium transistor bodies render at 2x the diameter of a standard
   // flat-bottomed part, flat-shaded. Shared so board.js's leg-attachment
   // math and the body drawing here can never drift apart.
@@ -279,6 +293,7 @@ const Shapes = (() => {
       case 'led':{const cm=def.color_map?.[inst.props.color]||{};drawLED(ctx,cm.hex||'#ff2200',bw,bh,inst._brightness||0);break;}
       case 'potentiometer':  drawPot(ctx,col,bw,bh,inst.props.wiper??0.5,halfLen); break;
       case 'diode':          drawDiode(ctx,def,inst,bw,bh); break;
+      case 'zener_diode':    drawZener(ctx,def,bw,bh); break;
       case 'transistor_npn':
       case 'transistor_pnp': drawTransistor(ctx,def,inst,col,bw,bh); break;
       case 'transistor_jfet_n': drawJfet(ctx,def,inst,bw,bh); break;
@@ -293,7 +308,7 @@ const Shapes = (() => {
   return {
     roundRect, resBands,
     drawResistor, drawFilmCap, drawElectroCap, drawLED, drawPot,
-    drawDiode, drawTransistor, drawSwitch, drawPower, drawSigGen, miniWave,
+    drawDiode, drawZener, drawTransistor, drawSwitch, drawPower, drawSigGen, miniWave,
     drawDefault, drawBody, germCircleGeom
   };
 })();

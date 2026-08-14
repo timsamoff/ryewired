@@ -1,0 +1,223 @@
+{
+  "components": [
+    {
+      "instanceId": "PS1",
+      "defId": "power_supply",
+      "legs": [
+        { "row": 5, "col": 62 },
+        { "row": 5, "col": 60 }
+      ],
+      "props": {
+        "voltage": 9,
+        "current_limit_ma": 500,
+        "reverse_polarity": false,
+        "power_on": true,
+        "battery_sag": 0,
+        "internal_resistance": 1,
+        "title": "PS1 (9V)"
+      }
+    },
+    {
+      "instanceId": "R1",
+      "defId": "resistor",
+      "legs": [
+        { "row": 6, "col": 58 },
+        { "row": 6, "col": 56 }
+      ],
+      "props": {
+        "resistance": 470,
+        "resistance__unit": "Ω",
+        "power_rating": "0.5W",
+        "tolerance": "5%",
+        "title": "R1"
+      }
+    },
+    {
+      "instanceId": "Z1",
+      "defId": "zener_diode",
+      "legs": [
+        { "row": 7, "col": 52 },
+        { "row": 7, "col": 54 }
+      ],
+      "props": {
+        "model": "1N4739A",
+        "zener_voltage": 9.1,
+        "title": "Z1"
+      }
+    },
+    {
+      "instanceId": "PS2",
+      "defId": "power_supply",
+      "legs": [
+        { "row": 5, "col": 48 },
+        { "row": 5, "col": 46 }
+      ],
+      "props": {
+        "voltage": 12,
+        "current_limit_ma": 500,
+        "reverse_polarity": false,
+        "power_on": true,
+        "battery_sag": 0,
+        "internal_resistance": 1,
+        "title": "PS2 (12V)"
+      }
+    },
+    {
+      "instanceId": "R2",
+      "defId": "resistor",
+      "legs": [
+        { "row": 6, "col": 44 },
+        { "row": 6, "col": 42 }
+      ],
+      "props": {
+        "resistance": 470,
+        "resistance__unit": "Ω",
+        "power_rating": "0.5W",
+        "tolerance": "5%",
+        "title": "R2"
+      }
+    },
+    {
+      "instanceId": "Z2",
+      "defId": "zener_diode",
+      "legs": [
+        { "row": 7, "col": 38 },
+        { "row": 7, "col": 40 }
+      ],
+      "props": {
+        "model": "1N4739A",
+        "zener_voltage": 9.1,
+        "title": "Z2"
+      }
+    },
+    {
+      "instanceId": "PS3",
+      "defId": "power_supply",
+      "legs": [
+        { "row": 5, "col": 34 },
+        { "row": 5, "col": 32 }
+      ],
+      "props": {
+        "voltage": 18,
+        "current_limit_ma": 500,
+        "reverse_polarity": false,
+        "power_on": true,
+        "battery_sag": 0,
+        "internal_resistance": 1,
+        "title": "PS3 (18V)"
+      }
+    },
+    {
+      "instanceId": "R3",
+      "defId": "resistor",
+      "legs": [
+        { "row": 6, "col": 30 },
+        { "row": 6, "col": 28 }
+      ],
+      "props": {
+        "resistance": 470,
+        "resistance__unit": "Ω",
+        "power_rating": "0.5W",
+        "tolerance": "5%",
+        "title": "R3"
+      }
+    },
+    {
+      "instanceId": "Z3",
+      "defId": "zener_diode",
+      "legs": [
+        { "row": 7, "col": 24 },
+        { "row": 7, "col": 26 }
+      ],
+      "props": {
+        "model": "1N4739A",
+        "zener_voltage": 9.1,
+        "title": "Z3"
+      }
+    },
+    {
+      "instanceId": "PS4",
+      "defId": "power_supply",
+      "legs": [
+        { "row": 5, "col": 20 },
+        { "row": 5, "col": 18 }
+      ],
+      "props": {
+        "voltage": 24,
+        "current_limit_ma": 500,
+        "reverse_polarity": false,
+        "power_on": true,
+        "battery_sag": 0,
+        "internal_resistance": 1,
+        "title": "PS4 (24V)"
+      }
+    },
+    {
+      "instanceId": "R4",
+      "defId": "resistor",
+      "legs": [
+        { "row": 6, "col": 16 },
+        { "row": 6, "col": 14 }
+      ],
+      "props": {
+        "resistance": 470,
+        "resistance__unit": "Ω",
+        "power_rating": "0.5W",
+        "tolerance": "5%",
+        "title": "R4"
+      }
+    },
+    {
+      "instanceId": "Z4",
+      "defId": "zener_diode",
+      "legs": [
+        { "row": 7, "col": 10 },
+        { "row": 7, "col": 12 }
+      ],
+      "props": {
+        "model": "1N4739A",
+        "zener_voltage": 9.1,
+        "title": "Z4"
+      }
+    }
+  ],
+  "wires": [
+    { "id": "W1A", "r1": 9, "c1": 60, "r2": 9, "c2": 58, "color": "#ff9900" },
+    { "id": "W1B", "r1": 8, "c1": 56, "r2": 8, "c2": 54, "color": "#ff9900" },
+    { "id": "W1C", "r1": 9, "c1": 52, "r2": 6, "c2": 62, "color": "#ff9900" },
+
+    { "id": "W2A", "r1": 9, "c1": 46, "r2": 9, "c2": 44, "color": "#33cc66" },
+    { "id": "W2B", "r1": 8, "c1": 42, "r2": 8, "c2": 40, "color": "#33cc66" },
+    { "id": "W2C", "r1": 9, "c1": 38, "r2": 6, "c2": 48, "color": "#33cc66" },
+
+    { "id": "W3A", "r1": 9, "c1": 32, "r2": 9, "c2": 30, "color": "#3399ff" },
+    { "id": "W3B", "r1": 8, "c1": 28, "r2": 8, "c2": 26, "color": "#3399ff" },
+    { "id": "W3C", "r1": 9, "c1": 24, "r2": 6, "c2": 34, "color": "#3399ff" },
+
+    { "id": "W4A", "r1": 9, "c1": 18, "r2": 9, "c2": 16, "color": "#cc33ff" },
+    { "id": "W4B", "r1": 8, "c1": 14, "r2": 8, "c2": 12, "color": "#cc33ff" },
+    { "id": "W4C", "r1": 9, "c1": 10, "r2": 6, "c2": 20, "color": "#cc33ff" }
+  ],
+  "permanentDevices": {
+    "power": {
+      "voltage": 9,
+      "current_limit_ma": 500,
+      "reverse_polarity": false,
+      "power_on": false,
+      "battery_sag": 0,
+      "internal_resistance": 1
+    },
+    "input": {
+      "waveform": "Sine",
+      "frequency": 440,
+      "amplitude": 0,
+      "dc_offset": 0,
+      "phase": 0,
+      "looping": true
+    },
+    "output": {
+      "volume": 0,
+      "mute": true
+    }
+  }
+}

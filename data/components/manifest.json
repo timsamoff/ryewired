@@ -8,6 +8,7 @@
   "resistor.json",
   "signal_generator.json",
   "switch.json",
+  "zener_diode.json",
   "transistor_jfet_n.json",
   "transistor_mosfet_n.json",
   "transistor_npn.json",
