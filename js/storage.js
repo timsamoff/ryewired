@@ -10,7 +10,14 @@ const Storage = (() => {
 
   const supportsFilePicker = typeof window.showSaveFilePicker === 'function';
   let _fileHandle = null;
-  let _fileName   = 'Untitled';
+  // null, not the literal 'Untitled' — this runs at module-eval time, before
+  // I18n.load() resolves in app.js's boot sequence, so there's no translated
+  // word available yet to seed it with. Every consumer (updateTitle,
+  // saveLayout's suggestedName/downloadJson fallbacks) resolves null via
+  // I18n.t('app.storage.untitled') at the point it's actually needed,
+  // when I18n is guaranteed ready — same pattern as everywhere else in the
+  // app that reads translated text lazily rather than caching it at load.
+  let _fileName   = null;
 
   // ── Component loading ───────────────────────────────────────────────────────
   async function loadAllComponents() {
@@ -52,7 +59,7 @@ const Storage = (() => {
   // ── New layout ──────────────────────────────────────────────────────────────
   function newLayout() {
     _fileHandle = null;
-    _fileName   = 'Untitled';
+    _fileName   = null;
     updateTitle(false);
     return true;
   }
@@ -64,7 +71,7 @@ const Storage = (() => {
       try {
         if (!_fileHandle||forceDialog) {
           _fileHandle = await window.showSaveFilePicker({
-            suggestedName: (_fileName||'untitled')+'.'+FILE_EXT,
+            suggestedName: (_fileName||I18n.t('app.storage.untitled'))+'.'+FILE_EXT,
             types: [{description:FILE_DESC, accept:{[FILE_MIME]:['.' +FILE_EXT]}}]
           });
         } else {
@@ -95,9 +102,10 @@ const Storage = (() => {
         }
       }
     }
-    downloadJson(json, (_fileName||'untitled')+'.'+FILE_EXT);
+    const baseName = _fileName||I18n.t('app.storage.untitled');
+    downloadJson(json, baseName+'.'+FILE_EXT);
     updateTitle(false);
-    return { saved:true, fileName:_fileName+'.'+FILE_EXT };
+    return { saved:true, fileName:baseName+'.'+FILE_EXT };
   }
 
   // ── Open ────────────────────────────────────────────────────────────────────
