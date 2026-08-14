@@ -659,7 +659,19 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
 #help-box {
   position: relative; background: var(--bg-elevated);
   border: 1px solid var(--border-light); border-radius: var(--radius-lg);
-  max-width: 420px; width: 90%; overflow: hidden;
+  max-width: 420px; width: 90%;
+  /* Top and bottom edges sit exactly 40px in from the browser window's top
+     and bottom, regardless of content length or language — #help-overlay
+     centers this box vertically (align-items:center), so a height of
+     100vh minus 80px (40px off each side) lands the edges there exactly.
+     A longer translation scrolls inside #help-body instead of growing the
+     box past that 40px margin. display:flex + the header/footer NOT
+     shrinking (their natural content size) + #help-body flex:1 with its
+     own overflow is what keeps header/footer visually fixed while only
+     the body scrolls. */
+  height: calc(100vh - 80px);
+  display: flex; flex-direction: column;
+  overflow: hidden;
   box-shadow: 0 16px 48px rgba(0,0,0,0.7);
   animation: dropdown-in 0.15s ease;
 }
@@ -668,6 +680,7 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
   display: flex; flex-direction: column; align-items: center;
   gap: 8px; padding: 28px 24px 20px;
   background: var(--bg-raised); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 #help-header img { width: 56px; height: 56px; border-radius: 12px; }
@@ -681,7 +694,17 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
   font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
 }
 
-#help-body { padding: 20px 24px; }
+#help-body {
+  padding: 20px 24px;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+}
+/* Stylized scrollbar — same treatment as the palette list and properties
+   panel elsewhere in the app, so a scrolling Help modal doesn't look like
+   a different, un-styled control. Only relevant when content actually
+   overflows the fixed 20vh box (a short language/viewport combination
+   never shows it, same as those other panels). */
+#help-body::-webkit-scrollbar { width: 3px; }
+#help-body::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
 
 #help-body p {
   font-size: 12px; color: var(--text-secondary);
@@ -717,6 +740,7 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
   align-items: center;
   gap: 6px;
   border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 /* X button in top-right corner of help header */
