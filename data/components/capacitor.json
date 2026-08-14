@@ -1,29 +1,29 @@
 {
   "id": "capacitor",
-  "label": "Capacitor (Film/Ceramic)",
+  "labelKey": "component.capacitor.label",
   "category": "passive",
   "symbol": "C",
-  "description": "Non-polarized film or ceramic capacitor. Can be placed either way.",
+  "descriptionKey": "component.capacitor.description",
   "legs": 2,
   "leg_span": 2,
   "polarized": false,
   "properties": [
-    { "key": "capacitance", "label": "Capacitance", "type": "value_unit", "default": 0.000000001, "default_unit": "nF",
+    { "key": "capacitance", "labelKey": "component.capacitor.capacitance.label", "type": "value_unit", "default": 0.000000001, "default_unit": "nF",
       "units": [ {"label":"pF","factor":1e-12}, {"label":"nF","factor":1e-9}, {"label":"µF","factor":1e-6}, {"label":"mF","factor":1e-3} ],
-      "hint": "How much charge this capacitor can store — sets which frequencies it blocks or passes in a filter or coupling stage." },
-    { "key": "voltage_rating", "label": "Voltage Rating", "type": "select", "options": ["16V","25V","50V","100V","250V","630V"], "default": "50V",
-      "hint": "The most voltage this capacitor can safely handle before it fails." },
-    { "key": "type", "label": "Type", "type": "select", "options": ["Film","Ceramic","Monolithic"], "default": "Film",
-      "hint": "The capacitor's construction — mainly affects real-world size and cost, not the simulated behavior here." },
-    { "key": "tolerance", "label": "Tolerance", "type": "select", "options": ["1%", "2%", "5%", "10%", "20%"], "default": "5%",
-      "hint": "How close the real capacitor is likely to be to its stated value — a real part is never exact." }
+      "hintKey": "component.capacitor.capacitance.hint" },
+    { "key": "voltage_rating", "labelKey": "component.capacitor.voltage_rating.label", "type": "select", "options": ["16V","25V","50V","100V","250V","630V"], "default": "50V",
+      "hintKey": "component.capacitor.voltage_rating.hint" },
+    { "key": "type", "labelKey": "component.capacitor.type.label", "type": "select", "options": ["Film","Ceramic","Monolithic"], "default": "Film",
+      "hintKey": "component.capacitor.type.hint" },
+    { "key": "tolerance", "labelKey": "component.capacitor.tolerance.label", "type": "select", "options": ["1%", "2%", "5%", "10%", "20%"], "default": "5%",
+      "hintKey": "component.capacitor.tolerance.hint" }
   ],
   "behavior": { "type": "capacitor" },
   "failure_modes": {
     "over_voltage": {
       "threshold_multiplier": 1.2,
       "result": "burn",
-      "message": "Capacitor voltage rating exceeded. Use a higher-rated capacitor."
+      "messageKey": "component.capacitor.failure.over_voltage"
     }
   },
   "visual": {

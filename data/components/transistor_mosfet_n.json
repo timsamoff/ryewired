@@ -1,9 +1,9 @@
 {
   "id": "transistor_mosfet_n",
-  "label": "N-Channel MOSFET",
+  "labelKey": "component.transistor_mosfet_n.label",
   "category": "semiconductor",
   "symbol": "Q",
-  "description": "N-channel enhancement-mode MOSFET. Voltage-controlled: the gate draws no DC current, drain current is zero below the gate threshold voltage and rises with the square of gate overdrive above it.",
+  "descriptionKey": "component.transistor_mosfet_n.description",
   "legs": 3,
   "leg_span": 2,
   "leg_labels": [
@@ -14,39 +14,40 @@
   "properties": [
     {
       "key": "model",
-      "label": "Model",
+      "labelKey": "component.transistor_mosfet_n.model.label",
       "type": "select",
       "options": [
         "2N7000",
         "BS170"
       ],
       "default": "2N7000",
-      "hint": "The real MOSFET part this simulates — sets its threshold voltage and transconductance automatically."
+      "hintKey": "component.transistor_mosfet_n.model.hint"
     },
     {
       "key": "vgs_th",
-      "label": "Vgs(th) (gate threshold voltage) — optional, overrides model's rating",
+      "labelKey": "component.transistor_mosfet_n.vgs_th.label",
       "type": "number",
       "default": "",
-      "hint": "The gate voltage needed before this MOSFET starts conducting at all. Leave blank to use the selected Model's real rating."
+      "hintKey": "component.transistor_mosfet_n.vgs_th.hint"
     },
     {
       "key": "k",
-      "label": "k (transconductance coefficient) — optional, overrides model's rating",
+      "labelKey": "component.transistor_mosfet_n.k.label",
       "type": "number",
       "default": "",
-      "hint": "How strongly drain current increases once the gate voltage is past threshold — higher means more gain. Leave blank to use the selected Model's real rating."
+      "hintKey": "component.transistor_mosfet_n.k.hint"
     },
     {
       "key": "pinout",
-      "label": "Pinout (left to right)",
+      "labelKey": "component.transistor_mosfet_n.pinout.label",
       "type": "select",
       "options": [
         "DGS",
         "SGD"
       ],
       "default": "DGS",
-      "hint": "Which physical leg is Drain/Gate/Source, left to right — matches how the real part's datasheet orders its leads."
+      "hintKey": "component.transistor_mosfet_n.pinout.hint",
+      "_i18nNote": "options ARE matched literally throughout js/simulation.js (MOSFET_PINOUTS lookup, props.pinout === 'DGS' etc.) — needs a stable non-text identifier before this can be localized."
     }
   ],
   "model_params": {
@@ -69,11 +70,11 @@
   "failure_modes": {
     "over_current": {
       "result": "burn",
-      "message": "Drain current exceeded maximum rating. The MOSFET is destroyed. Check the drain load for too little resistance."
+      "messageKey": "component.transistor_mosfet_n.failure.over_current"
     },
     "over_voltage": {
       "result": "burn",
-      "message": "Vds exceeded breakdown voltage. Use a device rated for higher voltage, or reduce the supply."
+      "messageKey": "component.transistor_mosfet_n.failure.over_voltage"
     }
   },
   "visual": {

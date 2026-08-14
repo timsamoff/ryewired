@@ -1,16 +1,18 @@
 {
   "id": "switch_spst",
-  "label": "Switch (SPST)",
+  "labelKey": "component.switch_spst.label",
   "category": "switch",
   "symbol": "SW",
-  "description": "Single-pole single-throw switch. On/off.",
+  "descriptionKey": "component.switch_spst.description",
   "legs": 2,
   "leg_span": 2,
   "properties": [
-    { "key": "type", "label": "Action", "type": "select", "options": ["Latching","Momentary (NO)","Momentary (NC)"], "default": "Latching",
-      "hint": "How the switch behaves when clicked: Latching stays in the new position; Momentary springs back when released (Normally Open = off until held, Normally Closed = on until held)." },
-    { "key": "state", "label": "Initial State", "type": "select", "options": ["Open","Closed"], "default": "Open",
-      "hint": "Whether the switch starts open (circuit broken) or closed (circuit connected) when the board loads." }
+    { "key": "type", "labelKey": "component.switch_spst.type.label", "type": "select", "options": ["Latching","Momentary (NO)","Momentary (NC)"], "default": "Latching",
+      "hintKey": "component.switch_spst.type.hint",
+      "_i18nNote": "options ARE matched literally by js/utils.js's isSwitchClosed() ('Momentary (NO)', 'Momentary (NC)'). Same landmine as taper/waveform — needs a stable non-text identifier before this can be localized." },
+    { "key": "state", "labelKey": "component.switch_spst.state.label", "type": "select", "options": ["Open","Closed"], "default": "Open",
+      "hintKey": "component.switch_spst.state.hint",
+      "_i18nNote": "options ARE matched literally ('Closed') by js/utils.js's isSwitchClosed() and js/board.js's toggle. Same landmine — needs a stable non-text identifier before this can be localized." }
   ],
   "behavior": { "type": "switch_spst" },
   "failure_modes": {},

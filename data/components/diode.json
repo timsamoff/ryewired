@@ -1,20 +1,20 @@
 {
   "id": "diode",
-  "label": "Diode",
+  "labelKey": "component.diode.label",
   "category": "semiconductor",
   "symbol": "D",
-  "description": "Allows current in one direction only. Used for rectification and clipping.",
+  "descriptionKey": "component.diode.description",
   "legs": 2,
   "leg_span": 2,
   "polarized": true,
   "leg_labels": ["A", "K"],
   "properties": [
-    { "key": "model", "label": "Model", "type": "select", "options": ["1N4148","1N4001","1N34A (Germanium)","BAT41 (Schottky)","1N5817 (Schottky)"], "default": "1N4148",
-      "hint": "The real diode part this simulates — sets its forward voltage, leakage, and clipping character automatically." },
-    { "key": "forward_voltage", "label": "Forward Voltage (V)", "type": "number", "default": 0.7,
-      "hint": "The voltage it takes to turn this diode on and let current flow — this is what shapes clipping/distortion character. Leave blank to use the selected Model's real rating." },
-    { "key": "leakage", "label": "Leakage (IR, µA) — optional", "type": "number", "default": "",
-      "hint": "A tiny amount of current that sneaks through even when the diode is supposed to be off. Usually negligible — leave blank to use the Model's real rating." }
+    { "key": "model", "labelKey": "component.diode.model.label", "type": "select", "options": ["1N4148","1N4001","1N34A (Germanium)","BAT41 (Schottky)","1N5817 (Schottky)"], "default": "1N4148",
+      "hintKey": "component.diode.model.hint" },
+    { "key": "forward_voltage", "labelKey": "component.diode.forward_voltage.label", "type": "number", "default": 0.7,
+      "hintKey": "component.diode.forward_voltage.hint" },
+    { "key": "leakage", "labelKey": "component.diode.leakage.label", "type": "number", "default": "",
+      "hintKey": "component.diode.leakage.hint" }
   ],
   "model_params": {
     "1N4148":         { "vf": 0.7,  "max_current_ma": 200,  "type": "silicon",   "leakage_ua": 0.025 },
@@ -25,8 +25,8 @@
   },
   "behavior": { "type": "diode" },
   "failure_modes": {
-    "over_current": { "result": "burn", "message": "Diode current exceeded its maximum rating and it burned out." },
-    "reverse_voltage": { "result": "burn", "message": "Reverse breakdown voltage exceeded. The diode failed." }
+    "over_current": { "result": "burn", "messageKey": "component.diode.failure.over_current" },
+    "reverse_voltage": { "result": "burn", "messageKey": "component.diode.failure.reverse_voltage" }
   },
   "visual": {
     "body_color": "#222222",

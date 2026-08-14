@@ -1,56 +1,56 @@
 {
   "id": "power_supply",
-  "label": "DC Power Supply",
+  "labelKey": "component.power_supply.label",
   "category": "power",
   "symbol": "V+",
-  "description": "DC voltage source. Connect + to power rail, \u2013 to ground rail.",
+  "descriptionKey": "component.power_supply.description",
   "legs": 2,
   "leg_span": 2,
   "leg_labels": [
     "+",
-    "\u2013"
+    "–"
   ],
   "properties": [
     {
       "key": "power_on",
-      "label": "Power On",
+      "labelKey": "component.power_supply.power_on.label",
       "type": "boolean",
       "default": true,
-      "hint": "Turns this supply on or off, like unplugging the battery."
+      "hintKey": "component.power_supply.power_on.hint"
     },
     {
       "key": "voltage",
-      "label": "Voltage (V)",
+      "labelKey": "component.power_supply.voltage.label",
       "type": "number",
       "default": 9,
       "min": 1,
       "max": 30,
-      "hint": "The voltage this supply provides to whatever it's wired into."
+      "hintKey": "component.power_supply.voltage.hint"
     },
     {
       "key": "current_limit_ma",
-      "label": "Current Limit (mA)",
+      "labelKey": "component.power_supply.current_limit_ma.label",
       "type": "number",
       "default": 500,
-      "hint": "The most current this supply can deliver before it can't keep up, like a battery running low under heavy load."
+      "hintKey": "component.power_supply.current_limit_ma.hint"
     },
     {
       "key": "battery_sag",
-      "label": "Battery Sag",
+      "labelKey": "component.power_supply.battery_sag.label",
       "type": "range",
       "default": 0,
       "min": 0,
       "max": 1,
       "step": 0.01,
-      "hint": "How much the voltage dips under load as you play \u2014 higher settings mimic a tired battery, audibly compressing and \"browning out\" on loud playing."
+      "hintKey": "component.power_supply.battery_sag.hint"
     },
     {
       "key": "internal_resistance",
-      "label": "Internal Resistance (\u03a9)",
+      "labelKey": "component.power_supply.internal_resistance.label",
       "type": "number",
       "default": 1,
       "min": 0,
-      "hint": "How much the supply's own resistance limits current \u2014 higher values make Battery Sag more pronounced."
+      "hintKey": "component.power_supply.internal_resistance.hint"
     }
   ],
   "behavior": {

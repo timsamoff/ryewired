@@ -12,6 +12,13 @@ const Palette = (() => {
         e.preventDefault(); _search.focus(); _search.select();
       }
     });
+    // Palette items used a native title= attribute (a leftover from before
+    // the app-wide custom-tooltip conversion) — that's a second, OS-owned
+    // tooltip mechanism with its own offset/timing, so it visibly didn't
+    // match the custom Tooltip module's 2px-offset positioning used
+    // everywhere else. One delegated binding, same pattern as
+    // PropertiesPanel/toolbar.
+    if (typeof Tooltip !== 'undefined') Tooltip.wireHintDelegate(_list, '.palette-item', { wrap: true });
   }
 
   function populate(defs) { render(defs); }
@@ -32,7 +39,7 @@ const Palette = (() => {
       if (!groups[cat]?.length) continue;
       const catEl = document.createElement('div');
       catEl.className = 'palette-category';
-      catEl.textContent = ComponentRegistry.CATEGORY_LABELS[cat] || cat;
+      catEl.textContent = ComponentRegistry.categoryLabel(cat);
       _list.appendChild(catEl);
       for (const def of groups[cat]) _list.appendChild(buildItem(def));
     }
@@ -47,16 +54,18 @@ const Palette = (() => {
   }
 
   function buildItem(def) {
+    const label = I18n.t(def.labelKey);
+    const description = I18n.t(def.descriptionKey);
     const el = document.createElement('div');
     el.className     = 'palette-item';
     el.draggable     = true;
     el.dataset.defId = def.id;
-    el.title         = def.description || def.label;
+    el.dataset.hint   = description || label;
     el.innerHTML     = `
       <div class="palette-item-symbol">${def.symbol || def.id.slice(0,2).toUpperCase()}</div>
       <div class="palette-item-info">
-        <div class="palette-item-label">${def.label}</div>
-        <div class="palette-item-desc">${trunc(def.description,40)}</div>
+        <div class="palette-item-label">${label}</div>
+        <div class="palette-item-desc">${trunc(description,40)}</div>
       </div>`;
 
     el.addEventListener('dragstart', e => {

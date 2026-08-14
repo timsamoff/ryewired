@@ -30,53 +30,54 @@ const PropertiesPanel = (() => {
   // left out for now.
   const PERMANENT_DEFS = {
     power: {
-      label: 'Power Supply', symbol: '9V',
+      labelKey: 'app.permanent.power.label', symbol: '9V',
       properties: [
-        { key:'power_on', label:'Power On', type:'boolean', default:true,
-          hint:'Turns the circuit\'s power on or off, like unplugging the battery.' },
-        { key:'voltage', label:'Voltage (V)', type:'number', default:9, min:1, max:24,
-          hint:'The supply voltage powering the circuit — 9V is standard for most pedals.' },
-        { key:'current_limit_ma', label:'Current Limit (mA)', type:'number', default:500,
-          hint:'The most current the supply can deliver before it can\'t keep up, like a battery running low under heavy load.' },
-        { key:'reverse_polarity', label:'Reverse Polarity', type:'boolean', default:false,
-          hint:'Swaps + and −, simulating a battery or power adapter plugged in backwards.' },
-        { key:'battery_sag', label:'Battery Sag', type:'range', min:0, max:1, step:0.01, default:0,
-          hint:'How much the supply voltage dips under load as you play — higher settings mimic a tired battery, audibly compressing and "browning out" on loud playing.' },
-        { key:'internal_resistance', label:'Internal Resistance (Ω)', type:'number', default:1, min:0,
-          hint:'How much the supply\'s own resistance limits current — higher values make Battery Sag more pronounced.' },
+        { key:'power_on', labelKey:'app.permanent.power.power_on.label', type:'boolean', default:true,
+          hintKey:'app.permanent.power.power_on.hint' },
+        { key:'voltage', labelKey:'app.permanent.power.voltage.label', type:'number', default:9, min:1, max:24,
+          hintKey:'app.permanent.power.voltage.hint' },
+        { key:'current_limit_ma', labelKey:'app.permanent.power.current_limit_ma.label', type:'number', default:500,
+          hintKey:'app.permanent.power.current_limit_ma.hint' },
+        { key:'reverse_polarity', labelKey:'app.permanent.power.reverse_polarity.label', type:'boolean', default:false,
+          hintKey:'app.permanent.power.reverse_polarity.hint' },
+        { key:'battery_sag', labelKey:'app.permanent.power.battery_sag.label', type:'range', min:0, max:1, step:0.01, default:0,
+          hintKey:'app.permanent.power.battery_sag.hint' },
+        { key:'internal_resistance', labelKey:'app.permanent.power.internal_resistance.label', type:'number', default:1, min:0,
+          hintKey:'app.permanent.power.internal_resistance.hint' },
       ]
     },
     input: {
-      label: 'Input', symbol: 'IN',
+      labelKey: 'app.permanent.input.label', symbol: 'IN',
       properties: [
-        { key:'waveform', label:'Audio Source', type:'select', default:'None',
+        { key:'waveform', labelKey:'app.permanent.input.waveform.label', type:'select', default:'None',
           options:['None','Sine','Square','Triangle','Sawtooth','White Noise','Pink Noise','Audio File'],
-          hint:'What signal to feed into the circuit — a test tone, noise, or a real recorded guitar sample.' },
-        { key:'source_impedance', label:'Source Impedance (Ω)', type:'number', default:10000, min:0, max:1000000,
-          hint:'How "stiff" the thing feeding this circuit is, like a guitar pickup\'s output. Lower values act more like an ideal source that isn\'t affected by what it\'s plugged into; a real passive pickup is typically around 6,000–12,000Ω.' },
-        { key:'frequency', label:'Frequency (Hz)', type:'number', default:440, min:1, max:20000,
-          hint:'The pitch of the test tone. A guitar\'s low E string is about 82Hz; middle A is 440Hz.' },
-        { key:'amplitude', label:'Amplitude (V)', type:'range', min:0.01, max:12, step:0.01, default:0.35, unit:'V',
-          hint:'How loud/hard the input signal hits the circuit — like picking softly versus digging in.' },
-        { key:'dc_offset', label:'DC Offset (V)', type:'number', default:0, min:-12, max:12,
-          hint:'Shifts the whole signal up or down by a fixed voltage. Rarely needed — mainly useful for testing bias-sensitive circuits.' },
-        { key:'phase', label:'Phase (°)', type:'range', min:0, max:360, step:1, default:0, unit:'°',
-          hint:'Shifts where in its cycle the test tone starts. Mostly useful for comparing two signals — won\'t audibly change a single tone on its own.' },
-        { key:'looping', label:'Loop Audio File', type:'boolean', default:true,
-          hint:'Restarts the audio file from the beginning when it finishes playing.' },
-        { key:'audio_file', label:'Audio File', type:'permanent_audio_source', default:null,
-          hint:'The recorded sample to play through the circuit when Audio Source is set to "Audio File".' },
+          hintKey:'app.permanent.input.waveform.hint',
+          _i18nNote: 'options ARE matched literally in audio-engine.js (waveform === \'Audio File\'/\'White Noise\'/\'Pink Noise\'/\'None\') — needs a stable non-text identifier before this can be localized.' },
+        { key:'source_impedance', labelKey:'app.permanent.input.source_impedance.label', type:'number', default:10000, min:0, max:1000000,
+          hintKey:'app.permanent.input.source_impedance.hint' },
+        { key:'frequency', labelKey:'app.permanent.input.frequency.label', type:'number', default:440, min:1, max:20000,
+          hintKey:'app.permanent.input.frequency.hint' },
+        { key:'amplitude', labelKey:'app.permanent.input.amplitude.label', type:'range', min:0.01, max:12, step:0.01, default:0.35, unit:'V',
+          hintKey:'app.permanent.input.amplitude.hint' },
+        { key:'dc_offset', labelKey:'app.permanent.input.dc_offset.label', type:'number', default:0, min:-12, max:12,
+          hintKey:'app.permanent.input.dc_offset.hint' },
+        { key:'phase', labelKey:'app.permanent.input.phase.label', type:'range', min:0, max:360, step:1, default:0, unit:'°',
+          hintKey:'app.permanent.input.phase.hint' },
+        { key:'looping', labelKey:'app.permanent.input.looping.label', type:'boolean', default:true,
+          hintKey:'app.permanent.input.looping.hint' },
+        { key:'audio_file', labelKey:'app.permanent.input.audio_file.label', type:'permanent_audio_source', default:null,
+          hintKey:'app.permanent.input.audio_file.hint' },
       ]
     },
     output: {
-      label: 'Output', symbol: 'OUT',
+      labelKey: 'app.permanent.output.label', symbol: 'OUT',
       properties: [
-        { key:'load_impedance', label:'Load Impedance (Ω)', type:'number', default:1000000, min:1, max:10000000,
-          hint:'How much whatever is plugged in downstream (an amp, another pedal) "pulls" on this circuit\'s output. Very high values (1,000,000Ω+) barely affect the sound; lower values can noticeably darken the tone, like plugging into a cheap mixer input.' },
-        { key:'volume', label:'Master Volume', type:'range', min:0, max:1, step:0.01, default:1.0,
-          hint:'The overall listening volume — doesn\'t affect the circuit itself, just how loud you hear the result.' },
-        { key:'mute', label:'Mute', type:'boolean', default:false,
-          hint:'Silences the output without stopping the simulation.' },
+        { key:'load_impedance', labelKey:'app.permanent.output.load_impedance.label', type:'number', default:1000000, min:1, max:10000000,
+          hintKey:'app.permanent.output.load_impedance.hint' },
+        { key:'volume', labelKey:'app.permanent.output.volume.label', type:'range', min:0, max:1, step:0.01, default:1.0,
+          hintKey:'app.permanent.output.volume.hint' },
+        { key:'mute', labelKey:'app.permanent.output.mute.label', type:'boolean', default:false,
+          hintKey:'app.permanent.output.mute.hint' },
       ]
     }
   };
@@ -88,6 +89,13 @@ const PropertiesPanel = (() => {
         if (_currentPermanentKind === 'input') showPermanent('input'); // refresh only if still on the Input panel
       });
     }
+
+    // One delegated binding for every [data-hint] element's tooltip (field
+    // labels AND the Rotate buttons below), rather than rebinding per-render
+    // — _content's children get fully replaced on every showComponent()/
+    // showPermanent() call, but the listener on _content itself doesn't
+    // need to move.
+    if (typeof Tooltip !== 'undefined') Tooltip.wireHintDelegate(_content, '[data-hint]', { wrap: true });
   }
 
   function show(inst, wire) {
@@ -112,8 +120,8 @@ const PropertiesPanel = (() => {
       <div class="prop-component-header">
         <div class="prop-component-symbol">${def.symbol}</div>
         <div class="prop-component-info">
-          <div class="prop-component-label">${def.label}</div>
-          <div class="prop-component-id">Permanent Workbench Device</div>
+          <div class="prop-component-label">${I18n.t(def.labelKey)}</div>
+          <div class="prop-component-id">${I18n.t('app.permanent.deviceTag')}</div>
         </div>
       </div>`;
 
@@ -131,8 +139,8 @@ const PropertiesPanel = (() => {
     const isLocked = (kind === 'input' || kind === 'power') &&
       typeof isCircuitEngaged === 'function' && isCircuitEngaged();
     if (isLocked) {
-      const msg = kind === 'input' ? 'Stop the simulation or bypass the pedal to change Input settings'
-                                    : 'Stop the simulation or bypass the pedal to change Power settings';
+      const msg = kind === 'input' ? I18n.t('app.permanent.lockedInput')
+                                    : I18n.t('app.permanent.lockedPower');
       html = `<div class="prop-locked-note"><i class="fa-solid fa-lock"></i> ${msg}</div>` + html;
     }
 
@@ -153,7 +161,7 @@ const PropertiesPanel = (() => {
         const samples = (typeof AudioEngine!=='undefined' && AudioEngine.getCachedSamples) ? AudioEngine.getCachedSamples() : [];
         const picked = await Modal.pickList(
           samples.map(s => ({ label: s.name, value: s })),
-          { title: 'Load Sample Audio', emptyLabel: 'No sample audio available' }
+          { title: I18n.t('app.properties.loadSampleAudio'), emptyLabel: I18n.t('app.properties.noSampleAudio') }
         );
         if (!picked) return;
         const name = await AudioEngine.loadSampleClip(picked.file, picked.name);
@@ -217,21 +225,21 @@ const PropertiesPanel = (() => {
   function showWire(wire) {
     const engaged = typeof isCircuitEngaged === 'function' && isCircuitEngaged();
     _content.innerHTML = `
-      ${engaged ? '<div class="prop-locked-note"><i class="fa-solid fa-lock"></i> Stop the simulation or bypass the pedal to remove a jumper.</div>' : ''}
+      ${engaged ? `<div class="prop-locked-note"><i class="fa-solid fa-lock"></i> ${I18n.t('app.properties.stopToEditWire')}</div>` : ''}
       <div class="prop-component-header">
         <div class="prop-component-symbol"
           style="background:${wire.color||'#ff9900'};border-color:${wire.color||'#ff9900'}">⌇</div>
         <div class="prop-component-info">
-          <div class="prop-component-label">Jumper Wire</div>
+          <div class="prop-component-label">${I18n.t('app.properties.jumperWire')}</div>
           <div class="prop-component-id">${wire.id}</div>
         </div>
       </div>
       <div class="prop-group">
-        <label class="prop-label">Color</label>
+        <label class="prop-label">${I18n.t('app.properties.color')}</label>
         <input class="prop-input" type="color" id="wire-color-pick" value="${wire.color||'#ff9900'}">
       </div>
       <button class="prop-delete-btn" id="prop-delete-btn" ${engaged ? 'disabled' : ''}>
-        <i class="fa-solid fa-trash-can"></i> Remove Jumper
+        <i class="fa-solid fa-trash-can"></i> ${I18n.t('app.properties.removeJumper')}
       </button>`;
 
     document.getElementById('wire-color-pick')?.addEventListener('input', e => {
@@ -253,15 +261,15 @@ const PropertiesPanel = (() => {
     let html = ``;
     if (engaged) {
       const wiperNote = def.behavior?.type === 'potentiometer'
-        ? 'Wiper stays adjustable while engaged — everything else is locked.'
-        : 'Stop the simulation or bypass the pedal to edit this component.';
+        ? I18n.t('app.properties.wiperStaysAdjustable')
+        : I18n.t('app.properties.stopToEdit');
       html += `<div class="prop-locked-note"><i class="fa-solid fa-lock"></i> ${wiperNote}</div>`;
     }
     html += `
       <div class="prop-component-header">
         <div class="prop-component-symbol">${def.symbol||'?'}</div>
         <div class="prop-component-info">
-          <div class="prop-component-label">${def.label}</div>
+          <div class="prop-component-label">${I18n.t(def.labelKey)}</div>
           <div class="prop-component-id">${inst.instanceId}</div>
         </div>
       </div>`;
@@ -269,13 +277,13 @@ const PropertiesPanel = (() => {
     // ── Title (optional, all non-jumper/non-permanent components) ───────────
     // Purely optional metadata, not part of any component's behavior schema —
     // stored in inst.props.title only once the user actually types something
-    // (see onPropChange), so old saved .rw files with no title never gain a
+    // (see onPropChange), so old saved .rye files with no title never gain a
     // new key just from being opened and re-saved.
     html += `
       <div class="prop-group">
-        <label class="prop-label">Title</label>
+        <label class="prop-label">${I18n.t('app.properties.title')}</label>
         <input class="prop-input" type="text" data-key="title" data-meta="true"
-          value="${(inst.props.title||'').replace(/"/g,'&quot;')}" placeholder="Optional label">
+          value="${(inst.props.title||'').replace(/"/g,'&quot;')}" placeholder="${escapeAttr(I18n.t('app.properties.optionalLabel'))}">
       </div>`;
 
     for (const prop of (def.properties||[])) {
@@ -334,12 +342,12 @@ const PropertiesPanel = (() => {
     if (canRotate) {
       html += `
         <div class="prop-group">
-          <label class="prop-label">Rotate</label>
+          <label class="prop-label">${I18n.t('app.properties.rotate')}</label>
           <div class="prop-rotate-wrap">
-            <button class="prop-rotate-btn" id="prop-rotate-ccw" title="Rotate 90° counter-clockwise">
+            <button class="prop-rotate-btn" id="prop-rotate-ccw" data-hint="${escapeAttr(I18n.t('app.properties.rotateCcw'))}">
               <i class="fa-solid fa-rotate-left"></i>
             </button>
-            <button class="prop-rotate-btn" id="prop-rotate-cw" title="Rotate 90° clockwise">
+            <button class="prop-rotate-btn" id="prop-rotate-cw" data-hint="${escapeAttr(I18n.t('app.properties.rotateCw'))}">
               <i class="fa-solid fa-rotate-right"></i>
             </button>
           </div>
@@ -348,14 +356,14 @@ const PropertiesPanel = (() => {
 
     html += `
       <div class="prop-group">
-        <label class="prop-label">Description</label>
+        <label class="prop-label">${I18n.t('app.properties.description')}</label>
         <textarea class="prop-input prop-textarea" data-key="description" data-meta="true"
-          rows="4" placeholder="Optional notes">${(inst.props.description||'').replace(/</g,'&lt;')}</textarea>
+          rows="4" placeholder="${escapeAttr(I18n.t('app.properties.optionalNotes'))}">${(inst.props.description||'').replace(/</g,'&lt;')}</textarea>
       </div>`;
 
     html += `
       <button class="prop-delete-btn" id="prop-delete-btn">
-        <i class="fa-solid fa-trash-can"></i> Remove Component
+        <i class="fa-solid fa-trash-can"></i> ${I18n.t('app.properties.removeComponent')}
       </button>`;
 
     _content.innerHTML = html;
@@ -401,7 +409,7 @@ const PropertiesPanel = (() => {
         inst.props.audio_file = name;
         const nameEl = _content.querySelector('.prop-audio-name');
         if (nameEl) nameEl.textContent = name;
-        audioBtn.innerHTML = '<i class="fa-solid fa-music"></i> Change Audio File';
+        audioBtn.innerHTML = `<i class="fa-solid fa-music"></i> ${I18n.t('app.properties.changeAudioFile')}`;
         Storage.markDirty(); History.pushDebounced();
       });
     }
@@ -454,15 +462,37 @@ const PropertiesPanel = (() => {
   }
 
   // ── Field builders ───────────────────────────────────────────────────────────
+  // Component-JSON properties and PERMANENT_DEFS properties (Power/Input/
+  // Output) both carry labelKey/hintKey now, but this stays in place as a
+  // single choke point rather than assuming every future prop shape does —
+  // resolves whichever shape `prop` actually has into a plain {label, hint}
+  // once, so buildPropFieldInner's ~7 internal ${prop.label} sites never
+  // need to know or care which source it came from.
+  function resolvePropText(prop) {
+    const label = prop.labelKey ? I18n.t(prop.labelKey) : (prop.label ?? '');
+    const hint  = prop.hintKey  ? I18n.t(prop.hintKey)   : prop.hint;
+    return (label === prop.label && hint === prop.hint) ? prop : { ...prop, label, hint };
+  }
+
   function buildPropField(prop, value, placeholder, unitLabel) {
-    const html = buildPropFieldInner(prop, value, placeholder, unitLabel);
+    const resolved = resolvePropText(prop);
+    const html = buildPropFieldInner(resolved, value, placeholder, unitLabel);
     // Single choke point for the hover tooltip on every property's label,
-    // rather than repeating a title= attribute in each case below (which a
-    // future new field type would have to remember to add too). prop.hint
-    // is the short description text; a field with none renders exactly as
-    // before (no title= at all — an empty tooltip would be worse than none).
-    if (!prop.hint) return html;
-    return html.replace('class="prop-label"', `class="prop-label" title="${escapeAttr(prop.hint)}"`);
+    // rather than repeating this in each case below (which a future new
+    // field type would have to remember to add too). No hint (resolved or
+    // plain) renders exactly as before (no data-hint at all — an empty
+    // tooltip would be worse than none).
+    //
+    // data-hint rather than title=: a native title tooltip can't be styled
+    // (no max-width/word-wrap control, so a long hint renders as one huge
+    // single-line strip) and can't be widened without the OS's own layout.
+    // Routing through the same Tooltip module the board/workbench already
+    // use gives every hint a real CSS max-width + word-wrap (see #hover-
+    // tooltip.hint-wrap in app.css) and the same 500ms-show/instant-hide
+    // behavior as everywhere else in the app, instead of a second,
+    // inconsistent tooltip mechanism.
+    if (!resolved.hint) return html;
+    return html.replace('class="prop-label"', `class="prop-label" data-hint="${escapeAttr(resolved.hint)}"`);
   }
 
   function escapeAttr(s) {
@@ -543,8 +573,8 @@ const PropertiesPanel = (() => {
           <div class="prop-group">
             <label class="prop-label">${prop.label}</label>
             <select class="prop-input" data-key="${prop.key}">
-              <option value="true"  ${value?'selected':''}>Yes</option>
-              <option value="false" ${!value?'selected':''}>No</option>
+              <option value="true"  ${value?'selected':''}>${I18n.t('app.properties.yes')}</option>
+              <option value="false" ${!value?'selected':''}>${I18n.t('app.properties.no')}</option>
             </select>
           </div>`;
       case 'range':
@@ -567,7 +597,7 @@ const PropertiesPanel = (() => {
             <label class="prop-label">${prop.label}</label>
             <button class="prop-audio-btn">
               <i class="fa-solid fa-music"></i>
-              ${value?'Change Audio File':'Load Audio File…'}
+              ${value?I18n.t('app.properties.changeAudioFile'):I18n.t('app.properties.loadAudioFile')}
             </button>
             <div class="prop-audio-name">${value||''}</div>
           </div>`;
@@ -583,10 +613,10 @@ const PropertiesPanel = (() => {
 
         return `
           <div class="prop-group">
-            <label class="prop-label">Audio File</label>
+            <label class="prop-label">${I18n.t('app.properties.audioFile')}</label>
             <div class="prop-audio-source-buttons">
-              <button class="prop-audio-btn" data-role="load-sample-audio"><i class="fa-solid fa-list"></i> Load Sample Audio</button>
-              <button class="prop-audio-btn" data-role="load-custom-audio"><i class="fa-solid fa-upload"></i> Load Custom Audio</button>
+              <button class="prop-audio-btn" data-role="load-sample-audio"><i class="fa-solid fa-list"></i> ${I18n.t('app.properties.loadSampleAudioBtn')}</button>
+              <button class="prop-audio-btn" data-role="load-custom-audio"><i class="fa-solid fa-upload"></i> ${I18n.t('app.properties.loadCustomAudio')}</button>
             </div>
             ${currentLabel ? `<div class="prop-audio-name">${currentLabel}</div>` : ''}
           </div>`;
@@ -652,7 +682,7 @@ const PropertiesPanel = (() => {
     if (e.target.dataset.meta === 'true') {
       // Title/Description are optional metadata, not part of any component's
       // behavior schema — only add the key when there's real content, and
-      // remove it entirely when cleared, so the .rw format stays backward
+      // remove it entirely when cleared, so the .rye format stays backward
       // compatible (old files never gain a key just from being reopened).
       if (rawVal.trim() === '') delete _currentInst.props[key];
       else _currentInst.props[key] = rawVal;
@@ -717,7 +747,7 @@ const PropertiesPanel = (() => {
     _content.innerHTML = `
       <div class="props-empty">
         <i class="fa-solid fa-arrow-pointer"></i>
-        <p>Select a component or jumper wire to edit its properties</p>
+        <p>${I18n.t('app.properties.emptyState')}</p>
       </div>`;
   }
 

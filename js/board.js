@@ -664,7 +664,7 @@ const Board = (() => {
         // be remembered every time a new model-bearing part is added.
         const base = title
           ? (model ? `${title} (${model})` : title)
-          : (model || def?.label || def?.id || '');
+          : (model || (def?.labelKey ? I18n.t(def.labelKey) : null) || def?.id || '');
         // Value-bearing passives get their actual value prefixed ("2.2µF
         // Capacitor (Electrolytic)", "1kΩ R4") — the tooltip's whole point
         // is a fast at-a-glance read, and "what's it called" alone leaves
@@ -806,7 +806,7 @@ const Board = (() => {
             _dragWireMove.r1=snappedA.row; _dragWireMove.c1=snappedA.col;
             _dragWireMove.r2=snappedB.row; _dragWireMove.c2=snappedB.col;
           } else if(wouldOverlap && typeof setStatus==='function') {
-            setStatus('Can\u2019t place there — a hole is already occupied');
+            setStatus(I18n.t('app.board.holeOccupied'));
           } // else: no valid spot for the other end, or it'd collapse to zero length — leave the wire at its original position
         } // no hole nearby the reference endpoint: leave the wire at its original position
       }
@@ -834,7 +834,7 @@ const Board = (() => {
           }
           if(ok && newLegs.some(l => holeOccupied(l.row,l.col,_dragInst.instanceId,null))){
             ok=false;
-            if (typeof setStatus==='function') setStatus('Can\u2019t place there — a hole is already occupied');
+            if (typeof setStatus==='function') setStatus(I18n.t('app.board.holeOccupied'));
           }
           if(ok) _dragInst.legs=newLegs;
         } // no hole nearby the reference leg: leave the part at its original position
@@ -903,7 +903,7 @@ const Board = (() => {
     e.preventDefault();
     const defId=e.dataTransfer.getData('text/plain');if(!defId) return;
     if(typeof isCircuitEngaged==='function' && isCircuitEngaged()){
-      if(typeof setStatus==='function') setStatus('Stop the simulation or bypass the pedal to add a new component');
+      if(typeof setStatus==='function') setStatus(I18n.t('app.board.stopToAdd'));
       return;
     }
     const {x,y}=eventToCanvas(e);
@@ -972,7 +972,7 @@ const Board = (() => {
     }
 
     if (inst.legs.some(l => holeOccupied(l.row, l.col, null, null))) {
-      if (typeof setStatus==='function') setStatus('Can\u2019t place there — a hole is already occupied');
+      if (typeof setStatus==='function') setStatus(I18n.t('app.board.holeOccupied'));
       return null;
     }
 
@@ -1054,7 +1054,7 @@ const Board = (() => {
     if(!holeA||!holeB) return; // missed a valid hole for one end — stay in paste mode, let them try again
     if(holeA.row===holeB.row&&holeA.col===holeB.col) return; // would collapse to zero length — same, try again
     if(holeOccupied(holeA.row,holeA.col,null,null) || holeOccupied(holeB.row,holeB.col,null,null)){
-      if (typeof setStatus==='function') setStatus('Can\u2019t place there — a hole is already occupied');
+      if (typeof setStatus==='function') setStatus(I18n.t('app.board.holeOccupied'));
       return; // stay in paste mode, let them try elsewhere
     }
     addWire({id:Utils.uid('W'), r1:holeA.row, c1:holeA.col, r2:holeB.row, c2:holeB.col, color:_pasteWireData.color});
@@ -1115,7 +1115,7 @@ const Board = (() => {
   }
   function deleteSelected(){
     if(typeof isCircuitEngaged==='function' && isCircuitEngaged()){
-      if(typeof setStatus==='function') setStatus('Stop the simulation or bypass the pedal to remove a component');
+      if(typeof setStatus==='function') setStatus(I18n.t('app.board.stopToRemove'));
       return;
     }
     if(_selectedComp){_placed=_placed.filter(p=>p.instanceId!==_selectedComp);setSelected(null,null);return;}
@@ -1150,7 +1150,7 @@ const Board = (() => {
     // Strip ALL runtime state rather than an explicit list. The list version
     // kept falling behind: it named _voltage/_current/_state/etc but not
     // _vceHeadroom, _saturated, _rLow, _rHigh, so solver output was written
-    // into saved .rw files and reloaded as if it were user data. Every new
+    // into saved .rye files and reloaded as if it were user data. Every new
     // per-tick field silently joined the leak (_swingUp/_swingDown were the
     // most recent). Convention: anything the solver writes onto an instance
     // is prefixed with _, and nothing prefixed with _ is ever saved.

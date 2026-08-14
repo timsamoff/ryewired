@@ -1,0 +1,30 @@
+{
+  "app.category.power": "Alimentation",
+  "app.category.source": "Sources de signal",
+  "app.category.passive": "Passifs",
+  "app.category.semiconductor": "Semi-conducteurs",
+  "app.category.switch": "Interrupteurs",
+  "app.category.ic": "CI",
+
+  "app.status.placed": "{label} placé — sélectionnez-le pour modifier ses propriétés",
+  "app.status.copied": "{label} copié",
+
+  "app.properties.wiperStaysAdjustable": "Le curseur reste réglable pendant que le circuit fonctionne — tout le reste est verrouillé.",
+  "app.properties.stopToEdit": "Arrêtez la simulation ou activez le bypass pour modifier ce composant.",
+
+  "app.simulation.genericComponent": "composant",
+  "app.simulation.disconnectedLegTitle": "Broche déconnectée",
+  "app.simulation.disconnectedLegMessage": "La broche {leg} de {who} n'est reliée à rien — c'est la seule chose sur sa ligne. Un(e) {label} avec une broche déconnectée ne peut rien faire sur une vraie plaque, et les tensions affichées ici n'ont pas de sens tant qu'il n'est pas correctement câblé.",
+  "app.simulation.componentFailedTitle": "{label} en panne — {which}",
+  "app.simulation.genericFailure": "Panne du composant : {mode}",
+
+  "component.resistor.label": "Résistance",
+  "component.resistor.description": "Résistance fixe. Limite le passage du courant.",
+  "component.resistor.resistance.label": "Résistance",
+  "component.resistor.resistance.hint": "La force avec laquelle cette résistance s'oppose au courant — plus la valeur est élevée, moins le courant passe.",
+  "component.resistor.power_rating.label": "Puissance nominale",
+  "component.resistor.power_rating.hint": "La chaleur maximale que cette résistance peut dissiper sans griller.",
+  "component.resistor.tolerance.label": "Tolérance",
+  "component.resistor.tolerance.hint": "À quel point la résistance réelle est susceptible d'être proche de sa valeur indiquée — un composant réel n'est jamais exact.",
+  "component.resistor.failure.over_power": "La résistance a dépassé sa puissance nominale et a grillé. Puissance = V²/R — utilisez une résistance de puissance supérieure ou réduisez la tension."
+}

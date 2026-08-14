@@ -12,6 +12,11 @@ let _statusGen = 0;
 
 (async function initApp() {
 
+  let savedLang;
+  try { savedLang = localStorage.getItem('ryewired_lang') || undefined; }
+  catch (e) { savedLang = undefined; } // private browsing / storage disabled — fall back to the default language rather than fail boot
+  await I18n.load(savedLang);
+  I18n.applyStaticMarkup();
   await ComponentRegistry.load();
 
   Board.init(document.getElementById('board-canvas'));
@@ -21,6 +26,10 @@ let _statusGen = 0;
   Palette.populate(ComponentRegistry.getAll());
   PropertiesPanel.init();
   Modal.init();
+  // Toolbar buttons carry data-hint (converted from native title= so every
+  // tooltip in the app goes through the one Tooltip mechanism) — one
+  // delegated binding covers all of them, same pattern as PropertiesPanel.
+  if (typeof Tooltip !== 'undefined') Tooltip.wireHintDelegate(document.getElementById('toolbar'), '[data-hint]');
   Oscilloscope.init(
     document.getElementById('scope-canvas'),
     document.getElementById('spectrum-canvas')
@@ -41,8 +50,9 @@ let _statusGen = 0;
 
   Board.onPlace(inst => {
     Storage.markDirty();
-    const label = ComponentRegistry.getById(inst.defId)?.label || inst.defId;
-    setStatus(`Placed ${label} — select it to set properties`);
+    const def = ComponentRegistry.getById(inst.defId);
+    const label = (def?.labelKey ? I18n.t(def.labelKey) : null) || inst.defId;
+    setStatus(I18n.t('app.status.placed', { label }));
     updateComponentCount();
     // History already pushed by board.js onDrop
   });
@@ -71,7 +81,7 @@ let _statusGen = 0;
   document.getElementById('failure-dismiss').addEventListener('click', () => {
     document.getElementById('failure-overlay').classList.add('hidden');
     Simulation.reset();
-    setStatus('Failures cleared — fix the circuit and try again');
+    setStatus(I18n.t('app.status.failuresCleared'));
   });
 
   document.getElementById('help-close').addEventListener('click',    () => closeHelp());
@@ -101,7 +111,7 @@ let _statusGen = 0;
   window.addEventListener('resize', Utils.debounce(fitBoard, 200));
 
   Storage.newLayout();
-  setStatus('Drop a component to get started — press W to place jumper wires');
+  setStatus(I18n.t('app.status.dropToStart'));
 
 })();
 
@@ -131,7 +141,7 @@ function handleAction(action) {
     case 'sim-stop':        stopSim();         break;
     case 'sim-reset':
       Simulation.reset();
-      setStatus('Failures cleared — components and wires unchanged');
+      setStatus(I18n.t('app.status.failuresClearedUnchanged'));
       break;
     case 'toggle-scope':    togglePanel('scope-panel',    'btn-toggle-scope');    break;
     case 'toggle-spectrum': togglePanel('spectrum-panel', 'btn-toggle-spectrum'); break;
@@ -144,6 +154,7 @@ function handleAction(action) {
     case 'zoom-in':         zoomIn();          break;
     case 'zoom-out':        zoomOut();         break;
     case 'zoom-fit':        fitBoard();        break;
+    case 'change-language': changeLanguage();  break;
     case 'help':            openHelp();        break;
   }
 }
@@ -195,13 +206,13 @@ function runSim() {
   // Reset path is guarded on that.
   if (!Simulation.isRunning()) return;
   AudioEngine.start(); Oscilloscope.start();
-  setSimState('running'); setStatus('Simulation running');
+  setSimState('running'); setStatus(I18n.t('app.status.simRunning'));
 }
 
 function stopSim() {
   if (!Simulation.isRunning()) return;
   Simulation.stop(); AudioEngine.stop(); Oscilloscope.stop();
-  setSimState('stopped'); setStatus('Simulation stopped');
+  setSimState('stopped'); setStatus(I18n.t('app.status.simStopped'));
   if (_currentTool !== 'select') exitToolToSelect();
 }
 
@@ -210,14 +221,14 @@ function stopSim() {
 async function newLayout() {
   if (Simulation.isRunning()) stopSim();
   if (Board.getPlaced().length>0 || Board.getWires().length>0) {
-    const ok = await Modal.confirm('Start a new layout? Unsaved changes will be lost.', {title:'New Layout', okLabel:'New Layout', danger:true});
+    const ok = await Modal.confirm(I18n.t('app.confirm.newLayout.message'), {title:I18n.t('app.confirm.newLayout.title'), okLabel:I18n.t('app.confirm.newLayout.okLabel'), danger:true});
     if (!ok) return;
   }
   Board.clear(); PropertiesPanel.hide(); Storage.newLayout();
   if (typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.resetInput) WorkbenchStrip.resetInput();
   if (typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.resetOutput) WorkbenchStrip.resetOutput();
   History.clear(); History.init(); AutoSave.clear();
-  updateComponentCount(); setStatus('New layout — drop components to get started');
+  updateComponentCount(); setStatus(I18n.t('app.status.newLayout'));
 }
 
 async function openLayout() {
@@ -226,34 +237,58 @@ async function openLayout() {
   if (!layout) return;
   Board.loadLayout(layout); PropertiesPanel.hide();
   History.clear(); History.init(); AutoSave.clear();
-  updateComponentCount(); setStatus(`Loaded — ${layout.components?.length||0} components`);
+  updateComponentCount(); setStatus(I18n.t('app.status.loaded', { count: layout.components?.length||0 }));
+}
+
+// Reloads the page after switching, rather than trying to re-render live.
+// The i18n conversion is in progress (see CLAUDE.md) — large parts of the
+// app still read hardcoded English strings directly rather than through
+// I18n.t(), so a live re-render right now would leave the UI in a
+// confusing half-translated state. A reload guarantees everything that HAS
+// been converted picks up the new language correctly, and is a completely
+// safe/correct behavior regardless of how much of the conversion is done
+// at any given point — this call site doesn't need to change again as more
+// of the app gets converted.
+async function changeLanguage() {
+  const languages = await I18n.listLanguages();
+  const current = I18n.currentLanguage();
+  const picked = await Modal.pickList(
+    languages.map(l => ({ label: l.code === current ? `${l.label} ✓` : l.label, value: l.code })),
+    { title: I18n.t('app.modal.language') }
+  );
+  if (!picked || picked === current) return;
+
+  try { localStorage.setItem('ryewired_lang', picked); }
+  catch (e) { /* private browsing / storage disabled — language just won't persist across reloads */ }
+
+  location.reload();
 }
 
 async function loadSampleCircuit() {
   const circuits = await Storage.listCircuits();
   const picked = await Modal.pickList(
     circuits.map(c => ({ label: c.name, value: c })),
-    { title: 'Load Sample Circuit', emptyLabel: 'No sample circuits available' }
+    { title: I18n.t('app.modal.loadSampleCircuit'), emptyLabel: I18n.t('app.modal.noSampleCircuits') }
   );
   if (!picked) return;
 
   if (Board.getPlaced().length>0 || Board.getWires().length>0) {
-    const ok = await Modal.confirm(`Load "${picked.name}"? Unsaved changes will be lost.`, {title:'Load Sample Circuit', okLabel:'Load', danger:true});
+    const ok = await Modal.confirm(I18n.t('app.confirm.loadSample.message', { name: picked.name }), {title:I18n.t('app.modal.loadSampleCircuit'), okLabel:I18n.t('app.confirm.loadSample.okLabel'), danger:true});
     if (!ok) return;
   }
   if (Simulation.isRunning()) stopSim();
 
-  setStatus(`Loading ${picked.name}…`);
+  setStatus(I18n.t('app.status.loading', { name: picked.name }));
   const layout = await Storage.loadBundledCircuit(picked.file, picked.name);
-  if (!layout) { setStatus(`Could not load "${picked.name}" — see console for details`); return; }
+  if (!layout) { setStatus(I18n.t('app.status.loadFailed', { name: picked.name })); return; }
   Board.loadLayout(layout); PropertiesPanel.hide();
   History.clear(); History.init(); AutoSave.clear();
-  updateComponentCount(); setStatus(`Loaded ${picked.name} — ${layout.components?.length||0} components`);
+  updateComponentCount(); setStatus(I18n.t('app.status.loadedNamed', { name: picked.name, count: layout.components?.length||0 }));
 }
 
 async function saveLayout(forceDialog=false) {
   const data=Board.getLayoutData(), result=await Storage.saveLayout(data,forceDialog);
-  if (result?.saved) setStatus(`Saved: ${result.fileName}`);
+  if (result?.saved) setStatus(I18n.t('app.status.saved', { fileName: result.fileName }));
 }
 
 // ── Tools ─────────────────────────────────────────────────────────────────────
@@ -266,9 +301,9 @@ async function saveLayout(forceDialog=false) {
 let _currentTool = 'select';
 
 const TOOL_CONFIG = {
-  jumper:    { btnId:'btn-wire-mode',      bodyClass:'wire-mode',      label:'⬡ JUMPER',      onMsg:'Jumper mode ON — click a hole to start, click another to finish. W or Esc to exit.', offMsg:'Jumper mode off' },
-  voltmeter: { btnId:'btn-tool-voltmeter', bodyClass:'voltmeter-mode', label:'⬡ VOLTMETER',   onMsg:'Voltage Meter ON — hover any hole to read its voltage. V or Esc to exit.',            offMsg:'Voltage Meter off' },
-  probe:     { btnId:'btn-tool-probe',     bodyClass:'probe-mode',     label:'⬡ AUDIO PROBE', onMsg:'Audio Probe ON — hover any hole to listen. P or Esc to exit.',                        offMsg:'Audio Probe off' },
+  jumper:    { btnId:'btn-wire-mode',      bodyClass:'wire-mode',      label:'⬡ JUMPER',      onMsgKey:'app.tool.jumper.on',    offMsgKey:'app.tool.jumper.off' },
+  voltmeter: { btnId:'btn-tool-voltmeter', bodyClass:'voltmeter-mode', label:'⬡ VOLTMETER',   onMsgKey:'app.tool.voltmeter.on', offMsgKey:'app.tool.voltmeter.off' },
+  probe:     { btnId:'btn-tool-probe',     bodyClass:'probe-mode',     label:'⬡ AUDIO PROBE', onMsgKey:'app.tool.probe.on',     offMsgKey:'app.tool.probe.off' },
 };
 
 function setTool(tool) {
@@ -316,7 +351,7 @@ function activateTool(tool) {
   document.body.classList.add(cfg.bodyClass);
   document.getElementById(cfg.btnId)?.classList.add('active');
   document.getElementById('status-wire-mode').textContent = cfg.label;
-  setStatus(cfg.onMsg);
+  setStatus(I18n.t(cfg.onMsgKey));
 }
 
 function deactivateTool(tool) {
@@ -333,7 +368,7 @@ function exitToolToSelect() {
   deactivateTool(_currentTool);
   _currentTool = 'select';
   document.getElementById('status-wire-mode').textContent = '';
-  setStatus(cfg.offMsg);
+  setStatus(I18n.t(cfg.offMsgKey));
   updateSelectButton();
 }
 
@@ -357,28 +392,30 @@ function copySelected() {
   const inst = Board.getSelected();
   if (inst) {
     _clipboard = { kind:'component', defId: inst.defId, props: {...inst.props} };
-    setStatus(`Copied ${ComponentRegistry.getById(inst.defId)?.label || inst.defId}`);
+    const def = ComponentRegistry.getById(inst.defId);
+    const label = (def?.labelKey ? I18n.t(def.labelKey) : null) || inst.defId;
+    setStatus(I18n.t('app.status.copied', { label }));
     return;
   }
   const wire = Board.getSelectedWireObj ? Board.getSelectedWireObj() : null;
   if (wire) {
     _clipboard = { kind:'wire', r1:wire.r1, c1:wire.c1, r2:wire.r2, c2:wire.c2, color:wire.color };
-    setStatus('Copied jumper wire');
+    setStatus(I18n.t('app.status.copiedWire'));
     return;
   }
-  setStatus('Nothing selected to copy');
+  setStatus(I18n.t('app.status.nothingToCopy'));
 }
 
 function pasteFromClipboard() {
-  if (!_clipboard) { setStatus('Nothing to paste'); return; }
+  if (!_clipboard) { setStatus(I18n.t('app.status.nothingToPaste')); return; }
   if (_currentTool !== 'select') exitToolToSelect(); // pasting wants normal board interaction, same as picking from the palette
   if (_clipboard.kind === 'wire') {
     Board.beginPasteWire(_clipboard);
-    setStatus('Click to place wire — Esc to cancel');
+    setStatus(I18n.t('app.status.clickToPlaceWire'));
     return;
   }
   Board.beginPaste(_clipboard.defId, _clipboard.props);
-  setStatus('Click to place — Esc to cancel');
+  setStatus(I18n.t('app.status.clickToPlace'));
 }
 
 // ── Zoom ──────────────────────────────────────────────────────────────────────
@@ -487,7 +524,7 @@ function onKeyDown(e) {
     if (document.querySelector('.menu-item.open')) {
       document.querySelectorAll('.menu-item').forEach(m=>m.classList.remove('open')); return;
     }
-    if (Board.cancelActivePaste && Board.cancelActivePaste()) { setStatus('Paste cancelled'); return; }
+    if (Board.cancelActivePaste && Board.cancelActivePaste()) { setStatus(I18n.t('app.status.pasteCancelled')); return; }
     if (_currentTool !== 'select') { exitToolToSelect(); return; }
     if (Wire.hasStart()) { Wire.cancelCurrent(); return; }
     if (Simulation.isRunning()) { stopSim(); return; }
@@ -529,14 +566,14 @@ function onKeyDown(e) {
 
 async function confirmClear() {
   if (Board.getPlaced().length===0 && Board.getWires().length===0) return;
-  const ok = await Modal.confirm('Clear the board? This cannot be undone.', {title:'Clear Board', okLabel:'Clear', danger:true});
+  const ok = await Modal.confirm(I18n.t('app.confirm.clearBoard.message'), {title:I18n.t('app.confirm.clearBoard.title'), okLabel:I18n.t('app.confirm.clearBoard.okLabel'), danger:true});
   if (ok) {
     if (Simulation.isRunning()) stopSim();
     Board.clear(); PropertiesPanel.hide(); updateComponentCount();
     if (typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.resetInput) WorkbenchStrip.resetInput();
     if (typeof WorkbenchStrip!=='undefined' && WorkbenchStrip.resetOutput) WorkbenchStrip.resetOutput();
     History.clear(); History.init(); AutoSave.clear();
-    setStatus('Board cleared');
+    setStatus(I18n.t('app.status.boardCleared'));
   }
 }
 
@@ -546,10 +583,10 @@ function setSimState(state) {
   const run=document.getElementById('btn-run');
   const stp=document.getElementById('btn-stop');
   if (state==='running') {
-    ind?.classList.add('running'); if(lbl)lbl.textContent='Running';
+    ind?.classList.add('running'); if(lbl)lbl.textContent=I18n.t('app.sim.running');
     if(run)run.disabled=true; if(stp)stp.disabled=false;
   } else {
-    ind?.classList.remove('running'); if(lbl)lbl.textContent='Stopped';
+    ind?.classList.remove('running'); if(lbl)lbl.textContent=I18n.t('app.sim.stopped');
     if(run)run.disabled=false; if(stp)stp.disabled=true;
   }
   PropertiesPanel.refresh();
@@ -577,5 +614,5 @@ function updateComponentCount() {
   const el = document.getElementById('status-component-count');
   if (!el) return;
   const n = Board.getPlaced().length;
-  el.textContent = n ? (n + ' component' + (n !== 1 ? 's' : '')) : '';
+  el.textContent = n ? I18n.t(n !== 1 ? 'app.status.componentCountPlural' : 'app.status.componentCount', { count: n }) : '';
 }

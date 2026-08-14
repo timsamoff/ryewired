@@ -1,15 +1,15 @@
 {
   "id": "potentiometer",
-  "label": "Potentiometer",
+  "labelKey": "component.potentiometer.label",
   "category": "passive",
   "symbol": "RV",
-  "description": "Variable resistor with 3 terminals. Wiper position is adjustable.",
+  "descriptionKey": "component.potentiometer.description",
   "legs": 3,
   "leg_span": 2,
   "properties": [
     {
       "key": "resistance",
-      "label": "Total Resistance",
+      "labelKey": "component.potentiometer.resistance.label",
       "type": "value_unit",
       "default": 100000,
       "default_unit": "kΩ",
@@ -18,11 +18,11 @@
         {"label":"kΩ","factor":1e3},
         {"label":"MΩ","factor":1e6}
       ],
-      "hint": "The pot's full end-to-end resistance — how much total resistance the wiper sweeps across as you turn it."
+      "hintKey": "component.potentiometer.resistance.hint"
     },
     {
       "key": "taper",
-      "label": "Taper",
+      "labelKey": "component.potentiometer.taper.label",
       "type": "select",
       "options": [
         "Linear (B)",
@@ -30,18 +30,19 @@
         "Reverse Audio (C)"
       ],
       "default": "Linear (B)",
-      "hint": "How resistance changes as you turn the knob. Linear is even throughout; Audio/Log matches how the ear perceives loudness, common for volume controls."
+      "hintKey": "component.potentiometer.taper.hint",
+      "_i18nNote": "options are NOT translation keys — js/simulation.js and js/audio-engine.js match against the literal substring 'Audio' in this value at 6 call sites to decide the audio-taper (squared) response curve. Translating these strings would silently break that electrical behavior, not just the display. Needs a stable non-text taper identifier before this can be localized — out of scope for the current text-only i18n pass."
     },
     {
       "key": "wiper",
-      "label": "Wiper Position",
+      "labelKey": "component.potentiometer.wiper.label",
       "type": "range",
       "min": 0,
       "max": 1,
       "step": 0.01,
       "default": 0.5,
       "live": true,
-      "hint": "The knob's current position, from fully counter-clockwise (0) to fully clockwise (1)."
+      "hintKey": "component.potentiometer.wiper.hint"
     }
   ],
   "behavior": {
@@ -51,7 +52,7 @@
     "over_power": {
       "threshold_multiplier": 2.0,
       "result": "burn",
-      "message": "Potentiometer power rating exceeded. Use a lower resistance value or reduce voltage."
+      "messageKey": "component.potentiometer.failure.over_power"
     }
   },
   "visual": {

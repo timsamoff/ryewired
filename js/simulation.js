@@ -77,10 +77,8 @@ const Simulation = (() => {
     // doesn't lie the way a solved number can.
     const floating = findFloatingTerminal(placed, nets);
     if (floating) {
-      failBoard('🔌', 'Disconnected Leg',
-        `${floating.who}'s ${floating.leg} isn't connected to anything — it's the only thing on ` +
-        `its row. A ${floating.label} with a floating leg can't do anything on a real board, and ` +
-        `the voltages here won't mean much until it's wired up.`);
+      failBoard('🔌', I18n.t('app.simulation.disconnectedLegTitle'),
+        I18n.t('app.simulation.disconnectedLegMessage', { who: floating.who, leg: floating.leg, label: floating.label }));
       return;
     }
 
@@ -1974,10 +1972,11 @@ const Simulation = (() => {
     const fm=def.failure_modes?.[mode];
     const icons={burn:'🔥',explode:'💥',smoke:'💨',silent_fail:'⚫'};
     const which = inst.props?.title ? `"${inst.props.title}" (${inst.instanceId})` : inst.instanceId;
+    const label = def?.labelKey ? I18n.t(def.labelKey) : def.id;
     if (_onFailure) _onFailure({
       icon: icons[fm?.result]||'💥',
-      title: `${def.label} Failed — ${which}`,
-      message: fm?.message||`Component failure: ${mode}`
+      title: I18n.t('app.simulation.componentFailedTitle', { label, which }),
+      message: (fm?.messageKey ? I18n.t(fm.messageKey) : null) || I18n.t('app.simulation.genericFailure', { mode })
     });
     stop(); Board.redraw();
   }
@@ -2037,9 +2036,9 @@ const Simulation = (() => {
         const n = nets.find(nets.key(inst.legs[i].row, inst.legs[i].col));
         if (exempt.has(n) || (legsOnNet.get(n) || 0) > 1) continue;
         return {
-          who:   inst.props?.title || def?.label || inst.instanceId,
+          who:   inst.props?.title || (def?.labelKey ? I18n.t(def.labelKey) : null) || inst.instanceId,
           leg:   def?.leg_labels?.[i] ? `${def.leg_labels[i]} leg` : `leg ${i + 1}`,
-          label: def?.label || 'component',
+          label: (def?.labelKey ? I18n.t(def.labelKey) : null) || I18n.t('app.simulation.genericComponent'),
         };
       }
     }
@@ -2058,7 +2057,7 @@ const Simulation = (() => {
       for (let i = 0; i < inst.legs.length; i++) {
         const l = inst.legs[i];
         if (nets.find(nets.key(l.row, l.col)) !== net) continue;
-        const who = inst.props?.title || def?.label || inst.instanceId;
+        const who = inst.props?.title || (def?.labelKey ? I18n.t(def.labelKey) : null) || inst.instanceId;
         return legLabels[i] ? `${who}'s ${legLabels[i]} leg` : who;
       }
     }

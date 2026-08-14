@@ -20,7 +20,7 @@ const WorkbenchStrip = (() => {
   // stage's clip curve fully saturates and swallows small control changes
   // (e.g. a Fuzz Face's Fuzz knob measured audibly inert at 0dB there, but
   // recovers real movement below ~0.1 amplitude) — not a bug, but not
-  // representative of normal playing either. Existing saved .rw files keep
+  // representative of normal playing either. Existing saved .rye files keep
   // whatever amplitude they were saved with; this only affects new circuits.
   // source_impedance / load_impedance: Open work item 6 (input/output
   // impedance). Input was previously an ideal zero-impedance voltage source
@@ -517,7 +517,7 @@ function fillHalf(active, left) {
   // Fixed short label per target — unlike a placed component, these aren't
   // user-titled, so there's no title/model fallback chain to run, just one
   // name each.
-  const HOVER_LABELS = { power: 'Power Supply', input: 'Signal Input', output: 'Signal Output', switch: 'Bypass Switch' };
+  const HOVER_LABEL_KEYS = { power: 'app.workbench.powerSupply', input: 'app.workbench.signalInput', output: 'app.workbench.signalOutput', switch: 'app.workbench.bypassSwitch' };
 
   function onMouseMove(e){
     const {x,y} = eventToCanvasXY(e);
@@ -525,7 +525,7 @@ function fillHalf(active, left) {
     canvas.style.cursor = hit ? 'pointer' : 'default';
     if (hit !== _hoverTarget) { _hoverTarget = hit; render(); }
     if (typeof Tooltip !== 'undefined') {
-      if (hit) Tooltip.show(hit, HOVER_LABELS[hit], e.clientX, e.clientY);
+      if (hit) Tooltip.show(hit, I18n.t(HOVER_LABEL_KEYS[hit]), e.clientX, e.clientY);
       else Tooltip.hide();
     }
   }

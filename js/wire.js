@@ -24,15 +24,15 @@ const Wire = (() => {
       _start = hole;
       Board.setStartWire(hole);
       const lbl = rowLabel(hole.row);
-      setStatus(`Wire started at ${lbl}${hole.col+1} — click another hole to finish, W or Esc to cancel`);
+      setStatus(I18n.t('app.wire.startedAt', { hole: `${lbl}${hole.col+1}` }));
     } else {
       if (_start.row===hole.row && _start.col===hole.col) {
         _start=null; Board.clearWire();
-        setStatus('Wire cancelled — click a hole to start again, or press W to exit jumper mode');
+        setStatus(I18n.t('app.wire.cancelledRestart'));
         return;
       }
       if (typeof Board!=='undefined' && Board.holeOccupied && Board.holeOccupied(hole.row,hole.col,null,null)) {
-        setStatus('That hole is already occupied — click a different one to finish the wire');
+        setStatus(I18n.t('app.wire.holeOccupied'));
         return;
       }
       Board.addWire({
@@ -44,14 +44,14 @@ const Wire = (() => {
       Storage.markDirty();
       History.push();
       _start=null; Board.clearWire();
-      setStatus('Wire placed — click another hole to start a new wire, or press W to exit');
+      setStatus(I18n.t('app.wire.placed'));
     }
   }
 
   function cancelCurrent() {
     if (!_start) return;
     _start=null; Board.clearWire();
-    setStatus('Wire cancelled');
+    setStatus(I18n.t('app.wire.cancelled'));
   }
 
   function enter() { _wiring=true; _start=null; document.body.classList.add('wire-mode'); document.getElementById('status-wire-mode').textContent='⬡ JUMPER'; }

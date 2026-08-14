@@ -504,22 +504,50 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
 .prop-delete-btn i { font-size: 11px; line-height: 1; }
 .prop-delete-btn:hover { background: var(--alert); color: var(--text-on-alert); border-color: var(--alert); }
 
-/* ── Hover tooltip (canvas components / workbench strip) ─────────────────── */
+/* ── Hover tooltip (used everywhere: canvas components, workbench strip,
+   properties panel hints, toolbar/menu buttons) ──────────────────────────── */
 /* Canvas has no native per-shape title=, so this is a single floating div
-   repositioned/relabeled by js/tooltip.js as the mouse moves. z-index above
-   the board but below the confirm modal, since a tooltip should never
-   outlast a modal opening over it (Tooltip.hide() is called defensively
-   wherever that could happen, but the stacking order is the last line of
-   defense). pointer-events:none so it never itself becomes the hover target
-   and flickers the tooltip it's part of. */
+   shown/positioned by js/tooltip.js — and since it's the one mechanism used
+   app-wide, every title= attribute in the app (toolbar buttons, rotate
+   buttons, etc.) has been converted to data-hint + Tooltip.show() rather
+   than mixing native and custom tooltips. z-index above the board but below
+   the confirm modal, since a tooltip should never outlast a modal opening
+   over it (Tooltip.hide() is called defensively wherever that could happen,
+   but the stacking order is the last line of defense). pointer-events:none
+   so it never itself becomes the hover target and flickers the tooltip it's
+   part of.
+
+   Styled to look like a native OS tooltip (white background, thin dark
+   border, dark text) rather than the app's own dark theme — deliberately
+   NOT var(--bg-elevated)/var(--text-primary) here, so this reads as system
+   chrome instead of another piece of app UI. The previous dark-themed
+   version is kept below as #hover-tooltip.theme-dark, unused by default —
+   add that class (see js/tooltip.js) to revert without re-deriving the
+   styling from scratch. */
 #hover-tooltip {
   position: fixed; z-index: 900; pointer-events: none;
-  background: var(--bg-elevated); color: var(--text-primary);
-  border: 1px solid var(--border-light); border-radius: var(--radius-sm);
-  padding: 4px 8px; font-family: var(--font-ui); font-size: 12px;
-  white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  background: #ffffff; color: #000000;
+  border: 1px solid #767676; border-radius: 2px;
+  padding: 3px 6px; font-family: var(--font-ui); font-size: 12px;
+  white-space: nowrap; box-shadow: 1px 2px 4px rgba(0,0,0,0.3);
 }
 #hover-tooltip.hidden { display: none; }
+/* Long hints (property panel, toolbar buttons with fuller descriptions)
+   wrap instead of running the short board/workbench labels' single-line
+   nowrap out to one huge strip — ~340px reads as roughly 11-14 words/line
+   at this font size, wider than the original 220px per user feedback that
+   6 words/line felt cramped. */
+#hover-tooltip.hint-wrap { white-space: normal; max-width: 340px; }
+
+/* Backup: the app's original dark-themed tooltip style, from before the
+   native-OS-look restyle above. Not used by default — opt in per-call via
+   Tooltip.show(..., { theme: 'dark' }) if the native look ever needs to be
+   reverted or offered as an option again. */
+#hover-tooltip.theme-dark {
+  background: var(--bg-elevated); color: var(--text-primary);
+  border: 1px solid var(--border-light); border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
 
 /* ── Confirm modal ────────────────────────────────────────────────────────── */
 

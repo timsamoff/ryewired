@@ -1,24 +1,24 @@
 {
   "id": "led",
-  "label": "LED",
+  "labelKey": "component.led.label",
   "category": "semiconductor",
   "symbol": "D",
-  "description": "Light-emitting diode. Emits light proportional to current.",
+  "descriptionKey": "component.led.description",
   "legs": 2,
   "leg_span": 2,
   "polarized": true,
   "properties": [
-    { "key": "color", "label": "Color", "type": "select", "options": ["Red","Green","Blue","Yellow","White","Orange","UV"], "default": "Red",
-      "hint": "Sets the LED's actual turn-on voltage — different colors need different amounts of voltage to light up." },
-    { "key": "forward_voltage", "label": "Forward Voltage (V)", "type": "number", "default": 2.0,
-      "hint": "The voltage it takes to turn this LED on. Set automatically by Color — override only for a specific real part." },
-    { "key": "max_current_ma", "label": "Max Current (mA)", "type": "number", "default": 20,
-      "hint": "The most current this LED can safely handle. Always pair an LED with a series resistor to keep current below this." }
+    { "key": "color", "labelKey": "component.led.color.label", "type": "select", "options": ["Red","Green","Blue","Yellow","White","Orange","UV"], "default": "Red",
+      "hintKey": "component.led.color.hint" },
+    { "key": "forward_voltage", "labelKey": "component.led.forward_voltage.label", "type": "number", "default": 2.0,
+      "hintKey": "component.led.forward_voltage.hint" },
+    { "key": "max_current_ma", "labelKey": "component.led.max_current_ma.label", "type": "number", "default": 20,
+      "hintKey": "component.led.max_current_ma.hint" }
   ],
   "behavior": { "type": "led" },
   "failure_modes": {
-    "over_current": { "threshold_multiplier": 1.5, "result": "burn", "message": "LED burned out from too much current. Always use a current-limiting resistor in series. R = (Vsupply - Vforward) / Imax" },
-    "reverse_voltage": { "threshold_v": -5, "result": "silent_fail", "message": "Either the LED is installed backwards or the power supply polarity is reversed. The LED's anode (+) should be connected to the positive rail, and the cathode (–) to the negative rail. If the LED is oriented correctly, check that the + and – connections from the power supply haven't been swapped." }
+    "over_current": { "threshold_multiplier": 1.5, "result": "burn", "messageKey": "component.led.failure.over_current" },
+    "reverse_voltage": { "threshold_v": -5, "result": "silent_fail", "messageKey": "component.led.failure.reverse_voltage" }
   },
   "color_map": {
     "Red":    { "hex": "#ff2200", "vf": 2.0 },

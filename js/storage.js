@@ -1,7 +1,7 @@
 // ── Storage Module ────────────────────────────────────────────────────────────
 
 const Storage = (() => {
-  const FILE_EXT      = 'rw';
+  const FILE_EXT      = 'rye';
   const FILE_MIME     = 'application/json';
   const FILE_DESC     = 'Ryewired Layout';
   const MANIFEST_PATH = './data/components/manifest.json';
@@ -77,8 +77,8 @@ const Storage = (() => {
           const perm = await _fileHandle.queryPermission({ mode: 'readwrite' });
           if (perm !== 'granted') {
             await Modal.alert(
-              'Ryewired needs permission to save changes to this file. Click Allow on the next prompt.',
-              { title: 'Save Permission Needed', okLabel: 'Continue' }
+              I18n.t('app.storage.savePermissionMessage'),
+              { title: I18n.t('app.storage.savePermissionTitle'), okLabel: I18n.t('app.storage.continue') }
             );
           }
         }
@@ -90,7 +90,7 @@ const Storage = (() => {
       } catch(err) {
         if (err.name==='AbortError') return { saved:false };
         if (err.name==='NotAllowedError') {
-          await Modal.alert("Save permission was denied, so the file wasn't saved.", { title:'Save Cancelled' });
+          await Modal.alert(I18n.t('app.storage.savePermissionDenied'), { title:I18n.t('app.storage.saveCancelled') });
           return { saved:false };
         }
       }
@@ -140,7 +140,7 @@ const Storage = (() => {
 
   // ── Bundled sample circuits ──────────────────────────────────────────────────
   // Same pattern as AudioEngine's bundled sample clips: fetched once, cached,
-  // warmed at module load. The manifest just maps a display name to a .rw
+  // warmed at module load. The manifest just maps a display name to a .rye
   // filename in vendor/circuits/ — add a new circuit by dropping the file
   // there and adding one line to manifest.json, no code changes needed.
   const CIRCUITS_MANIFEST_PATH = 'vendor/circuits/manifest.json';
@@ -159,7 +159,7 @@ const Storage = (() => {
   function listCircuits() { return fetchCircuitManifest(); }
 
   // Fetches a bundled sample circuit and runs it through the exact same
-  // parse/migrate path a user-opened .rw file already uses. Also resets the
+  // parse/migrate path a user-opened .rye file already uses. Also resets the
   // file-identity state the same way newLayout() does — a bundled circuit
   // isn't tied to a writable file handle, so Save should prompt Save As
   // rather than silently trying to overwrite the vendor asset.
@@ -214,9 +214,10 @@ const Storage = (() => {
   function updateTitle(dirty=false) {
     const n=document.getElementById('app-file-name');
     const d=document.getElementById('app-dirty');
-    if(n) n.textContent=_fileName||'Untitled';
+    const untitled = I18n.t('app.storage.untitled');
+    if(n) n.textContent=_fileName||untitled;
     if(d) d.classList.toggle('hidden',!dirty);
-    document.title='RYEWIRED — '+(_fileName||'Untitled');
+    document.title='RYEWIRED — '+(_fileName||untitled);
   }
 
   function markDirty()   { updateTitle(true); }

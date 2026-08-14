@@ -1,32 +1,32 @@
 {
   "id": "capacitor_electrolytic",
-  "label": "Capacitor (Electrolytic)",
+  "labelKey": "component.capacitor_electrolytic.label",
   "category": "passive",
   "symbol": "C+",
-  "description": "Polarized electrolytic capacitor. Stripe side is negative (–).",
+  "descriptionKey": "component.capacitor_electrolytic.description",
   "legs": 2,
   "leg_span": 2,
   "polarized": true,
   "leg_labels": ["+", "–"],
   "properties": [
-    { "key": "capacitance", "label": "Capacitance", "type": "value_unit", "default": 0.0001, "default_unit": "µF",
+    { "key": "capacitance", "labelKey": "component.capacitor_electrolytic.capacitance.label", "type": "value_unit", "default": 0.0001, "default_unit": "µF",
       "units": [ {"label":"pF","factor":1e-12}, {"label":"nF","factor":1e-9}, {"label":"µF","factor":1e-6}, {"label":"mF","factor":1e-3} ],
-      "hint": "How much charge this capacitor can store — sets which frequencies it blocks or passes in a filter or coupling stage." },
-    { "key": "voltage_rating", "label": "Voltage Rating", "type": "select", "options": ["6.3V","10V","16V","25V","35V","50V","63V","100V"], "default": "25V",
-      "hint": "The most voltage this capacitor can safely handle before it fails." },
-    { "key": "tolerance", "label": "Tolerance", "type": "select", "options": ["1%", "2%", "5%", "10%", "20%"], "default": "5%",
-      "hint": "How close the real capacitor is likely to be to its stated value — a real part is never exact." }
+      "hintKey": "component.capacitor_electrolytic.capacitance.hint" },
+    { "key": "voltage_rating", "labelKey": "component.capacitor_electrolytic.voltage_rating.label", "type": "select", "options": ["6.3V","10V","16V","25V","35V","50V","63V","100V"], "default": "25V",
+      "hintKey": "component.capacitor_electrolytic.voltage_rating.hint" },
+    { "key": "tolerance", "labelKey": "component.capacitor_electrolytic.tolerance.label", "type": "select", "options": ["1%", "2%", "5%", "10%", "20%"], "default": "5%",
+      "hintKey": "component.capacitor_electrolytic.tolerance.hint" }
   ],
   "behavior": { "type": "capacitor" },
   "failure_modes": {
     "over_voltage": {
       "threshold_multiplier": 1.1,
       "result": "explode",
-      "message": "Electrolytic capacitor voltage rating exceeded. These can rupture violently when over-volted. Use a cap rated for higher voltage."
+      "messageKey": "component.capacitor_electrolytic.failure.over_voltage"
     },
     "reverse_polarity": {
       "result": "explode",
-      "message": "Electrolytic capacitor connected backwards. The stripe side (–) must connect toward ground, the plain side (+) toward positive voltage."
+      "messageKey": "component.capacitor_electrolytic.failure.reverse_polarity"
     }
   },
   "visual": {

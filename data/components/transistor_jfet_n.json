@@ -1,9 +1,9 @@
 {
   "id": "transistor_jfet_n",
-  "label": "N-Channel JFET",
+  "labelKey": "component.transistor_jfet_n.label",
   "category": "semiconductor",
   "symbol": "Q",
-  "description": "N-channel junction field-effect transistor. Voltage-controlled: the gate draws no DC current, drain current is set by gate-source voltage.",
+  "descriptionKey": "component.transistor_jfet_n.description",
   "legs": 3,
   "leg_span": 2,
   "leg_labels": [
@@ -14,7 +14,7 @@
   "properties": [
     {
       "key": "model",
-      "label": "Model",
+      "labelKey": "component.transistor_jfet_n.model.label",
       "type": "select",
       "options": [
         "J201",
@@ -23,11 +23,11 @@
         "BF245A"
       ],
       "default": "J201",
-      "hint": "The real JFET part this simulates — sets its Idss and pinch-off voltage automatically."
+      "hintKey": "component.transistor_jfet_n.model.hint"
     },
     {
       "key": "idss",
-      "label": "Idss (Vgs=0 drain current) — optional, overrides model's rating",
+      "labelKey": "component.transistor_jfet_n.idss.label",
       "type": "value_unit",
       "default": "",
       "default_unit": "mA",
@@ -35,18 +35,18 @@
         { "label": "µA", "factor": 0.001 },
         { "label": "mA", "factor": 1 }
       ],
-      "hint": "The maximum current this JFET conducts when its gate isn't restricting it at all. Leave blank to use the selected Model's real rating."
+      "hintKey": "component.transistor_jfet_n.idss.hint"
     },
     {
       "key": "vgs_off",
-      "label": "Vgs(off) (pinch-off voltage) — optional, overrides model's rating",
+      "labelKey": "component.transistor_jfet_n.vgs_off.label",
       "type": "number",
       "default": "",
-      "hint": "The gate voltage at which this JFET shuts off completely. Leave blank to use the selected Model's real rating."
+      "hintKey": "component.transistor_jfet_n.vgs_off.hint"
     },
     {
       "key": "pinout",
-      "label": "Pinout (left to right)",
+      "labelKey": "component.transistor_jfet_n.pinout.label",
       "type": "select",
       "options": [
         "SGD",
@@ -54,7 +54,8 @@
         "GSD"
       ],
       "default": "SGD",
-      "hint": "Which physical leg is Source/Gate/Drain, left to right — matches how the real part's datasheet orders its leads."
+      "hintKey": "component.transistor_jfet_n.pinout.hint",
+      "_i18nNote": "options ARE matched literally throughout js/simulation.js (JFET_PINOUTS lookup, props.pinout === 'SGD' etc.) — needs a stable non-text identifier before this can be localized."
     }
   ],
   "model_params": {
@@ -89,11 +90,11 @@
   "failure_modes": {
     "over_current": {
       "result": "burn",
-      "message": "Drain current exceeded maximum rating. The JFET is destroyed. Check the drain load for too little resistance."
+      "messageKey": "component.transistor_jfet_n.failure.over_current"
     },
     "over_voltage": {
       "result": "burn",
-      "message": "Vds exceeded breakdown voltage. Use a device rated for higher voltage, or reduce the supply."
+      "messageKey": "component.transistor_jfet_n.failure.over_voltage"
     }
   },
   "visual": {

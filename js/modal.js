@@ -20,9 +20,9 @@ const Modal = (() => {
 
   function _open(message, opts) {
     overlay().classList.remove('hidden');
-    titleEl().textContent = opts.title || 'Confirm';
+    titleEl().textContent = opts.title || I18n.t('app.modal.confirm');
     msgEl().textContent   = message;
-    okBtn().textContent   = opts.okLabel || 'OK';
+    okBtn().textContent   = opts.okLabel || I18n.t('app.modal.ok');
     okBtn().classList.toggle('confirm-btn-danger', !!opts.danger);
     cancelBtn().style.display = opts.cancel===false ? 'none' : '';
     okBtn().focus();
@@ -33,11 +33,11 @@ const Modal = (() => {
   // Cancel/backdrop/Escape all still work the normal way (resolve false).
   function _openList(items, opts) {
     overlay().classList.remove('hidden');
-    titleEl().textContent = opts.title || 'Choose';
+    titleEl().textContent = opts.title || I18n.t('app.modal.choose');
     if (opts.message) { msgEl().textContent = opts.message; msgEl().classList.remove('hidden'); }
     else { msgEl().textContent = ''; msgEl().classList.add('hidden'); }
     okBtn().style.display = 'none';
-    cancelBtn().textContent = opts.cancelLabel || 'Cancel';
+    cancelBtn().textContent = opts.cancelLabel || I18n.t('app.modal.cancel');
     cancelBtn().style.display = '';
 
     const list = listEl();
@@ -46,7 +46,7 @@ const Modal = (() => {
     if (!items.length) {
       const empty = document.createElement('div');
       empty.className = 'confirm-list-empty';
-      empty.textContent = opts.emptyLabel || 'Nothing available';
+      empty.textContent = opts.emptyLabel || I18n.t('app.modal.nothingAvailable');
       list.appendChild(empty);
     } else {
       items.forEach(item => {
@@ -94,7 +94,7 @@ const Modal = (() => {
   function alertBox(message, opts={}) {
     return new Promise(resolve => {
       _resolve = () => resolve();
-      _open(message, {...opts, cancel:false, okLabel: opts.okLabel || 'OK'});
+      _open(message, {...opts, cancel:false, okLabel: opts.okLabel || I18n.t('app.modal.ok')});
     });
   }
 

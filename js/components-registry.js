@@ -4,10 +4,14 @@ const ComponentRegistry = (() => {
   let _defs = [];
 
   const CATEGORY_ORDER  = ['power','source','passive','semiconductor','switch','ic'];
-  const CATEGORY_LABELS = {
-    power:'Power', source:'Signal Sources', passive:'Passives',
-    semiconductor:'Semiconductors', switch:'Switches', ic:'ICs'
+  // Resolved through I18n on read (categoryLabel below), not stored
+  // pre-translated — these are static app-chrome keys, not component data,
+  // so they live under the "app." namespace rather than "component.".
+  const CATEGORY_LABEL_KEYS = {
+    power:'app.category.power', source:'app.category.source', passive:'app.category.passive',
+    semiconductor:'app.category.semiconductor', switch:'app.category.switch', ic:'app.category.ic'
   };
+  function categoryLabel(cat) { return I18n.t(CATEGORY_LABEL_KEYS[cat] || cat); }
 
   async function load() {
     _defs = await Storage.loadAllComponents();
@@ -24,9 +28,14 @@ const ComponentRegistry = (() => {
   function search(q) {
     q = q.toLowerCase().trim();
     if (!q) return _defs;
+    // Searches against the RESOLVED (translated) text, not the labelKey/
+    // descriptionKey — a user typing "resistor" needs to find it regardless
+    // of what internal key backs that string. I18n.t() is cheap (a Map
+    // lookup) so resolving per search call rather than caching is fine at
+    // this component count.
     return _defs.filter(d =>
-      d.label.toLowerCase().includes(q) ||
-      d.description.toLowerCase().includes(q) ||
+      I18n.t(d.labelKey).toLowerCase().includes(q) ||
+      I18n.t(d.descriptionKey).toLowerCase().includes(q) ||
       d.id.toLowerCase().includes(q) ||
       (d.symbol||'').toLowerCase().includes(q));
   }
@@ -163,5 +172,5 @@ const ComponentRegistry = (() => {
 
   function clampCol(col) { return Math.max(0, Math.min(62, col)); }
 
-  return { load, getAll, getById, search, createInstance, applyModelDefaults, rerollTolerance, CATEGORY_LABELS };
+  return { load, getAll, getById, search, createInstance, applyModelDefaults, rerollTolerance, categoryLabel };
 })();
