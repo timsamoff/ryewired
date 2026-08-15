@@ -138,6 +138,24 @@ const Shapes = (() => {
     ctx.fillStyle=cathodeColor;ctx.fillRect(bw/2-5,-bh/2,4,bh);
   }
 
+  // DIP-8 IC package: black body, silkscreen notch + pin-1 dot at the
+  // +x edge in LOCAL (post-rotation) space — this always lines up with
+  // pin 1 (legs[0]) because drawIcInst rotates into local space before
+  // calling here, buildDipLegs always anchors legs[0] (pin 1) at the
+  // highest column of the 8, and holeX(col) increases with col, so
+  // localPts[0].x is always the most-positive x. rotateIc180 flips the
+  // instance's own leg columns/rows, so this body art never needs to
+  // know the current rotation itself.
+  function drawOpamp(ctx,def,bw,bh){
+    const bodyColor = def.visual?.body_color || '#1a1a1a';
+    ctx.fillStyle=bodyColor;roundRect(ctx,-bw/2,-bh/2,bw,bh,2);ctx.fill();
+    ctx.strokeStyle='#000';ctx.lineWidth=0.5;ctx.stroke();
+    ctx.fillStyle='#555';
+    ctx.beginPath();ctx.arc(bw/2-6,0,3,Math.PI*1.5,Math.PI*0.5);ctx.fill();
+    ctx.fillStyle='#888';
+    ctx.beginPath();ctx.arc(bw/2-4,-bh/2+4,1.4,0,Math.PI*2);ctx.fill();
+  }
+
   // Germanium transistor bodies render at 2x the diameter of a standard
   // flat-bottomed part, flat-shaded. Shared so board.js's leg-attachment
   // math and the body drawing here can never drift apart.
@@ -298,6 +316,7 @@ const Shapes = (() => {
       case 'transistor_pnp': drawTransistor(ctx,def,inst,col,bw,bh); break;
       case 'transistor_jfet_n': drawJfet(ctx,def,inst,bw,bh); break;
       case 'transistor_mosfet_n': drawMosfet(ctx,def,inst,bw,bh); break;
+      case 'opamp':           drawOpamp(ctx,def,bw,bh); break;
       case 'switch_spst':    drawSwitch(ctx,bw,bh,theme?.success||'#33cc66',theme?.alert||'#e6394a',Utils.isSwitchClosed(inst)); break;
       case 'power_supply':   drawPower(ctx,col,bw,bh,inst.props.voltage,!!inst.props.reverse_polarity,ang); break;
       case 'signal_generator':drawSigGen(ctx,col,bw,bh,inst.props.waveform,theme?.scopeTrace); break;
@@ -308,7 +327,7 @@ const Shapes = (() => {
   return {
     roundRect, resBands,
     drawResistor, drawFilmCap, drawElectroCap, drawLED, drawPot,
-    drawDiode, drawZener, drawTransistor, drawSwitch, drawPower, drawSigGen, miniWave,
+    drawDiode, drawZener, drawOpamp, drawTransistor, drawSwitch, drawPower, drawSigGen, miniWave,
     drawDefault, drawBody, germCircleGeom
   };
 })();

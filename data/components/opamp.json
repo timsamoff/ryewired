@@ -1,0 +1,29 @@
+{
+  "id": "opamp",
+  "labelKey": "component.opamp.label",
+  "category": "ic",
+  "symbol": "U",
+  "descriptionKey": "component.opamp.description",
+  "legs": 8,
+  "leg_span": 0,
+  "leg_labels": ["1OUT", "1IN-", "1IN+", "VCC-", "2IN+", "2IN-", "2OUT", "VCC+"],
+  "properties": [
+    { "key": "model", "labelKey": "component.opamp.model.label", "type": "select",
+      "options": ["JRC4558", "TL072"], "default": "JRC4558",
+      "hintKey": "component.opamp.model.hint" }
+  ],
+  "model_params": {
+    "JRC4558": { "aol": 100000, "output_swing_headroom": 1.5, "supply_min": 4, "supply_max": 18 },
+    "TL072":   { "aol": 200000, "output_swing_headroom": 1.0, "supply_min": 3.5, "supply_max": 15 }
+  },
+  "behavior": { "type": "opamp_dual" },
+  "failure_modes": {
+    "over_voltage": { "result": "burn", "messageKey": "component.opamp.failure.over_voltage" }
+  },
+  "visual": {
+    "body_color": "#1a1a1a",
+    "body_width": 40,
+    "body_height": 24,
+    "lead_length": 10
+  }
+}

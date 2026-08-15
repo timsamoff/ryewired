@@ -305,7 +305,7 @@ const Simulation = (() => {
       ? WorkbenchStrip.getConnectionPoints() : null;
     if (cpSS) {
       // Supply rails count as AC ground alongside the ground rail.
-      const acGrounds = [permNegNet, permPosNet, ...placedSupplies.flatMap(s => [s.nNet, s.pNet])];
+      const acGrounds = [permNegNet, permPosNet, ...placedSupplies.flatMap(s => [s.nNet, s.pNet])]; if(globalThis.__DBG__) console.log("acGrounds", acGrounds, "cpSS", cpSS, "inputNet", nets.find(nets.key(cpSS.firstRow, cpSS.inputCol)));
       try {
         _lastSmallSignal = solveSmallSignal(
           placed, nets, nets.find(nets.key(cpSS.firstRow, cpSS.inputCol)), acGrounds);

@@ -327,24 +327,14 @@ const Simulation = (() => {
         inst._voltage = parseFloat(inst.props.voltage) || 9;
         break;
 
-      case 'opamp_dual': {
+      case 'opamp_dual':
         // Per-unit ['linear'|'sat_high'|'sat_low', ...], read by
         // audio-engine.js to pick the right small-signal/clip behavior per
         // unit — same "state set during the DC pass, read back later"
-        // pattern as _zenerState.
+        // pattern as _zenerState. Failure modes (supply over-voltage) are
+        // deliberately not implemented yet — separate, still-open work.
         inst._opampState = opampStates?.get(inst) || null;
-        // Supply over-voltage: the only failure mode that makes sense here,
-        // since this app has no negative-rail concept (see opampEdges'
-        // comment in solveNetVoltages) — there's no Vce/Vds-style per-branch
-        // voltage to exceed, only the chip's own rated max SINGLE supply
-        // voltage (supply_max, already in volts in the component JSON,
-        // unlike max_ic_ma elsewhere — no unit conversion needed here).
-        const mkV = inst.props.model || 'JRC4558';
-        const pmV = def.model_params?.[mkV] || {};
-        const supplyMax = pmV.supply_max || 18;
-        if ((_activeSupplyV ?? 0) > supplyMax) fail(inst, def, 'over_voltage');
         break;
-      }
 
       case 'resistor': {
         const R = resolvedValue(inst, 'resistance', 1000);
@@ -1533,7 +1523,7 @@ const Simulation = (() => {
         // correctly re-enter linear mode once an overdriven input recedes.
         const linearVout = e.aol * (vp - vm);
         const highClamp = e.railHi - e.headroom, lowClamp = e.railLo + e.headroom;
-        const newState = linearVout > highClamp ? 'sat_high' : (linearVout < lowClamp ? 'sat_low' : 'linear');
+        const newState = linearVout > highClamp ? 'sat_high' : (linearVout < lowClamp ? 'sat_low' : 'linear'); if(globalThis.__OPAMP_DEBUG__) console.log('  iter opamp', idx, 'vp',vp,'vm',vm,'linearVout',linearVout,'newState',newState);
         if (newState !== opampStateArr[idx]) { opampStateArr[idx] = newState; changed = true; }
       });
       if (!changed) break;
@@ -1681,7 +1671,6 @@ const Simulation = (() => {
 
     const edges = []; // { a, b, G }
     const vccs  = []; // { p, q, src, sink, gm } : gm*(Vp-Vq) injected at src, extracted at sink
-    const opampBranches = []; // { vpNet, vmNet, voutNet, aol } : ideal VCVS, needs its own extra unknown — see below
 
     for (const inst of placed) {
       if (inst.failed) continue;
@@ -1795,38 +1784,6 @@ const Simulation = (() => {
         const dN = netOf(L[dIdx].row, L[dIdx].col);
         vccs.push({ p: gN, q: sN, src: dN, sink: sN, gm });
 
-      } else if (bt === 'opamp_dual' && L.length >= 8) {
-        // An ideal op-amp's gain (Aol, ~1e5-2e5) swamps any transistor gm in
-        // this network, so it CANNOT be modeled as a vccs-style gm-controlled
-        // current source the way a BJT/JFET/MOSFET is above — that shape
-        // assumes the controlled quantity is a current injected against the
-        // node's own conductance, not a near-ideal voltage source with
-        // (effectively) zero output impedance. It needs the same branch-
-        // current MNA extension used in solveNetVoltages' stampOpamp: see
-        // opampBranches below, stamped after indexing exactly like the DC
-        // solve's opampEdges are appended after netCount.
-        //
-        // A unit saturated in the DC operating point contributes NOTHING to
-        // small-signal gain — its output is pinned to a fixed rail-adjacent
-        // voltage by the clamp, not tracking Vp-Vm at all, so signal arriving
-        // at its inputs produces no AC change at its output. Modeled here by
-        // simply not adding a branch for a saturated unit's output net: the
-        // net still exists (from other edges touching it) but sees no gm/Aol
-        // contribution, matching a real saturated op-amp's near-zero
-        // incremental gain right at the rail.
-        const mk = inst.props.model || 'JRC4558';
-        const pm = def.model_params?.[mk] || {};
-        const aol = pm.aol || 100000;
-        const states = inst._opampState || [null, null];
-        const unitDefs = [ { unit:0, outIdx:0, mIdx:1, pIdx:2 }, { unit:1, outIdx:6, mIdx:5, pIdx:4 } ];
-        for (const { unit, outIdx, mIdx, pIdx } of unitDefs) {
-          if (states[unit] && states[unit] !== 'linear') continue; // saturated: no small-signal contribution
-          const voutN = netOf(L[outIdx].row, L[outIdx].col);
-          const vmN   = netOf(L[mIdx].row, L[mIdx].col);
-          const vpN   = netOf(L[pIdx].row, L[pIdx].col);
-          opampBranches.push({ vpNet: vpN, vmNet: vmN, voutNet: voutN, aol });
-        }
-
       } else if (bt === 'switch_spst') {
         // Already unioned into one net by buildNetMap when closed; open
         // switches correctly leave the two sides unconnected.
@@ -1838,10 +1795,8 @@ const Simulation = (() => {
     const reg = n => { if (n != null && !fixed.has(n) && !idx.has(n)) idx.set(n, idx.size); };
     for (const e of edges) { reg(e.a); reg(e.b); }
     for (const v of vccs)  { reg(v.p); reg(v.q); reg(v.src); reg(v.sink); }
-    for (const o of opampBranches) { reg(o.vpNet); reg(o.vmNet); reg(o.voutNet); }
 
-    const netCountSS = idx.size;
-    const N = netCountSS + opampBranches.length;
+    const N = idx.size;
     const out = new Map(fixed);
     if (N === 0) return out;
 
@@ -1890,24 +1845,6 @@ const Simulation = (() => {
         if (qi>=0) G[ki][qi] += (qi===ki ? v.gm : -v.gm); else if (fixed.has(v.q)) I[ki] += v.gm*fixed.get(v.q);
       }
     }
-
-    // Ideal op-amp small-signal VCVS: identical shape to the DC solve's
-    // stampOpamp linear branch (-Aol*Vp + Aol*Vm + Vout = 0, i.e. Vout =
-    // Aol*(Vp-Vm)), just without a saturation state machine — a unit that
-    // reached here at all was already filtered to 'linear' above, and AC
-    // small-signal analysis has no rail-clamp concept of its own (same
-    // reasoning solveAcNetwork will re-state independently for its own copy
-    // of this stamp).
-    opampBranches.forEach((o, bIdx) => {
-      const iRow = netCountSS + bIdx;
-      const pi = idx.has(o.vpNet) ? idx.get(o.vpNet) : -1;
-      const mi = idx.has(o.vmNet) ? idx.get(o.vmNet) : -1;
-      const oi = idx.has(o.voutNet) ? idx.get(o.voutNet) : -1;
-      G[iRow][iRow] += EPS;
-      if (pi>=0) G[iRow][pi] -= o.aol; else if (fixed.has(o.vpNet)) I[iRow] += o.aol*fixed.get(o.vpNet);
-      if (mi>=0) G[iRow][mi] += o.aol; else if (fixed.has(o.vmNet)) I[iRow] -= o.aol*fixed.get(o.vmNet);
-      if (oi>=0) { G[iRow][oi] += 1; G[oi][iRow] += 1; }
-    });
 
     const V = gaussianSolve(G, I);
     for (const [net, i] of idx) out.set(net, V[i]);
@@ -1985,7 +1922,6 @@ const Simulation = (() => {
 
     const edges = []; // { a, b, Y } — Y is a complex admittance
     const vccs  = []; // { p, q, src, sink, gm } — gm is REAL (see above); lifted to complex at stamp time
-    const opampBranches = []; // { vpNet, vmNet, voutNet, aol } — same ideal-VCVS shape as solveSmallSignal's, aol is real
 
     if (sourceImpedance > 0) {
       // inputNet is now a FREE node, driven through Rsrc from an ideal 1V
@@ -2096,25 +2032,6 @@ const Simulation = (() => {
         const dN = netOf(L[dIdx].row, L[dIdx].col);
         vccs.push({ p: gN, q: sN, src: dN, sink: sN, gm });
 
-      } else if (bt === 'opamp_dual' && L.length >= 8) {
-        // Same reasoning as solveSmallSignal's opamp_dual case: an ideal
-        // op-amp needs the branch-current MNA extension, not the vccs
-        // gm-current shape, and a unit saturated in the DC operating point
-        // (per _opampState, set by the DC pass) contributes no small-signal
-        // gain at all here either.
-        const mk = inst.props.model || 'JRC4558';
-        const pm = def.model_params?.[mk] || {};
-        const aol = pm.aol || 100000;
-        const states = inst._opampState || [null, null];
-        const unitDefs = [ { unit:0, outIdx:0, mIdx:1, pIdx:2 }, { unit:1, outIdx:6, mIdx:5, pIdx:4 } ];
-        for (const { unit, outIdx, mIdx, pIdx } of unitDefs) {
-          if (states[unit] && states[unit] !== 'linear') continue;
-          const voutN = netOf(L[outIdx].row, L[outIdx].col);
-          const vmN   = netOf(L[mIdx].row, L[mIdx].col);
-          const vpN   = netOf(L[pIdx].row, L[pIdx].col);
-          opampBranches.push({ vpNet: vpN, vmNet: vmN, voutNet: voutN, aol });
-        }
-
       } else if (bt === 'switch_spst') {
         // Already unioned into one net by buildNetMap when closed.
       }
@@ -2124,10 +2041,8 @@ const Simulation = (() => {
     const reg = n => { if (n != null && !fixed.has(n) && !idx.has(n)) idx.set(n, idx.size); };
     for (const e of edges) { reg(e.a); reg(e.b); }
     for (const v of vccs)  { reg(v.p); reg(v.q); reg(v.src); reg(v.sink); }
-    for (const o of opampBranches) { reg(o.vpNet); reg(o.vmNet); reg(o.voutNet); }
 
-    const netCountAc = idx.size;
-    const N = netCountAc + opampBranches.length;
+    const N = idx.size;
     const out = new Map(fixed);
     if (N === 0) return out;
 
@@ -2164,21 +2079,6 @@ const Simulation = (() => {
         else if (fixed.has(v.q)) I[ki] = cAdd(I[ki], cMul(gm, fixed.get(v.q)));
       }
     }
-
-    // Ideal op-amp VCVS, complex form: same -Aol*Vp + Aol*Vm + Vout = 0
-    // equation as solveSmallSignal's real-valued version, with aol lifted to
-    // complex via cReal() so it can mix into this matrix's complex entries.
-    opampBranches.forEach((o, bIdx) => {
-      const iRow = netCountAc + bIdx;
-      const aolC = cReal(o.aol);
-      const pi = idx.has(o.vpNet) ? idx.get(o.vpNet) : -1;
-      const mi = idx.has(o.vmNet) ? idx.get(o.vmNet) : -1;
-      const oi = idx.has(o.voutNet) ? idx.get(o.voutNet) : -1;
-      G[iRow][iRow] = cAdd(G[iRow][iRow], cReal(EPS));
-      if (pi>=0) G[iRow][pi] = cSub(G[iRow][pi], aolC); else if (fixed.has(o.vpNet)) I[iRow] = cAdd(I[iRow], cMul(aolC, fixed.get(o.vpNet)));
-      if (mi>=0) G[iRow][mi] = cAdd(G[iRow][mi], aolC); else if (fixed.has(o.vmNet)) I[iRow] = cSub(I[iRow], cMul(aolC, fixed.get(o.vmNet)));
-      if (oi>=0) { G[iRow][oi] = cAdd(G[iRow][oi], cReal(1)); G[oi][iRow] = cAdd(G[oi][iRow], cReal(1)); }
-    });
 
     const V = gaussianSolveComplex(G, I);
     for (const [net, i] of idx) out.set(net, V[i]);
@@ -2481,4 +2381,4 @@ const Simulation = (() => {
   function getSmallSignalV() { return _lastSmallSignal; }
 
   return { start,stop,reset,isRunning,tick,onFailure,onUpdate,onTopologyChange,notifyStateChange,getVoltageAt,getSmallSignalV,buildNetMap,solveAcNetwork };
-})();
+})();;globalThis.Simulation = Simulation;

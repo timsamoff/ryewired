@@ -165,11 +165,44 @@ const ComponentRegistry = (() => {
         { row, col: clampCol(col + span) }
       ];
     }
+    if (count === 8) return buildDipLegs(row, col); // DIP-8 dual-op-amp package — see buildDipLegs
     // Generic: spread evenly
     const legs = [];
     for (let i = 0; i < count; i++) {
       legs.push({ row, col: clampCol(col + Math.round(i * span / (count-1))) });
     }
+    return legs;
+  }
+
+  // DIP-8 package leg layout, straddling the center channel exactly like a
+  // real chip does on a physical breadboard. `row` is the anchor (pin 1's
+  // row, always in the bottom half 0-4 — rows 5-9 is the other half); `col`
+  // is pin 1's column.
+  //
+  // Real DIP-8 pin order (verified against IC pin-numbering convention,
+  // notch-left): pins 1-4 run left-to-right along the bottom row, pin 5
+  // continues at top-right, pins 5-8 run right-to-left along the top row
+  // (pin 8 sits directly above pin 1). This board's columns ascend LEFT TO
+  // RIGHT on screen (verified directly against board.js's holeX(col), which
+  // increases with col), so "left-to-right" for the pin sequence maps to
+  // ASCENDING column number as pin number increases. legs[0..3] are pins
+  // 1-4 at col, col-1, col-2, col-3 — i.e. anchored with pin 1 at the
+  // HIGHEST column of the four (the rightmost on screen) and descending
+  // from there, matching the code below (col-i, not col+i) regardless of
+  // which screen direction "ascending column" turned out to mean; pin 1's
+  // exact screen position doesn't matter for correctness, only that every
+  // pin's column-to-pin-number mapping stays internally consistent, which
+  // this does. legs[4] (pin 5) sits directly above legs[3] (pin 4), and
+  // legs[4..7] continue back to directly above legs[0] (pin 8 above pin 1).
+  function buildDipLegs(row, col) {
+    // Always straddles the board's one and only center channel — rows 4 and
+    // 5 are the two rows flanking it (see board.js's DIP_GAP), so a DIP
+    // package's bottom row is pinned to row 4 regardless of whichever row
+    // number the drop happened to land closest to.
+    const bottomRow = 4, topRow = 5;
+    const legs = [];
+    for (let i = 0; i < 4; i++) legs.push({ row: bottomRow, col: clampCol(col - i) }); // pins 1-4
+    for (let i = 0; i < 4; i++) legs.push({ row: topRow, col: clampCol(col - (3 - i)) }); // pins 5-8, pin5 above pin4's column, pin8 above pin1's column
     return legs;
   }
 

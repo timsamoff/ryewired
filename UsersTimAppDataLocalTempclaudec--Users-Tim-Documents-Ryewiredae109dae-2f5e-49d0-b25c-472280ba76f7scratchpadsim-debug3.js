@@ -1533,7 +1533,7 @@ const Simulation = (() => {
         // correctly re-enter linear mode once an overdriven input recedes.
         const linearVout = e.aol * (vp - vm);
         const highClamp = e.railHi - e.headroom, lowClamp = e.railLo + e.headroom;
-        const newState = linearVout > highClamp ? 'sat_high' : (linearVout < lowClamp ? 'sat_low' : 'linear');
+        const newState = linearVout > highClamp ? 'sat_high' : (linearVout < lowClamp ? 'sat_low' : 'linear'); if(globalThis.__DBG2__) console.log('iter opamp',idx,'vp',vp?.toFixed(3),'vm',vm?.toFixed(3),'linearVout',linearVout?.toFixed(3),'newState',newState,'oldState',opampStateArr[idx]);
         if (newState !== opampStateArr[idx]) { opampStateArr[idx] = newState; changed = true; }
       });
       if (!changed) break;

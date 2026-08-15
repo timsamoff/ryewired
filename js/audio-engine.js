@@ -712,6 +712,25 @@ const AudioEngine = (() => {
         const [sIdx, gIdx, dIdx] = PINOUTS[inst.props.pinout] || PINOUTS[fallback];
         return [[inst.legs[gIdx], inst.legs[sIdx]], [inst.legs[gIdx], inst.legs[dIdx]]];
       }
+      case 'opamp_dual': {
+        // Same "offer every hop this device could plausibly be wired as,
+        // let the walk's own net-matching pick whichever one actually
+        // touches the expanding net" pattern as the JFET/MOSFET case above.
+        // Legs per opamp.json: [1OUT,1IN-,1IN+,VCC-,2IN+,2IN-,2OUT,VCC+].
+        // Both inputs of both units are offered — a real circuit only ever
+        // has ONE of these four actually wired into the signal path (the
+        // other input goes to a bias/feedback network instead), and the
+        // walk's existing net-matching already handles that ambiguity for
+        // JFET/MOSFET without needing to know which topology it is ahead of
+        // time.
+        if (inst.legs.length < 8) return [];
+        return [
+          [inst.legs[2], inst.legs[0]], // unit 0: 1IN+ -> 1OUT
+          [inst.legs[1], inst.legs[0]], // unit 0: 1IN- -> 1OUT
+          [inst.legs[4], inst.legs[6]], // unit 1: 2IN+ -> 2OUT
+          [inst.legs[5], inst.legs[6]], // unit 1: 2IN- -> 2OUT
+        ];
+      }
       default: return [];
     }
   }
@@ -1121,6 +1140,42 @@ const AudioEngine = (() => {
         const pre  = ctx.createGain(); pre.gain.value  = g / scale;
         const sh   = ctx.createWaveShaper(); sh.oversample = CLIP_OVERSAMPLE;
         sh.curve   = makeClipCurve(clip / scale);
+        const post = ctx.createGain(); post.gain.value = scale;
+        pre.connect(sh); sh.connect(post);
+        return { in: pre, out: post, nodes: [pre, sh, post] };
+      }
+      case 'opamp_dual': {
+        // Same net-gain-from-the-real-solve pattern as potentiometer/JFET/
+        // MOSFET above — entryNet is whichever input (IN+ or IN-) the walk
+        // actually matched, exitNet is that unit's OUT net, so netGain()
+        // already returns the real solved gain (verified against the AC
+        // solve in simulation.js) without needing to know inverting vs
+        // non-inverting here.
+        const gain = netGain(entryNet, exitNet);
+        // Real asymmetric rail distance, the same idea as a BJT's
+        // setOutputSwing (real volts to each rail, not a symmetric guess),
+        // computed here rather than read from the DC solve because
+        // audio-engine has no access to simulation.js's per-unit clamp
+        // state beyond inst._opampState (which unit is saturated), not the
+        // actual swing-to-rail distance in volts.
+        const exitLeg = inst.legs.find(l => nets.find(nets.key(l.row, l.col)) === exitNet);
+        const vOut = (exitLeg && typeof Simulation !== 'undefined' && Simulation.getVoltageAt)
+          ? Simulation.getVoltageAt(exitLeg.row, exitLeg.col) : null;
+        const supplyV = (typeof WorkbenchStrip !== 'undefined')
+          ? parseFloat(WorkbenchStrip.getPermanentState()?.power?.voltage) : NaN;
+        const mk = inst.props.model || 'JRC4558';
+        const pm = def.model_params?.[mk] || {};
+        const headroom = pm.output_swing_headroom ?? 1.5;
+        let clipUp = 1, clipDown = 1;
+        if (Number.isFinite(vOut) && Number.isFinite(supplyV) && supplyV > 0) {
+          clipUp   = Math.max((supplyV - headroom) - vOut, 1e-3);
+          clipDown = Math.max(vOut - headroom, 1e-3);
+        }
+        const scale = Math.max(clipUp, clipDown, 1e-3) / 0.9;
+        const g = Number.isFinite(gain) ? gain : 1;
+        const pre  = ctx.createGain(); pre.gain.value  = g / scale;
+        const sh   = ctx.createWaveShaper(); sh.oversample = CLIP_OVERSAMPLE;
+        sh.curve   = makeClipCurve(clipUp / scale, clipDown / scale);
         const post = ctx.createGain(); post.gain.value = scale;
         pre.connect(sh); sh.connect(post);
         return { in: pre, out: post, nodes: [pre, sh, post] };

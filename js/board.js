@@ -90,6 +90,39 @@ const Board = (() => {
   function extraGroups(col) {
     return col < 3 ? 0 : Math.floor((col-3)/5) + 1;
   }
+
+  // Placement-span validation: on a real breadboard, a part's legs only
+  // land in useful holes when they don't stretch across gaps that don't
+  // exist on the physical part. Two different rules, per component kind:
+  //   - Transistors (3-leg): the two OUTER legs may span at most ONE
+  //     5-hole-group boundary (extraGroups' gap columns) — allows the
+  //     common "leg happens to straddle one gap" case a real transistor's
+  //     bent leads can do, but not two-plus gaps at once, which nothing
+  //     shaped like a real TO-92 body could reach.
+  //   - Op-amps / DIP-8 (8-leg, category 'ic'): ALWAYS straddles the one
+  //     center channel by construction (buildDipLegs), which is allowed —
+  //     it's the one gap on the board a real DIP is designed to straddle.
+  //     What's NOT allowed is a placement whose 4-pin row additionally
+  //     crosses a column-group boundary, since nothing about a real DIP's
+  //     rigid pin spacing lets it also span a completely different gap.
+  // Both are checked the same way: do the part's occupied columns span more
+  // than one extraGroups() value?
+  function legSpanValid(defCategory, legCount, cols) {
+    if (legCount === 3) {
+      // Group INDEX distance, not just "are the two groups different" — two
+      // groups five apart (e.g. dragged clear across the board) would
+      // wrongly pass a same-vs-different check but must fail here, since
+      // that's many boundaries crossed, not one.
+      const gA = extraGroups(Math.min(...cols)), gB = extraGroups(Math.max(...cols));
+      return Math.abs(gB - gA) <= 1;
+    }
+    if (defCategory === 'ic') {
+      const groups = cols.map(extraGroups);
+      return Math.max(...groups) - Math.min(...groups) === 0; // the 4-pin row must stay within one group
+    }
+    return true; // 2-leg parts are the "stretch it like real lead wire" case, no span limit
+  }
+
   function holeX(col) {
     return ML + col*HOLE_PITCH + extraGroups(col)*GROUP_GAP + HOLE_PITCH/2;
   }
@@ -152,6 +185,8 @@ const Board = (() => {
 
   function instGeometry(inst,useOffset) {
     const pts=useOffset?instLegPixels(inst,true):instLegPixels(inst,false);
+    const def=ComponentRegistry.getById(inst.defId);
+    if(def?.category==='ic') return icGeometry(inst,pts);
     const a=pts[0], b=pts[pts.length-1];
     const cx=(a.x+b.x)/2, cy=(a.y+b.y)/2;
     const ang=Math.atan2(b.y-a.y,b.x-a.x);
@@ -159,11 +194,46 @@ const Board = (() => {
     return {cx,cy,ang,len,pts};
   }
 
+  // IC packages (DIP-N) don't fit the 2/3-leg "line between first and last
+  // leg" model above — an 8-leg DIP-8 is a 2xN pin GRID straddling the
+  // center channel, not two ends of one line, so its center is the
+  // bounding-box midpoint of every leg, not the midpoint of legs[0]/
+  // legs[last] (which for a DIP-8 built per the pin-1/pin-N ordering in
+  // buildLegs would land off-center, diagonally between two corner pins).
+  // `ang` here is a discrete 0/90/180/270deg rotation the user sets via the
+  // same Rotate control 2-leg parts use (see rotateLeg90's IC branch below),
+  // stored as `inst._icAngle` rather than derived from leg geometry — an IC
+  // has no natural "angle between two legs" the way a resistor does. `len`
+  // is unused for ICs (nothing here draws a lead the way a 2-leg part
+  // does) but kept in the returned shape so any caller destructuring
+  // {cx,cy,ang,len,pts} from either branch doesn't need an IC-specific
+  // special case downstream.
+  function icGeometry(inst,pts){
+    const minX=Math.min(...pts.map(p=>p.x)), maxX=Math.max(...pts.map(p=>p.x));
+    const minY=Math.min(...pts.map(p=>p.y)), maxY=Math.max(...pts.map(p=>p.y));
+    const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+    const ang=((inst._icAngle||0)*Math.PI)/180;
+    return {cx,cy,ang,len:maxX-minX,pts};
+  }
+
   function hitTestComp(x,y) {
     for(let i=_placed.length-1;i>=0;i--) {
       const inst=_placed[i], def=ComponentRegistry.getById(inst.defId);
       if(!def) continue;
       const geo=instGeometry(inst);
+      if(def.category==='ic'){
+        // Bounding box of the pin grid itself (already computed by
+        // icGeometry as geo.cx/cy, half-extents derivable from geo.len and
+        // the leg pixel spread) plus a small package-body margin — a real
+        // DIP's plastic body overhangs its pins slightly on every side.
+        const pinHalfW=geo.len/2, pinHalfH=HOLE_PITCH/2+DIP_GAP/2;
+        const margin=10;
+        const dx=x-geo.cx, dy=y-geo.cy;
+        const lx=dx*Math.cos(-geo.ang)-dy*Math.sin(-geo.ang);
+        const ly=dx*Math.sin(-geo.ang)+dy*Math.cos(-geo.ang);
+        if(Math.abs(lx)<pinHalfW+margin&&Math.abs(ly)<pinHalfH+margin) return inst;
+        continue;
+      }
       const bh0=def.visual?.body_height||16;
       const isGerm=(def.id==='transistor_npn'||def.id==='transistor_pnp')
         && def.model_params?.[inst.props?.model]?.type==='germanium';
@@ -461,6 +531,13 @@ const Board = (() => {
     if(alpha<1) ctx.globalAlpha=alpha;
     if(isFail)  ctx.globalAlpha=(alpha||1)*0.35;
 
+    // IC packages (DIP-N) are structurally different enough from every 2/3-
+    // leg part (rectangular pin grid + body spanning the channel, no
+    // germanium-can/pot/power-supply special cases to weave through) that
+    // they get their own complete draw path rather than threading an extra
+    // branch through the 2-leg/3-leg logic below.
+    if(def.category==='ic'){ drawIcInst(inst,def,c,isSel,isFail,alpha,geo); ctx.restore(); return; }
+
     const halfLen=len/2;
     const bw=def.visual?.body_width||28, bh=def.visual?.body_height||14;
     const isGermTransistor = (def.id==='transistor_npn'||def.id==='transistor_pnp')
@@ -556,6 +633,44 @@ const Board = (() => {
       ctx.fillText('✕',0,failY);
     }
     ctx.restore();
+  }
+
+  // Draws an IC (DIP-N package): 8 (or however many) straight leads from
+  // each pin's actual hole position up/down to the package body edge, then
+  // the body itself via Shapes.drawBody. Called with the same rotate/
+  // translate context drawInst already set up (origin at geo.cx/cy, rotated
+  // by geo.ang), so every coordinate here is in that same local space —
+  // geo.pts are WORLD pixel positions and need the same local-space
+  // transform drawInst's 3-leg branch already uses (rotate by -ang, offset
+  // by cx/cy) to place each lead correctly relative to that origin.
+  function drawIcInst(inst,def,c,isSel,isFail,alpha,geo){
+    const {cx,cy,ang,pts}=geo;
+    const cosA=Math.cos(-ang), sinA=Math.sin(-ang);
+    const localPts=pts.map(p=>{
+      const dx=p.x-cx, dy=p.y-cy;
+      return {x:dx*cosA-dy*sinA, y:dx*sinA+dy*cosA};
+    });
+    const halfRowGap=HOLE_PITCH/2+DIP_GAP/2; // body edge sits just past the pin rows, same margin hitTestComp uses
+
+    ctx.strokeStyle=LEAD_COLOR;ctx.lineWidth=LEAD_WIDTH;ctx.lineCap='round';ctx.fillStyle=LEAD_COLOR;
+    for(const p of localPts){
+      const bodyEdgeY = p.y<0 ? -halfRowGap : halfRowGap;
+      ctx.beginPath();ctx.moveTo(p.x,bodyEdgeY);ctx.lineTo(p.x,p.y);ctx.stroke();
+      ctx.beginPath();ctx.arc(p.x,p.y,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
+    }
+
+    if(isSel&&alpha>=1){
+      const pinHalfW=(Math.max(...localPts.map(p=>p.x))-Math.min(...localPts.map(p=>p.x)))/2;
+      ctx.beginPath();ctx.ellipse(0,0,pinHalfW+10,halfRowGap+10,0,0,Math.PI*2);
+      ctx.strokeStyle=c.warning;ctx.lineWidth=2;ctx.stroke();
+    }
+
+    Shapes.drawBody(ctx,def,inst,c,0,0);
+
+    if(isFail&&alpha>=1){
+      ctx.globalAlpha=1;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillStyle=c.alert;
+      ctx.fillText('✕',0,0);
+    }
   }
 
   // ── Body painters ─────────────────────────────────────────────────────────────
@@ -798,7 +913,16 @@ const Board = (() => {
   function onMouseUp(e){
     if(e.button!==0) return;
     if(_pressedSwitchInst){_pressedSwitchInst._pressed=false;Simulation.notifyStateChange(_pressedSwitchInst);render();_pressedSwitchInst=null;}
-    if(_dragMode==='leg-dragging'){_dragMode='idle';_dragInst=null;_dragAnchorLeg=null;_dragLegIdx=-1;Storage.markDirty();History.push();render();return;}
+    if(_dragMode==='leg-dragging'){
+      if(_dragInst){
+        const legDef=ComponentRegistry.getById(_dragInst.defId);
+        if(legDef && !legSpanValid(legDef.category, _dragInst.legs.length, _dragInst.legs.map(l=>l.col))){
+          if(_savedLegs) _dragInst.legs=_savedLegs.map(l=>({...l}));
+          if(typeof setStatus==='function') setStatus(I18n.t('app.board.legSpanInvalid'));
+        }
+      }
+      _dragMode='idle';_dragInst=null;_dragAnchorLeg=null;_dragLegIdx=-1;Storage.markDirty();History.push();render();return;
+    }
     if(_dragMode==='wire-dragging'){_dragMode='idle';_dragWire=null;_dragWireEnd=-1;_savedWireEnds=null;Storage.markDirty();History.push();render();return;}
     if(_dragMode==='wire-moving'){
       if(_dragWireMove&&_savedWireMoveEnds){
@@ -984,6 +1108,14 @@ const Board = (() => {
     if (inst.legs.some(l => holeOccupied(l.row, l.col, null, null))) {
       if (typeof setStatus==='function') setStatus(I18n.t('app.board.holeOccupied'));
       return null;
+    }
+
+    {
+      const legDef = ComponentRegistry.getById(defId);
+      if (legDef && !legSpanValid(legDef.category, inst.legs.length, inst.legs.map(l=>l.col))) {
+        if (typeof setStatus==='function') setStatus(I18n.t('app.board.legSpanInvalid'));
+        return null;
+      }
     }
 
     _placed.push(inst);setSelected(inst.instanceId,null);

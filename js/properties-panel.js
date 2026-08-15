@@ -337,7 +337,7 @@ const PropertiesPanel = (() => {
     // in one fixed orientation, and reverse_polarity already covers swapping
     // + and – electrically, so rotating it has no legitimate use and only
     // risks landing it off the rails.
-    const canRotate = def.legs >= 2 && def.category !== 'ic' && def.id !== 'power_supply';
+    const canRotate = def.legs >= 2 && def.id !== 'power_supply';
 
     if (canRotate) {
       html += `<div class="prop-section-div"></div>`;
@@ -428,6 +428,9 @@ const PropertiesPanel = (() => {
   function rotateLeg90(inst, dir) {
     if (!inst.legs || inst.legs.length < 2) return;
 
+    const def = ComponentRegistry.getById(inst.defId);
+    if (def?.category === 'ic') { rotateIc180(inst); return; }
+
     const L = inst.legs;
     const a = L[0], b = L[L.length-1];
     // Rail-anchored legs (rtp/rtm/rbp/rbm row strings) aren't part of the
@@ -462,6 +465,34 @@ const PropertiesPanel = (() => {
       }
     }
 
+    Board.redraw(); Storage.markDirty(); History.push();
+  }
+
+  // DIP packages only ever sit in one of two real-world orientations on a
+  // breadboard (pin 1 left or pin 1 right, always straddling the center
+  // channel) — a true 90°-increment rotation has no physical equivalent for
+  // a chip socketed this way, so this is a 180° flip, not a generalization
+  // of rotateLeg90's per-90°-step math above.
+  //
+  // A 180° in-plane flip maps every pin to its DIAGONAL opposite corner of
+  // the pin grid (row 4↔5 AND column mirrored about the grid's own center
+  // simultaneously) — verified against a hand-derived case before writing
+  // this: reversing the leg array (an earlier, simpler-looking approach)
+  // is WRONG, it maps each pin to the hole directly across the channel
+  // (same column, other row) rather than the true diagonal, which only
+  // happens to look right for a single-column-wide part.
+  function rotateIc180(inst) {
+    if (!inst.legs || inst.legs.length < 2) return;
+    const cols = inst.legs.map(l => l.col);
+    const minCol = Math.min(...cols), maxCol = Math.max(...cols);
+    const centerCol2 = minCol + maxCol; // 2x the center column, so the mirror math stays integer even when the span is odd
+    const rows = [...new Set(inst.legs.map(l => l.row))];
+    if (rows.length !== 2) return; // defensive — a DIP always spans exactly 2 rows (see buildDipLegs)
+    const [rowA, rowB] = rows;
+    inst.legs = inst.legs.map(l => ({
+      row: l.row === rowA ? rowB : rowA,
+      col: centerCol2 - l.col,
+    }));
     Board.redraw(); Storage.markDirty(); History.push();
   }
 

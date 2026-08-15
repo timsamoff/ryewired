@@ -3,6 +3,7 @@
   "capacitor_electrolytic.json",
   "diode.json",
   "led.json",
+  "opamp.json",
   "potentiometer.json",
   "power_supply.json",
   "resistor.json",
