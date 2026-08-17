@@ -366,7 +366,13 @@ const Board = (() => {
     const c=C();
     ctx.setTransform(_dpr,0,0,_dpr,0,0);
     ctx.clearRect(0,0,boardWidth(),boardHeight());
-    drawBoardSurface(c); drawWires(c); drawComponents(c);
+    // Wires draw AFTER components (not before) so every jumper sits above
+    // every component, at all times — not just while dragging. Newest-
+    // wire-on-top falls out for free within drawWires itself: addWire()
+    // appends to the end of _wires, and a canvas paints array entries in
+    // order, so a later wire is always painted over an earlier one without
+    // needing any separate z-index concept.
+    drawBoardSurface(c); drawComponents(c); drawWires(c);
     if(_paletteGhost) drawPaletteGhost(ghostX??_mouseX,ghostY??_mouseY,c);
     drawMeasurementReadout();
   }
