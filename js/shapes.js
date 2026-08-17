@@ -138,22 +138,32 @@ const Shapes = (() => {
     ctx.fillStyle=cathodeColor;ctx.fillRect(bw/2-5,-bh/2,4,bh);
   }
 
-  // DIP-8 IC package: black body, silkscreen notch + pin-1 dot at the
-  // +x edge in LOCAL (post-rotation) space — this always lines up with
-  // pin 1 (legs[0]) because drawIcInst rotates into local space before
-  // calling here, buildDipLegs always anchors legs[0] (pin 1) at the
-  // highest column of the 8, and holeX(col) increases with col, so
-  // localPts[0].x is always the most-positive x. rotateIc180 flips the
-  // instance's own leg columns/rows, so this body art never needs to
-  // know the current rotation itself.
+  // DIP-8 IC package: black body, bright pin-1 marker dot near the +x edge
+  // in LOCAL (post-rotation) space — this always lines up with pin 1
+  // (legs[0]) because drawIcInst rotates into local space before calling
+  // here, buildDipLegs always anchors legs[0] (pin 1) at the highest
+  // column of the 8, and holeX(col) increases with col, so localPts[0].x
+  // is always the most-positive x. rotateIc180 flips the instance's own
+  // leg columns/rows, so this body art never needs to know the current
+  // rotation itself.
+  //
+  // bw/bh are the REAL pin-span width and lead-row height (see drawBody's
+  // 'opamp' case), not a static guess — the body silhouette is sized to
+  // exactly reach the four pin columns and sit just short of the lead
+  // rows, leaving room for drawIcInst's flush pin stubs outside the body
+  // edge rather than overlapping it.
   function drawOpamp(ctx,def,bw,bh){
     const bodyColor = def.visual?.body_color || '#1a1a1a';
     ctx.fillStyle=bodyColor;roundRect(ctx,-bw/2,-bh/2,bw,bh,2);ctx.fill();
-    ctx.strokeStyle='#000';ctx.lineWidth=0.5;ctx.stroke();
-    ctx.fillStyle='#555';
-    ctx.beginPath();ctx.arc(bw/2-6,0,3,Math.PI*1.5,Math.PI*0.5);ctx.fill();
-    ctx.fillStyle='#888';
-    ctx.beginPath();ctx.arc(bw/2-4,-bh/2+4,1.4,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#000';ctx.lineWidth=0.75;ctx.stroke();
+    // Pin-1 marker: a round bright dot near the top-right corner (legs[0]
+    // is always the +x corner in this local space — see the module comment
+    // above), scaled off the body's own height so it reads clearly at this
+    // package's small real-world size without being oversized relative to
+    // the body the way a fixed pixel radius would at different zoom levels.
+    const markerR = bh*0.18*0.9; // 10% smaller than the previous size, per direct feedback
+    ctx.fillStyle='#cfcfcf';
+    ctx.beginPath();ctx.arc(bw/2-bh*0.32,-bh*0.15,markerR,0,Math.PI*2);ctx.fill();
   }
 
   // Germanium transistor bodies render at 2x the diameter of a standard
@@ -316,7 +326,18 @@ const Shapes = (() => {
       case 'transistor_pnp': drawTransistor(ctx,def,inst,col,bw,bh); break;
       case 'transistor_jfet_n': drawJfet(ctx,def,inst,bw,bh); break;
       case 'transistor_mosfet_n': drawMosfet(ctx,def,inst,bw,bh); break;
-      case 'opamp':           drawOpamp(ctx,def,bw,bh); break;
+      case 'opamp': {
+        // drawIcInst passes the REAL pin-span width and lead-row height
+        // through halfLen/ang (otherwise unused for an IC) so the body
+        // always matches where the leads actually terminate, rather than a
+        // static def.visual guess unrelated to this instance's real leg
+        // geometry. Falls back to the static size only for contexts that
+        // call drawBody without going through drawIcInst (e.g. a palette
+        // preview with no real placed legs yet).
+        const icW = halfLen || bw, icH = ang || bh;
+        drawOpamp(ctx,def,icW,icH);
+        break;
+      }
       case 'switch_spst':    drawSwitch(ctx,bw,bh,theme?.success||'#33cc66',theme?.alert||'#e6394a',Utils.isSwitchClosed(inst)); break;
       case 'power_supply':   drawPower(ctx,col,bw,bh,inst.props.voltage,!!inst.props.reverse_polarity,ang); break;
       case 'signal_generator':drawSigGen(ctx,col,bw,bh,inst.props.waveform,theme?.scopeTrace); break;
