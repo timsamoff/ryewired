@@ -196,10 +196,19 @@ const ComponentRegistry = (() => {
   // legs[4..7] continue back to directly above legs[0] (pin 8 above pin 1).
   function buildDipLegs(row, col) {
     // Always straddles the board's one and only center channel — rows 4 and
-    // 5 are the two rows flanking it (see board.js's DIP_GAP), so a DIP
-    // package's bottom row is pinned to row 4 regardless of whichever row
-    // number the drop happened to land closest to.
-    const bottomRow = 4, topRow = 5;
+    // 9 are the two rows flanking it, NOT 4 and 5. Verified directly
+    // against board.js's buildLayout(): row 5's y is assigned FIRST in the
+    // r=5..9 loop (so row 5 sits nearest the TOP RAIL, farthest from the
+    // channel) and row 9 is assigned LAST in that same loop (nearest the
+    // channel, right where DIP_GAP begins) — row 5 is the top half's row
+    // "a" in board-display terms (rowDisplayLabel), not the one adjacent
+    // to the gap. An earlier version of this function used topRow=5, which
+    // is wrong: it made a placed DIP-8's leads stretch the FULL height of
+    // both half-grids (row 5 down through row 9's channel edge on top,
+    // row 4 down through row 0 on the bottom) instead of one row on each
+    // side of the gap, caught by comparing a live screenshot against the
+    // intended one-row-of-leads look.
+    const bottomRow = 4, topRow = 9;
     const legs = [];
     for (let i = 0; i < 4; i++) legs.push({ row: bottomRow, col: clampCol(col - i) }); // pins 1-4
     for (let i = 0; i < 4; i++) legs.push({ row: topRow, col: clampCol(col - (3 - i)) }); // pins 5-8, pin5 above pin4's column, pin8 above pin1's column

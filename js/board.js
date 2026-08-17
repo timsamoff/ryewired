@@ -33,6 +33,25 @@ const Board = (() => {
   const LEAD_WIDTH = 2.0;
   const LEAD_CAP_R = 3.0;
   const STAND_GAP  = 14; // visible lead length between a standing 3-leg body and the hole row
+  // Length of a DIP body's pin tab: the distance from the body edge to
+  // the CENTER of the hole it reaches (not to the hole's near edge) — a
+  // real tab visibly overlaps into the hole dot, it doesn't stop at its
+  // rim. Extracted via direct pixel measurement of a reference image
+  // (screenshots/my_comp.png), re-derived after an earlier pass
+  // mismeasured this: naive color-run detection along a tab's own column
+  // misclassified the hole dot's own pixels as "tab" (both land in a
+  // similar gray/dark range at this image's anti-aliased edges), which
+  // undercounted body height and overcounted a separate "tab-color-run"
+  // quantity that wasn't actually the tab. Re-measured by reading the raw
+  // per-pixel column trace directly: the real tab is a single antialiased
+  // pixel immediately adjacent to both the body and the hole dot's own
+  // rim, i.e. body edge sits (hole radius + ~1px) from the hole CENTER,
+  // measuring 0.1405× hole-pitch in the reference image — consistent with
+  // (not contradicting) the earlier ≈0.13× estimate; tightened here using
+  // the more careful raw-column measurement.
+  const IC_TAB_LEN = HOLE_PITCH*0.1405 + 2; // +2px per direct feedback, on top of the measured base length
+  const IC_STUB_COLOR = '#8a8a8a'; // lighter than LEAD_COLOR — a DIP's own metal pins read lighter/more silver than a 2-leg part's wire lead
+  const IC_BODY_MARGIN = 4; // body extends this far past the outermost pin COLUMN on each side (left/right)
 
   // 3-leg parts (transistor, potentiometer) stand above the hole row with
   // parallel legs; 2-leg parts lie flat directly on the hole row.
@@ -121,6 +140,25 @@ const Board = (() => {
       return Math.max(...groups) - Math.min(...groups) === 0; // the 4-pin row must stay within one group
     }
     return true; // 2-leg parts are the "stretch it like real lead wire" case, no span limit
+  }
+
+  // Only 2 of every 5 columns are valid DIP-8 anchors (the 4-pin row must
+  // stay within one 5-hole group), so a user dropping by eye lands in an
+  // invalid 3-column dead zone more often than not. Rather than reject
+  // those drops outright, search outward from the requested anchor column
+  // for the nearest column that IS valid — same spirit as xyToHole's own
+  // snap-to-nearest-hole behavior, just one level up (snap to nearest
+  // valid PLACEMENT, not just nearest hole). Returns null only if nothing
+  // valid exists within the search radius (shouldn't happen in practice,
+  // since valid columns repeat every 5).
+  function nearestValidDipAnchor(col) {
+    const cols4 = c => [c, c-1, c-2, c-3];
+    if (col >= 3 && legSpanValid('ic', 8, cols4(col))) return col;
+    for (let d = 1; d <= 5; d++) {
+      if (col+d <= 62 && col+d >= 3 && legSpanValid('ic', 8, cols4(col+d))) return col+d;
+      if (col-d >= 3 && legSpanValid('ic', 8, cols4(col-d))) return col-d;
+    }
+    return null;
   }
 
   function holeX(col) {
@@ -650,13 +688,20 @@ const Board = (() => {
       const dx=p.x-cx, dy=p.y-cy;
       return {x:dx*cosA-dy*sinA, y:dx*sinA+dy*cosA};
     });
-    const halfRowGap=HOLE_PITCH/2+DIP_GAP/2; // body edge sits just past the pin rows, same margin hitTestComp uses
+    const halfRowGap=HOLE_PITCH/2+DIP_GAP/2; // distance from IC center to the actual hole row (row 4/9, the two rows flanking the DIP gap) — used for hit-testing/selection, which should reach the real pin position
+    // Body edge sits IC_TAB_LEN short of halfRowGap, and the tab fills
+    // that exact remaining distance — so the tab reaches all the way to
+    // the first hole row above/below the DIP gap (visibly overlapping the
+    // hole's own center, per the measured reference), with no floating
+    // gap before it and no overshoot past it.
+    const bodyHalfH=halfRowGap-IC_TAB_LEN;
+    const STUB_W=HOLE_PITCH*0.4;
 
-    ctx.strokeStyle=LEAD_COLOR;ctx.lineWidth=LEAD_WIDTH;ctx.lineCap='round';ctx.fillStyle=LEAD_COLOR;
+    ctx.fillStyle=IC_STUB_COLOR;
     for(const p of localPts){
-      const bodyEdgeY = p.y<0 ? -halfRowGap : halfRowGap;
-      ctx.beginPath();ctx.moveTo(p.x,bodyEdgeY);ctx.lineTo(p.x,p.y);ctx.stroke();
-      ctx.beginPath();ctx.arc(p.x,p.y,LEAD_CAP_R,0,Math.PI*2);ctx.fill();
+      const bodyEdgeY = p.y<0 ? -bodyHalfH : bodyHalfH;
+      const top = Math.min(bodyEdgeY, p.y), h = Math.abs(p.y-bodyEdgeY);
+      ctx.fillRect(p.x-STUB_W/2, top, STUB_W, h);
     }
 
     if(isSel&&alpha>=1){
@@ -665,7 +710,15 @@ const Board = (() => {
       ctx.strokeStyle=c.warning;ctx.lineWidth=2;ctx.stroke();
     }
 
-    Shapes.drawBody(ctx,def,inst,c,0,0);
+    // Real body size, not a static def.visual guess: as wide as the pin
+    // span (however many hole-columns this package's legs actually occupy)
+    // plus IC_BODY_MARGIN on each side — a real DIP's plastic body
+    // overhangs its outermost pin columns slightly, it doesn't end exactly
+    // at them — and as tall as bodyHalfH*2 (reaching the hole row). Passed
+    // through drawBody's otherwise-unused halfLen/ang slots for
+    // IC-category parts specifically.
+    const pinSpanW=Math.max(...localPts.map(p=>p.x))-Math.min(...localPts.map(p=>p.x));
+    Shapes.drawBody(ctx,def,inst,c,pinSpanW+IC_BODY_MARGIN*2,bodyHalfH*2);
 
     if(isFail&&alpha>=1){
       ctx.globalAlpha=1;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillStyle=c.alert;
@@ -685,6 +738,34 @@ const Board = (() => {
     if(!def) return;
     const bw=def.visual?.body_width||28,bh=def.visual?.body_height||14;
     const legCount=def.legs||2;
+    const isDip=def.category==='ic' && legCount>=8;
+
+    if(isDip){
+      // Mirrors drawIcInst's real DIP-8 geometry exactly (same constants,
+      // same tab/body math) rather than the generic 2/3-leg ghost shape
+      // below, which collapses a leg_span:0 part to zero width.
+      const halfRowGap=HOLE_PITCH/2+DIP_GAP/2;
+      const bodyHalfH=halfRowGap-IC_TAB_LEN;
+      const STUB_W=HOLE_PITCH*0.4;
+      const pinXs=[-1.5,-0.5,0.5,1.5].map(m=>m*HOLE_PITCH);
+      const fakeInst={defId:def.id,legs:[],props:{},failed:false,_brightness:0,_state:false};
+      for(const p of(def.properties||[])) fakeInst.props[p.key]=p.default;
+
+      ctx.save();ctx.translate(mx,my);
+      ctx.globalAlpha=0.72;
+      ctx.fillStyle=IC_STUB_COLOR;
+      for(const px of pinXs){
+        for(const sign of [-1,1]){
+          const bodyEdgeY=sign*bodyHalfH, holeY=sign*halfRowGap;
+          const top=Math.min(bodyEdgeY,holeY), h=Math.abs(holeY-bodyEdgeY);
+          ctx.fillRect(px-STUB_W/2,top,STUB_W,h);
+        }
+      }
+      Shapes.drawBody(ctx,def,fakeInst,c,3*HOLE_PITCH+IC_BODY_MARGIN*2,bodyHalfH*2);
+      ctx.restore();
+      return;
+    }
+
     // Match buildLegs() in components-registry.js exactly: leg_span IS the
     // hole-column distance between the two outer legs, no -1.
     const span=def.leg_span||2;
@@ -1055,11 +1136,34 @@ const Board = (() => {
     if(defId!=='power_supply'){
       const def=ComponentRegistry.getById(defId);
       if(def){
-        const span=def.leg_span||1;
-        snapX=x-(span*HOLE_PITCH/2);
+        if(def.category==='ic' && (def.legs||0)>=8){
+          // DIP-8: the ghost is centered on the cursor (pins span
+          // -1.5..+1.5 * HOLE_PITCH), but buildDipLegs anchors pin 1 (the
+          // rightmost pin) at the passed column, not the center — so the
+          // snap offset has to be +1.5*HOLE_PITCH, not the generic 2/3-leg
+          // span/2 math below (which for this part's leg_span:0 would
+          // wrongly fall back to a single HOLE_PITCH/2 offset and land the
+          // real part shifted from where the ghost showed it).
+          snapX=x-(1.5*HOLE_PITCH);
+        } else {
+          const span=def.leg_span||1;
+          snapX=x-(span*HOLE_PITCH/2);
+        }
       }
     }
     const hole=xyToHole(snapX,y,DROP_SNAP_RADIUS);if(!hole) return;
+    if(typeof hole.row==='number'){
+      const dropDef=ComponentRegistry.getById(defId);
+      if(dropDef?.category==='ic' && (dropDef.legs||0)>=8){
+        // Only 2 of every 5 columns are valid DIP-8 anchors, so a drop
+        // aimed by eye lands in the invalid 3-column dead zone more often
+        // than not — snap to the nearest valid anchor instead of
+        // rejecting, the same way xyToHole already snaps to the nearest
+        // hole rather than requiring pixel-perfect aim.
+        const snapped=nearestValidDipAnchor(hole.col);
+        if(snapped!=null) hole.col=snapped;
+      }
+    }
     finalizePlacement(defId, hole, null);
   }
 
@@ -1152,12 +1256,23 @@ const Board = (() => {
     if(defId!=='power_supply'){
       const def=ComponentRegistry.getById(defId);
       if(def){
-        const span=def.leg_span||1;
-        snapX=x-(span*HOLE_PITCH/2);
+        if(def.category==='ic' && (def.legs||0)>=8){
+          snapX=x-(1.5*HOLE_PITCH); // see onDrop's matching comment
+        } else {
+          const span=def.leg_span||1;
+          snapX=x-(span*HOLE_PITCH/2);
+        }
       }
     }
     const hole=xyToHole(snapX,y,DROP_SNAP_RADIUS);
     if(!hole) return; // missed a valid hole — stay in paste mode, let them try again
+    {
+      const pasteDef=ComponentRegistry.getById(defId);
+      if(pasteDef?.category==='ic' && (pasteDef.legs||0)>=8){
+        const snapped=nearestValidDipAnchor(hole.col);
+        if(snapped!=null) hole.col=snapped;
+      }
+    }
     const placed=finalizePlacement(defId, hole, clipboardProps);
     if(!placed) return; // collided with an existing component — stay in paste mode, let them try elsewhere
     _pasteActive=false;
@@ -1306,7 +1421,7 @@ const Board = (() => {
 
   return{init,render,clear,loadLayout,getLayoutData,getPlaced,getWires,addWire,nextWireColor,
     setDragGhost,setStartWire,clearWire,setSelected,getSelected,getSelectedWireObj,deleteSelected,
-    onSelect,onPlace,holeToXY,xyToHole,redraw,setZoom,getBoardWidth:boardWidth,
+    onSelect,onPlace,holeToXY,xyToHole,redraw,setZoom,getZoom:()=>_zoom,getBoardWidth:boardWidth,
     beginPaste,cancelPaste,beginPasteWire,cancelPasteWire,isPastingWire,cancelActivePaste,
     holeOccupied,rowDisplayLabel};
 })();

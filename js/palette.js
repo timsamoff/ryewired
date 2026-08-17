@@ -100,6 +100,7 @@ const Palette = (() => {
   function buildDragImage(def) {
     try {
       const HOLE_PITCH = 20; // must match board.js's board geometry
+      const DIP_GAP = 18; // must match board.js's board geometry
       const bw0  = def.visual?.body_width  || 28;
       const bh0  = def.visual?.body_height || 14;
       const legCount = def.legs || 2;
@@ -107,13 +108,35 @@ const Palette = (() => {
       const STAND_GAP = 14;
       const halfLen = span*HOLE_PITCH/2; // real hole spacing, not body_width — matches board.js
       const isPowerSupply = def.id === 'power_supply';
+      const isDip = def.category === 'ic' && legCount >= 8;
+      // Match the size an ALREADY-PLACED IC renders at when dragged on-
+      // canvas — that path draws through the board's own zoomed/DPR-scaled
+      // canvas, so its on-screen size is real-board-units * current zoom.
+      // A fixed 0.5 scale (an earlier attempt) was wrong for the same
+      // reason a fixed 1.0 would be: this OS drag-image canvas is
+      // rendered at 1:1 CSS pixels, independent of the board's own zoom
+      // level, so matching the in-canvas drag's real behavior means
+      // scaling by whatever the board is CURRENTLY zoomed to, not a
+      // constant guess.
+      const DIP_GHOST_SCALE = (typeof Board !== 'undefined' && Board.getZoom) ? Board.getZoom() : 1;
 
       // For standing 3-leg parts, compute the true top-most extent instead
       // of guessing with a fixed padding constant — the round pot knob uses
       // bw0 as its radius (not bh0), so a bh0-only estimate under-sized the
       // canvas and clipped the top of the part.
       let W, H, vOffset;
-      if (legCount===3) {
+      if (isDip) {
+        // Real DIP-8 footprint (4 pin columns wide, straddling the center
+        // channel top-to-bottom) drawn at DIP_GHOST_SCALE (the board's
+        // current zoom) — matches the on-screen size an already-placed IC
+        // renders at while being dragged, per direct feedback that a
+        // fixed scale (both 1.0 and a guessed 0.5) didn't match that.
+        const dipPinSpanW = 3*HOLE_PITCH;
+        const dipRowSpanH = HOLE_PITCH+DIP_GAP;
+        H = (dipRowSpanH + 8) * DIP_GHOST_SCALE;
+        W = (dipPinSpanW + 8) * DIP_GHOST_SCALE;
+        vOffset = 0;
+      } else if (legCount===3) {
         const bodyHalf   = Math.max(bh0/2, bw0/2);
         const topExtent  = -(bh0/2+STAND_GAP) - bodyHalf; // highest point drawn
         const bottomExtent = 0; // legs terminate at the row line
@@ -141,6 +164,7 @@ const Palette = (() => {
       const ctx  = cvs.getContext('2d');
 
       ctx.translate(W/2, H/2 + vOffset);
+      if (isDip) ctx.scale(DIP_GHOST_SCALE, DIP_GHOST_SCALE); // canvas is already sized down; scale the real-board-unit drawing to match
       const ang = isPowerSupply ? Math.PI/2 : 0;
       ctx.rotate(ang);
       ctx.globalAlpha = 0.88;
@@ -154,7 +178,35 @@ const Palette = (() => {
       const fakeInst = {defId:def.id, props:{}, _brightness:0, _state:false};
       for (const p of (def.properties||[])) fakeInst.props[p.key] = p.default;
 
-      if (legCount===3) {
+      if (isDip) {
+        // Mirrors board.js's drawIcInst geometry exactly: 4 pin columns at
+        // -1.5,-0.5,0.5,1.5 * HOLE_PITCH from center, body edge IC_TAB_LEN
+        // short of the real hole row, a short tab filling that gap. Kept
+        // in sync by comment rather than a shared constants module, since
+        // this app has no build step to import across files — see
+        // board.js's IC_TAB_LEN/IC_STUB_COLOR/IC_BODY_MARGIN for the
+        // source values these mirror.
+        const IC_TAB_LEN = HOLE_PITCH*0.1405 + 2;
+        const IC_STUB_COLOR = '#8a8a8a';
+        const IC_BODY_MARGIN = 4;
+        const halfRowGapDip = HOLE_PITCH/2 + DIP_GAP/2;
+        const bodyHalfHDip = halfRowGapDip - IC_TAB_LEN;
+        const stubWDip = HOLE_PITCH*0.4;
+        const pinXs = [-1.5, -0.5, 0.5, 1.5].map(m => m*HOLE_PITCH);
+
+        ctx.fillStyle = IC_STUB_COLOR;
+        for (const px of pinXs) {
+          for (const sign of [-1, 1]) {
+            const bodyEdgeY = sign*bodyHalfHDip;
+            const holeY = sign*halfRowGapDip;
+            const top = Math.min(bodyEdgeY, holeY), h = Math.abs(holeY-bodyEdgeY);
+            ctx.fillRect(px-stubWDip/2, top, stubWDip, h);
+          }
+        }
+
+        const dipBodyW = 3*HOLE_PITCH + IC_BODY_MARGIN*2;
+        Shapes.drawBody(ctx, def, fakeInst, null, dipBodyW, bodyHalfHDip*2);
+      } else if (legCount===3) {
         // Standing style: body above, three parallel legs straight down —
         // matches board.js's drawInst() for transistor/potentiometer.
         const mid  = Math.round(span/2);

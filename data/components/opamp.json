@@ -22,8 +22,8 @@
   },
   "visual": {
     "body_color": "#1a1a1a",
-    "body_width": 40,
-    "body_height": 24,
+    "body_width": 60,
+    "body_height": 33,
     "lead_length": 10
   }
 }
