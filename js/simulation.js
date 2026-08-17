@@ -695,7 +695,7 @@ const Simulation = (() => {
     const bjtEdges      = []; // {a,b,Vf,inst,hfe,collector,pnp}  a/b = B-E junction's anode/cathode nets (base/emitter for NPN, emitter/base for PNP)
     const jfetEdges     = []; // {gateNet,sourceNet,drainNet,inst,idss,vgsOff}  N-channel only for now
     const mosfetEdges   = []; // {gateNet,sourceNet,drainNet,inst,vgsTh,k}  N-channel enhancement-mode only for now
-    const opampEdges    = []; // {vpNet,vmNet,voutNet,inst,unit,aol,headroom,railHi,railLo}  one entry per op-amp UNIT (2 per DIP-8 package)
+    const opampEdges    = []; // {vpNet,vmNet,voutNet,inst,unit,aol,headroomLo,headroomHi,railHi,railLo}  one entry per op-amp UNIT (2 per DIP-8 package)
 
     for (const inst of placed) {
       if (inst.failed) continue;
@@ -861,7 +861,15 @@ const Simulation = (() => {
         const mk = inst.props.model || 'JRC4558';
         const pm = def.model_params?.[mk] || {};
         const aol = pm.aol || 100000;
-        const headroom = pm.output_swing_headroom ?? 1.5;
+        // Separate low/high headroom, not one symmetric value — a real op-amp's
+        // output stage isn't always equally close to both rails. LM358/LM324
+        // swing to within millivolts of the negative rail (headroom_lo near 0)
+        // but still sit ~1.5V short of V+ (headroom_hi, ordinary NPN pull-up
+        // headroom) — genuinely asymmetric, not a symmetric rail-to-rail part.
+        // Each falls back to the single legacy output_swing_headroom field
+        // (then 1.5) so JRC4558/TL072 are unaffected by this split.
+        const headroomLo = pm.output_swing_headroom_lo ?? pm.output_swing_headroom ?? 1.5;
+        const headroomHi = pm.output_swing_headroom_hi ?? pm.output_swing_headroom ?? 1.5;
         const railLo = 0, railHi = _activeSupplyV ?? 9;
         const unitDefs = [
           { unit: 0, outIdx: 0, mIdx: 1, pIdx: 2 },
@@ -871,7 +879,7 @@ const Simulation = (() => {
           const voutNet = netOf(inst.legs[outIdx].row, inst.legs[outIdx].col);
           const vmNet   = netOf(inst.legs[mIdx].row, inst.legs[mIdx].col);
           const vpNet   = netOf(inst.legs[pIdx].row, inst.legs[pIdx].col);
-          opampEdges.push({ inst, unit, vpNet, vmNet, voutNet, aol, headroom, railHi, railLo });
+          opampEdges.push({ inst, unit, vpNet, vmNet, voutNet, aol, headroomLo, headroomHi, railHi, railLo });
         }
       }
     }
@@ -1113,7 +1121,7 @@ const Simulation = (() => {
         if (mIdx>=0) G[iRow][mIdx] += e.aol; else if (mFixed) I[iRow] -= e.aol*fixed.get(e.vmNet);
         if (oIdx>=0) { G[iRow][oIdx] += 1; G[oIdx][iRow] += 1; }
       } else {
-        const clampV = state === 'sat_high' ? (e.railHi - e.headroom) : (e.railLo + e.headroom);
+        const clampV = state === 'sat_high' ? (e.railHi - e.headroomHi) : (e.railLo + e.headroomLo);
         if (oIdx>=0) { G[oIdx][oIdx] += BIG_G; I[oIdx] += BIG_G*clampV; }
         G[iRow][iRow] += BIG_G; // inert row — Iout unconstrained/unused while saturated
       }
@@ -1532,7 +1540,7 @@ const Simulation = (() => {
         // range. Verified in isolation this is what lets the relaxation
         // correctly re-enter linear mode once an overdriven input recedes.
         const linearVout = e.aol * (vp - vm);
-        const highClamp = e.railHi - e.headroom, lowClamp = e.railLo + e.headroom;
+        const highClamp = e.railHi - e.headroomHi, lowClamp = e.railLo + e.headroomLo;
         const newState = linearVout > highClamp ? 'sat_high' : (linearVout < lowClamp ? 'sat_low' : 'linear');
         if (newState !== opampStateArr[idx]) { opampStateArr[idx] = newState; changed = true; }
       });

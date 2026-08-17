@@ -1165,11 +1165,15 @@ const AudioEngine = (() => {
           ? parseFloat(WorkbenchStrip.getPermanentState()?.power?.voltage) : NaN;
         const mk = inst.props.model || 'JRC4558';
         const pm = def.model_params?.[mk] || {};
-        const headroom = pm.output_swing_headroom ?? 1.5;
+        // See simulation.js's matching split for why low/high headroom differ
+        // (e.g. LM358 swings near ground but not near V+) — same fallback
+        // shape here so JRC4558/TL072 clip identically to before the split.
+        const headroomLo = pm.output_swing_headroom_lo ?? pm.output_swing_headroom ?? 1.5;
+        const headroomHi = pm.output_swing_headroom_hi ?? pm.output_swing_headroom ?? 1.5;
         let clipUp = 1, clipDown = 1;
         if (Number.isFinite(vOut) && Number.isFinite(supplyV) && supplyV > 0) {
-          clipUp   = Math.max((supplyV - headroom) - vOut, 1e-3);
-          clipDown = Math.max(vOut - headroom, 1e-3);
+          clipUp   = Math.max((supplyV - headroomHi) - vOut, 1e-3);
+          clipDown = Math.max(vOut - headroomLo, 1e-3);
         }
         const scale = Math.max(clipUp, clipDown, 1e-3) / 0.9;
         const g = Number.isFinite(gain) ? gain : 1;

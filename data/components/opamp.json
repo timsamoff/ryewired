@@ -9,12 +9,13 @@
   "leg_labels": ["1OUT", "1IN-", "1IN+", "VCC-", "2IN+", "2IN-", "2OUT", "VCC+"],
   "properties": [
     { "key": "model", "labelKey": "component.opamp.model.label", "type": "select",
-      "options": ["JRC4558", "TL072"], "default": "JRC4558",
+      "options": ["JRC4558", "TL072", "LM358"], "default": "JRC4558",
       "hintKey": "component.opamp.model.hint" }
   ],
   "model_params": {
     "JRC4558": { "aol": 100000, "output_swing_headroom": 1.5, "supply_min": 4, "supply_max": 18 },
-    "TL072":   { "aol": 200000, "output_swing_headroom": 1.0, "supply_min": 3.5, "supply_max": 15 }
+    "TL072":   { "aol": 200000, "output_swing_headroom": 1.0, "supply_min": 3.5, "supply_max": 15 },
+    "LM358":   { "aol": 100000, "output_swing_headroom_lo": 0.02, "output_swing_headroom_hi": 1.5, "supply_min": 3, "supply_max": 32 }
   },
   "behavior": { "type": "opamp_dual" },
   "failure_modes": {
