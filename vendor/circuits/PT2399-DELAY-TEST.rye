@@ -1,0 +1,98 @@
+{
+  "components": [
+    {
+      "instanceId": "U1",
+      "defId": "pt2399",
+      "legs": [
+        { "row": 4, "col": 32 },
+        { "row": 4, "col": 31 },
+        { "row": 4, "col": 30 },
+        { "row": 4, "col": 29 },
+        { "row": 4, "col": 28 },
+        { "row": 4, "col": 27 },
+        { "row": 4, "col": 26 },
+        { "row": 4, "col": 25 },
+        { "row": 9, "col": 25 },
+        { "row": 9, "col": 26 },
+        { "row": 9, "col": 27 },
+        { "row": 9, "col": 28 },
+        { "row": 9, "col": 29 },
+        { "row": 9, "col": 30 },
+        { "row": 9, "col": 31 },
+        { "row": 9, "col": 32 }
+      ],
+      "props": { "model": "PT2399", "title": "U1" }
+    },
+    {
+      "instanceId": "R1",
+      "defId": "resistor",
+      "legs": [{ "row": 5, "col": 55 }, { "row": 6, "col": 26 }],
+      "props": { "resistance": 10000, "resistance__unit": "Ω", "power_rating": "0.5W", "tolerance": "5%", "title": "R1 (in)" }
+    },
+    {
+      "instanceId": "R2",
+      "defId": "resistor",
+      "legs": [{ "row": 6, "col": 28 }, { "row": 5, "col": 13 }],
+      "props": { "resistance": 10000, "resistance__unit": "Ω", "power_rating": "0.5W", "tolerance": "5%", "title": "R2 (wet)" }
+    },
+    {
+      "instanceId": "RV1",
+      "defId": "potentiometer",
+      "legs": [{ "row": 1, "col": 19 }, { "row": 1, "col": 20 }, { "row": 1, "col": 21 }],
+      "props": { "resistance": 100000, "taper": "Linear (B)", "wiper": 0.5, "title": "Speed" }
+    },
+    {
+      "instanceId": "RV2",
+      "defId": "potentiometer",
+      "legs": [{ "row": 1, "col": 15 }, { "row": 1, "col": 16 }, { "row": 1, "col": 17 }],
+      "props": { "resistance": 50000, "taper": "Linear (B)", "wiper": 0.4, "title": "Feedback" }
+    },
+    {
+      "instanceId": "RV3",
+      "defId": "potentiometer",
+      "legs": [{ "row": 1, "col": 10 }, { "row": 1, "col": 11 }, { "row": 1, "col": 12 }],
+      "props": { "resistance": 100000, "taper": "Linear (B)", "wiper": 0.5, "title": "Mix" }
+    }
+  ],
+  "wires": [
+    { "id": "W1", "r1": "rtp", "c1": 32, "r2": 3, "c2": 32, "color": "#000000" },
+    { "id": "W2", "r1": "rtm", "c1": 30, "r2": 3, "c2": 30, "color": "#000000" },
+
+    { "id": "W3", "r1": 3, "c1": 27, "r2": 2, "c2": 19, "color": "#cc33cc" },
+    { "id": "W4", "r1": 2, "c1": 27, "r2": 0, "c2": 20, "color": "#cc33cc" },
+    { "id": "W5", "r1": "rtm", "c1": 21, "r2": 0, "c2": 21, "color": "#000000" },
+
+    { "id": "W6", "r1": 7, "c1": 26, "r2": 2, "c2": 15, "color": "#00ccff" },
+    { "id": "W7", "r1": 7, "c1": 28, "r2": 2, "c2": 17, "color": "#ffaa00" },
+
+    { "id": "W8", "r1": 6, "c1": 13, "r2": 2, "c2": 12, "color": "#ff6699" },
+    { "id": "W9", "r1": 6, "c1": 55, "r2": 2, "c2": 10, "color": "#ffffff" },
+    { "id": "W10", "r1": 0, "c1": 11, "r2": 5, "c2": 6, "color": "#33ff99" }
+  ],
+  "permanentDevices": {
+    "power": {
+      "voltage": 5,
+      "current_limit_ma": 500,
+      "reverse_polarity": false,
+      "power_on": true,
+      "battery_sag": 0,
+      "internal_resistance": 1
+    },
+    "input": {
+      "waveform": "Sine",
+      "frequency": 400,
+      "amplitude": 0.35,
+      "dc_offset": 0,
+      "phase": 0,
+      "looping": true,
+      "audio_file": null,
+      "audio_source": "upload",
+      "source_impedance": 10000
+    },
+    "output": {
+      "volume": 0.5,
+      "mute": false,
+      "load_impedance": 1000000
+    }
+  }
+}

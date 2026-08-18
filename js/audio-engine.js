@@ -601,6 +601,20 @@ const AudioEngine = (() => {
     const frontier = [inputNet];
     const visitedNets = new Set(frontier);
     let stageCount = 0;
+    // Tracks which of an instance's signalLegPairs indices have ALREADY been
+    // built, across different frontier-net passes — an instance only joins
+    // `used` once every pair it offers has been built, not after the FIRST
+    // pass that matches any one of them. Needed for any component whose two
+    // pairs can be reached from two genuinely different, independently-
+    // arriving nets (a two-source blend pot: dry reaches CCW on one pass,
+    // wet reaches CW on a LATER pass, once something upstream of it has
+    // built that far). Marking `used` after the dry-only pass, as this loop
+    // used to, permanently discarded the wet hop the moment its net became
+    // reachable — found on a real PT2399 mix-pot circuit where the wet path
+    // was built, fed, and never reached the output, the same "stage exists
+    // but isn't reachable" failure class as the Electra Distortion bug this
+    // file's own history already documents, just via a different mechanism.
+    const builtPairIdx = new Map(); // instanceId -> Set of pair indices already built
 
     while (frontier.length && stageCount < MAX_STAGES) {
       const net = frontier.shift();
@@ -612,6 +626,7 @@ const AudioEngine = (() => {
         const def = ComponentRegistry.getById(inst.defId);
         if (!def) continue;
         const pairs = signalLegPairs(inst, def);
+        const doneIdx = builtPairIdx.get(inst.instanceId) || new Set();
         // Every pair that touches the net being expanded gets its own
         // stage, not just the first match. A potentiometer's wiper
         // genuinely feeds BOTH outer legs at once in a real circuit; a
@@ -626,15 +641,47 @@ const AudioEngine = (() => {
         // so the amplified drain signal, the actual output, was never
         // built at all. Building every match fixes that without needing
         // to guess a "right" pair order per topology.
-        let matchedAny = false;
-        for (const pair of pairs) {
+        // A two-source blend pot's wiper net is always a SINK for this
+        // component (both outer arms conduct TOWARD the wiper), never a
+        // source to hop back out through — unlike a normal volume/tone/fuzz
+        // pot, where the wiper net becoming a frontier item is exactly how
+        // its output correctly continues to the next stage. Detected the
+        // same structural way buildAudioStage does (the pot's OTHER outer
+        // leg, from whichever leg the wiper reached, is neither AC ground
+        // nor the supply rail — a real single-source pot always grounds or
+        // biases its unused outer leg). Computed once per instance per pass,
+        // from the pot's own real leg nets, not from entryNet/exitNet (which
+        // are hop-direction-dependent and would beg the question).
+        // Without this, the wiper net entering the frontier (correctly, from
+        // the FIRST arm reaching it) let the walk treat the wiper as a new
+        // expansion point and hop BACKWARD through the second arm (wiper->
+        // CW instead of the real wet-signal CW->wiper direction) — found on
+        // a real PT2399 mix-pot circuit, where this backward hop silently
+        // consumed the pair slot the genuine wet->wiper hop needed, so the
+        // delayed signal never reached Output at all despite the graph
+        // otherwise looking complete.
+        let wiperIsSinkOnly = false;
+        if (def.behavior?.type === 'potentiometer' && inst.legs.length >= 3) {
+          const ccwNetChk = nets.find(nets.key(inst.legs[0].row, inst.legs[0].col));
+          const wprNetChk = nets.find(nets.key(inst.legs[1].row, inst.legs[1].col));
+          const cwNetChk  = nets.find(nets.key(inst.legs[2].row, inst.legs[2].col));
+          if (net === wprNetChk) {
+            const ccwIsAcGround = ccwNetChk === groundNet || ccwNetChk === supplyNet;
+            const cwIsAcGround  = cwNetChk === groundNet || cwNetChk === supplyNet;
+            wiperIsSinkOnly = !ccwIsAcGround && !cwIsAcGround;
+          }
+        }
+        for (let pi = 0; pi < pairs.length; pi++) {
+          if (doneIdx.has(pi)) continue; // this pair already built on an earlier pass
+          const pair = pairs[pi];
           const netA = nets.find(nets.key(pair[0].row, pair[0].col));
           const netB = nets.find(nets.key(pair[1].row, pair[1].col));
           let entryNet = null, otherNet = null;
           if (netA === net && netB !== net) { entryNet = netA; otherNet = netB; }
           else if (netB === net && netA !== net) { entryNet = netB; otherNet = netA; }
           else continue; // this pair doesn't touch the net we're expanding from
-          matchedAny = true;
+          if (wiperIsSinkOnly) continue; // see the wiperIsSinkOnly comment above — don't hop backward out through a blend pot's wiper
+          doneIdx.add(pi);
 
           const built = buildAudioStage(ctx, inst, def, nets, placed, entryNet, otherNet, groundNet, supplyNet,
             inputNet, outputNet, sourceImpedance, loadImpedance);
@@ -655,7 +702,10 @@ const AudioEngine = (() => {
 
           if (!isAcGround(otherNet) && !visitedNets.has(otherNet)) { visitedNets.add(otherNet); frontier.push(otherNet); }
         }
-        if (matchedAny) { used.add(inst.instanceId); stageCount++; }
+        if (doneIdx.size) {
+          builtPairIdx.set(inst.instanceId, doneIdx);
+          if (doneIdx.size >= pairs.length) { used.add(inst.instanceId); stageCount++; }
+        }
       }
     }
 
@@ -731,6 +781,18 @@ const AudioEngine = (() => {
           [inst.legs[5], inst.legs[6]], // unit 1: 2IN- -> 2OUT
         ];
       }
+      case 'pt2399_delay': {
+        // One hop, OP1-IN -> OP2-OUT: a real PT2399 pedal circuit's signal
+        // enters at OP1's input (leg 9) and the delayed/dry-mixed result
+        // exits at OP2's output (leg 11) — see pt2399.json's leg_labels for
+        // the full real pinout. Unlike opamp_dual, there's only one real
+        // signal path through this chip (no separate inverting/non-inverting
+        // ambiguity to offer both sides of), since OP1/OP2 aren't a matched
+        // differential pair the user wires arbitrarily — they're the fixed
+        // input/output stages of one internal delay line.
+        if (inst.legs.length < 16) return [];
+        return [[inst.legs[9], inst.legs[11]]]; // OP1-IN -> OP2-OUT
+      }
       default: return [];
     }
   }
@@ -769,6 +831,105 @@ const AudioEngine = (() => {
     if (Number.isFinite(actual)) return actual;
     const nominal = parseFloat(inst.props[key]);
     return Number.isFinite(nominal) ? nominal : fallback;
+  }
+
+  // Real resistance wired to a specific net, from a plain resistor or a
+  // potentiometer — used for the PT2399's VCO pin, where the delay time is
+  // set by whatever the user actually wired there, not a hardcoded knob
+  // value. Unlike acLoadResistance, this does NOT require the far leg to
+  // reach AC ground: VCO's timing resistor is read for its own value, not as
+  // a loading term on some other net.
+  //
+  // A pot's EFFECTIVE resistance depends on how it's wired, and getting this
+  // wrong makes the knob silently inert — a real bug caught while laying out
+  // the PT2399 demo circuit, not a hypothetical: the first version of this
+  // function always returned the pot's full nameplate value no matter the
+  // wiper position, which is only correct for the "used as a plain 2-
+  // terminal resistor" case (CCW-to-CW, wiper unused). The standard way to
+  // make a TIMING pot sweepable is a rheostat: the wiper shorted to one
+  // outer leg, so only the wiper-to-far-end track segment is actually in
+  // circuit, and that segment's length genuinely depends on wiper position.
+  // Three real wiring shapes, distinguished by which legs touch `net`:
+  //  - wiper AND one outer leg both touch net (rheostat) -> the effective
+  //    resistance is the OTHER (non-shorted) segment: Rt*(1-wiper) if CCW is
+  //    shorted to the wiper, Rt*wiper if CW is shorted to the wiper.
+  //  - only ONE outer leg touches net, wiper does not -> plain 2-terminal
+  //    use, full Rt (matches a plain resistor's behavior).
+  //  - only the wiper touches net (no outer leg) -> genuinely ambiguous
+  //    without a second net reference, same convention as the full Rt case.
+  // Returns null (not 0) when nothing recognizable is found, so callers can
+  // tell "no timing component wired" apart from "wired at zero ohms."
+  function resistorOnNet(net, nets, placed, skipInstanceId) {
+    if (net == null) return null;
+    const netOf = (row, col) => nets.find(nets.key(row, col));
+    for (const p of placed) {
+      if (p.failed || p.instanceId === skipInstanceId) continue;
+      const def = ComponentRegistry.getById(p.defId);
+      const bt = def?.behavior?.type;
+      if (bt === 'resistor' && p.legs.length >= 2) {
+        const a = netOf(p.legs[0].row, p.legs[0].col);
+        const b = netOf(p.legs[p.legs.length-1].row, p.legs[p.legs.length-1].col);
+        if (a === net || b === net) {
+          const R = resolvedValue(p, 'resistance', 0);
+          if (R > 0) return R;
+        }
+      } else if (bt === 'potentiometer' && p.legs.length >= 3) {
+        const ccw = netOf(p.legs[0].row, p.legs[0].col);
+        const wpr = netOf(p.legs[1].row, p.legs[1].col);
+        const cw  = netOf(p.legs[2].row, p.legs[2].col);
+        const ccwOnNet = ccw === net, cwOnNet = cw === net, wprOnNet = wpr === net;
+        if (!ccwOnNet && !cwOnNet && !wprOnNet) continue;
+        const Rt = resolvedValue(p, 'resistance', 0);
+        if (Rt <= 0) continue;
+        const parsedWiper = parseFloat(p.props.wiper);
+        const wiper = Number.isNaN(parsedWiper) ? 0.5 : parsedWiper;
+        if (wprOnNet && ccwOnNet && !cwOnNet) return Rt * (1 - wiper); // rheostat, CCW shorted to wiper
+        if (wprOnNet && cwOnNet && !ccwOnNet) return Rt * wiper;       // rheostat, CW shorted to wiper
+        return Rt; // plain 2-terminal use, or wiper-only with no outer-leg reference
+      }
+    }
+    return null;
+  }
+
+  // A repeats/feedback knob is a potentiometer wired as a variable divider:
+  // one outer leg on the wet (delayed) net, the other reaching back toward
+  // the dry input net, wiper fraction sets how much returns. Finds that pot
+  // and returns its real solved wiper fraction (0-1) directly — same "the
+  // pot IS the control, modelled once" philosophy as every other pot in this
+  // app, deliberately not a resistance-derived formula (a repeats pot's
+  // RESISTANCE isn't what sets the amount, its wiper POSITION is). Depth-1
+  // only: the far outer leg either lands directly on toNet, or reaches it
+  // through exactly one more resistor — covers the common "pot output ->
+  // series resistor -> op-amp input" shape without open-ended recursion for
+  // a control this simple. Returns null when nothing recognizable is wired,
+  // so "no feedback pot" reads as null (zero repeats), not a guessed default.
+  function feedbackWiperFraction(fromNet, toNet, nets, placed, skipInstanceId) {
+    if (fromNet == null || toNet == null) return null;
+    const netOf = (row, col) => nets.find(nets.key(row, col));
+    const reachesToNet = net => {
+      if (net === toNet) return true;
+      for (const p of placed) {
+        if (p.failed || p.instanceId === skipInstanceId) continue;
+        const def = ComponentRegistry.getById(p.defId);
+        if (def?.behavior?.type !== 'resistor' || p.legs.length < 2) continue;
+        const a = netOf(p.legs[0].row, p.legs[0].col);
+        const b = netOf(p.legs[p.legs.length-1].row, p.legs[p.legs.length-1].col);
+        if ((a === net && b === toNet) || (b === net && a === toNet)) return true;
+      }
+      return false;
+    };
+    for (const p of placed) {
+      if (p.failed || p.instanceId === skipInstanceId || p.legs.length < 3) continue;
+      const def = ComponentRegistry.getById(p.defId);
+      if (def?.behavior?.type !== 'potentiometer') continue;
+      const ccw = netOf(p.legs[0].row, p.legs[0].col);
+      const cw  = netOf(p.legs[2].row, p.legs[2].col);
+      const farLeg = (ccw === fromNet) ? cw : (cw === fromNet) ? ccw : null;
+      if (farLeg == null || !reachesToNet(farLeg)) continue;
+      const parsedWiper = parseFloat(p.props.wiper);
+      return Number.isNaN(parsedWiper) ? 0.5 : parsedWiper;
+    }
+    return null;
   }
 
   // Resistance from a net to AC ground, used to give a coupling capacitor its
@@ -1084,13 +1245,59 @@ const AudioEngine = (() => {
         const parsedWiper = parseFloat(inst.props.wiper);
         const wiper = Number.isNaN(parsedWiper) ? 0.5 : parsedWiper; // NOT `|| 0.5` — that treats a real, valid wiper of exactly 0 as missing and silently substitutes 0.5
         const pos   = (inst.props.taper||'').includes('Audio') ? Math.pow(wiper,2) : wiper;
-        const solved = netGain(entryNet, exitNet);
-        const g     = ctx.createGain();
-        g.gain.value = solved != null ? solved : pos;
+
+        // Two-source blend pot (a dry/wet mix control): BOTH outer legs are
+        // independently signal-carrying nets, not "signal in, ground/bias
+        // out" like every volume/tone/fuzz pot this model was built around.
+        // netGain only ever injects ONE 1V source (Input) into the AC solve,
+        // so it has no way to represent a second independent source driving
+        // the far outer leg — measured directly on this circuit's Mix pot:
+        // both outer legs came back reading ~1.0 relative to Input (no real
+        // attenuation, no blend), because the wet/delayed branch simply
+        // isn't part of what the AC solve was ever asked to drive.
+        //
+        // signalLegPairs offers [wiper,CCW] and [wiper,CW] — the walk's own
+        // net-matching decides which of entryNet/exitNet ends up being the
+        // wiper vs. the outer leg per hop (it's whichever one matches the
+        // net currently being expanded from), so this can't assume a fixed
+        // role for either parameter; it has to identify the wiper net and
+        // the OUTER leg THIS hop is carrying, whichever param each landed in.
+        const ccwNet = nets.find(nets.key(inst.legs[0].row, inst.legs[0].col));
+        const wprNet = nets.find(nets.key(inst.legs[1].row, inst.legs[1].col));
+        const cwNet  = nets.find(nets.key(inst.legs[2].row, inst.legs[2].col));
+        const thisOuterNet = (entryNet === ccwNet || exitNet === ccwNet) ? ccwNet
+                            : (entryNet === cwNet  || exitNet === cwNet)  ? cwNet : null;
+        const otherOuterNet = (thisOuterNet === ccwNet) ? cwNet : (thisOuterNet === cwNet) ? ccwNet : null;
+        // Detected structurally: the OTHER outer leg (not this hop's own)
+        // is neither AC ground nor the supply rail — a real volume/tone/
+        // fuzz pot always grounds or biases its unused outer leg, so a real
+        // signal net there is the one thing a two-source blend pot always
+        // shows and a normal pot never does.
+        const otherIsAcGround = otherOuterNet != null && (otherOuterNet === groundNet || otherOuterNet === supplyNet);
+        const isTwoSourceBlend = otherOuterNet != null && !otherIsAcGround;
+
+        let gainValue;
+        if (isTwoSourceBlend) {
+          // Crossfade weight for THIS hop's own outer leg — (1-pos) for the
+          // CCW/dry side, pos for the CW/wet side (matches a real linear-
+          // taper pot's physical wiring: wiper position 0 = fully CCW output,
+          // 1 = fully CW). Both hops share the SAME wiper net bus (ensureBus
+          // is memoized per net), so their two gain-scaled contributions
+          // genuinely sum there — no separate merge step needed.
+          gainValue = (thisOuterNet === ccwNet) ? (1 - pos) : pos;
+        } else {
+          const solved = netGain(entryNet, exitNet);
+          gainValue = solved != null ? solved : pos;
+        }
+        const g = ctx.createGain();
+        g.gain.value = gainValue;
         inst._audioNode = g;
         // Refreshed from the solve every tick, same as transistor stages, so
-        // turning the knob moves the real network ratio rather than a fraction.
-        _livePotStages.push({ inst, g, entryNet, exitNet });
+        // turning the knob moves the real network ratio rather than a
+        // fraction — updatePotWiper (see below) needs to know which branch
+        // this stage used, so a live wiper change re-derives correctly
+        // rather than always re-reading netGain.
+        _livePotStages.push({ inst, g, entryNet, exitNet, isTwoSourceBlend, blendIsCcw: thisOuterNet === ccwNet });
         return { in: g, out: g };
       }
       case 'bjt_npn': case 'bjt_pnp': {
@@ -1183,6 +1390,62 @@ const AudioEngine = (() => {
         const post = ctx.createGain(); post.gain.value = scale;
         pre.connect(sh); sh.connect(post);
         return { in: pre, out: post, nodes: [pre, sh, post] };
+      }
+      case 'pt2399_delay': {
+        // Real Web Audio delay line + feedback loop, not a gain/clip stage —
+        // this chip's whole job is a time-domain effect the existing
+        // gain-node/WaveShaper vocabulary can't express (see CLAUDE.md's
+        // scoping note on this component). Delay TIME comes from the VCO
+        // pin's real wired resistance (pin 6, leg index 5), same "read the
+        // actual netlist, don't hardcode a knob value" philosophy as every
+        // other derived parameter in this engine. Repeats/feedback amount
+        // comes from whatever resistor or pot the user wires from OP2-OUT
+        // back toward OP1-IN — a real PT2399 pedal has no dedicated feedback
+        // pin, that mixing is always external, so reading it from the real
+        // wiring (or getting zero repeats if nothing is wired that way) is
+        // the electrically honest choice, not a fixed default.
+        const vcoNet = nets.find(nets.key(inst.legs[5].row, inst.legs[5].col));
+        const vcoR = resistorOnNet(vcoNet, nets, placed, inst.instanceId);
+        // Linear map through the one real datasheet anchor (20k ohm =~
+        // 270ms) — flagged as a calibration approximation, same honesty
+        // standard as VOLTS_PER_SIGNAL_UNIT elsewhere in this file, since
+        // the datasheet gives one point, not a curve. Clamped to a sane
+        // range so a missing/zero-ohm VCO net (nothing wired, or a dead
+        // short) doesn't produce a broken or silent delay time.
+        const PT2399_MS_PER_OHM = 270 / 20000;
+        const delayMs = vcoR != null ? Utils.clamp(vcoR * PT2399_MS_PER_OHM, 20, 800) : 270;
+        const delaySec = delayMs / 1000;
+
+        const delay = ctx.createDelay(1); // 1s max — comfortably above the 800ms clamp above
+        delay.delayTime.value = delaySec;
+
+        // Feedback: a real repeats knob is a pot wired as a variable
+        // divider (its WIPER position sets how much wet signal returns to
+        // the input), not a fixed resistor whose raw value alone would set
+        // it — same "read the network's real solved position" philosophy
+        // every other pot in this app already uses (volume/tone/fuzz all
+        // work this way; a resistance-to-gain formula would have been the
+        // one exception with no real basis). If a pot has one outer leg on
+        // OP2-OUT's net (this stage's own exit net) and the other outer leg
+        // reaches back toward OP1-IN's net (entryNet), its real wiper
+        // fraction (0-1) IS the feedback amount. Clamped below 1 so a pot
+        // run to its extreme can't create true runaway self-oscillation in
+        // the audio graph (a real PT2399 repeat-to-infinity does self-
+        // oscillate, but an uncapped feedback>=1 DelayNode loop grows
+        // without bound in Web Audio, which is a rendering hazard, not a
+        // faithful "it squeals" — 0.92 leaves genuine near-infinite-repeat
+        // territory audible without divergence).
+        const fbWiper = feedbackWiperFraction(exitNet, entryNet, nets, placed, inst.instanceId);
+        const feedbackGain = ctx.createGain();
+        // No wired feedback pot -> genuinely zero repeats, not a guessed
+        // default: a real PT2399 with nothing feeding OP2 back to OP1 just
+        // plays the single delayed copy once.
+        feedbackGain.gain.value = fbWiper != null ? Utils.clamp(fbWiper, 0, 0.92) : 0;
+
+        delay.connect(feedbackGain);
+        feedbackGain.connect(delay);
+
+        return { in: delay, out: delay, nodes: [delay, feedbackGain] };
       }
       case 'diode': {
         const mk  = inst.props.model || '1N4148';
@@ -1386,7 +1649,17 @@ const AudioEngine = (() => {
     // Pots too: their ratio is network-derived, so it moves when the knob
     // moves AND when anything around them changes (another pot loading them,
     // a transistor's bias shifting its input impedance, and so on).
-    for (const { inst, g, entryNet, exitNet } of _livePotStages) {
+    for (const { inst, g, entryNet, exitNet, isTwoSourceBlend, blendIsCcw } of _livePotStages) {
+      if (isTwoSourceBlend) {
+        // See buildAudioStage's matching comment: netGain can't represent a
+        // second independent source, so a live wiper move re-derives the
+        // same crossfade-weight formula build time used, not netGain.
+        const parsedWiper = parseFloat(inst.props.wiper);
+        const wiper = Number.isNaN(parsedWiper) ? 0.5 : parsedWiper;
+        const pos = (inst.props.taper||'').includes('Audio') ? Math.pow(wiper,2) : wiper;
+        g.gain.setTargetAtTime(blendIsCcw ? (1 - pos) : pos, _ctx.currentTime, 0.01);
+        continue;
+      }
       const solved = netGain(entryNet, exitNet);
       if (solved == null) continue; // leave the build-time value in place
       g.gain.setTargetAtTime(solved, _ctx.currentTime, 0.01);
