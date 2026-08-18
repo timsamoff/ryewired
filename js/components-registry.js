@@ -13,6 +13,15 @@ const ComponentRegistry = (() => {
   };
   function categoryLabel(cat) { return I18n.t(CATEGORY_LABEL_KEYS[cat] || cat); }
 
+  // Second-level grouping within a category — currently only "ic" uses this
+  // (linear/timer/logic), since it's the one category expected to hold
+  // behaviorally distinct component families. Falls back to the raw
+  // subcategory string if no key is registered, same pattern as categoryLabel.
+  const SUBCATEGORY_LABEL_KEYS = {
+    linear:'app.subcategory.linear', timer:'app.subcategory.timer', logic:'app.subcategory.logic'
+  };
+  function subcategoryLabel(sub) { return I18n.t(SUBCATEGORY_LABEL_KEYS[sub] || sub); }
+
   async function load() {
     _defs = await Storage.loadAllComponents();
     _defs.sort((a,b) => {
@@ -165,7 +174,8 @@ const ComponentRegistry = (() => {
         { row, col: clampCol(col + span) }
       ];
     }
-    if (count === 8) return buildDipLegs(row, col); // DIP-8 dual-op-amp package — see buildDipLegs
+    if (count === 8) return buildDipLegs(row, col, 4); // DIP-8 dual-op-amp package — see buildDipLegs
+    if (count === 16) return buildDipLegs(row, col, 8); // DIP-16 (PT2399) — same real-DIP pin geometry, doubled
     // Generic: spread evenly
     const legs = [];
     for (let i = 0; i < count; i++) {
@@ -194,7 +204,7 @@ const ComponentRegistry = (() => {
   // pin's column-to-pin-number mapping stays internally consistent, which
   // this does. legs[4] (pin 5) sits directly above legs[3] (pin 4), and
   // legs[4..7] continue back to directly above legs[0] (pin 8 above pin 1).
-  function buildDipLegs(row, col) {
+  function buildDipLegs(row, col, perSide) {
     // Always straddles the board's one and only center channel — rows 4 and
     // 9 are the two rows flanking it, NOT 4 and 5. Verified directly
     // against board.js's buildLayout(): row 5's y is assigned FIRST in the
@@ -210,12 +220,12 @@ const ComponentRegistry = (() => {
     // intended one-row-of-leads look.
     const bottomRow = 4, topRow = 9;
     const legs = [];
-    for (let i = 0; i < 4; i++) legs.push({ row: bottomRow, col: clampCol(col - i) }); // pins 1-4
-    for (let i = 0; i < 4; i++) legs.push({ row: topRow, col: clampCol(col - (3 - i)) }); // pins 5-8, pin5 above pin4's column, pin8 above pin1's column
+    for (let i = 0; i < perSide; i++) legs.push({ row: bottomRow, col: clampCol(col - i) }); // pins 1..perSide
+    for (let i = 0; i < perSide; i++) legs.push({ row: topRow, col: clampCol(col - (perSide - 1 - i)) }); // pins perSide+1..2*perSide, mirrored back over the same columns
     return legs;
   }
 
   function clampCol(col) { return Math.max(0, Math.min(62, col)); }
 
-  return { load, getAll, getById, search, createInstance, applyModelDefaults, rerollTolerance, categoryLabel };
+  return { load, getAll, getById, search, createInstance, applyModelDefaults, rerollTolerance, categoryLabel, subcategoryLabel };
 })();

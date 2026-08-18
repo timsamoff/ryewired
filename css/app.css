@@ -258,6 +258,16 @@ input, select, textarea { font-family: var(--font-ui); }
   letter-spacing: 0.16em; color: var(--text-dim); text-transform: uppercase;
 }
 
+/* Second-level heading inside a category (e.g. "Linear" / "Timer /
+   Oscillator" under ICs) — same treatment as .palette-category but smaller
+   and indented, so it reads as subordinate rather than a sibling section. */
+.palette-subcategory {
+  padding: 6px 12px 3px 18px;
+  font-family: var(--font-mono); font-size: 8px; font-weight: 600;
+  letter-spacing: 0.14em; color: var(--text-dim); text-transform: uppercase;
+  opacity: 0.75;
+}
+
 .palette-item {
   display: flex; align-items: center; gap: 9px; padding: 6px 12px;
   cursor: grab; border-left: 2px solid transparent;

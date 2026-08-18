@@ -41,7 +41,7 @@ const Palette = (() => {
       catEl.className = 'palette-category';
       catEl.textContent = ComponentRegistry.categoryLabel(cat);
       _list.appendChild(catEl);
-      for (const def of groups[cat]) _list.appendChild(buildItem(def));
+      appendGroupItems(groups[cat]);
     }
     for (const [cat, list] of Object.entries(groups)) {
       if (order.includes(cat)) continue;
@@ -49,6 +49,34 @@ const Palette = (() => {
       catEl.className = 'palette-category';
       catEl.textContent = cat;
       _list.appendChild(catEl);
+      appendGroupItems(list);
+    }
+  }
+
+  // Renders a category's items, sub-grouping by def.subcategory when any
+  // member of the group declares one — a plain flat list otherwise, so
+  // categories that never adopt subcategories (everything but "ic" today)
+  // render exactly as before. Items with no subcategory inside a group that
+  // DOES use them fall into an unheaded leading block, so a component isn't
+  // forced to pick a subcategory just because siblings in its category do.
+  function appendGroupItems(defs) {
+    if (!defs.some(d => d.subcategory)) {
+      for (const def of defs) _list.appendChild(buildItem(def));
+      return;
+    }
+    const bare = defs.filter(d => !d.subcategory);
+    for (const def of bare) _list.appendChild(buildItem(def));
+    const subGroups = {};
+    for (const def of defs) {
+      if (!def.subcategory) continue;
+      if (!subGroups[def.subcategory]) subGroups[def.subcategory] = [];
+      subGroups[def.subcategory].push(def);
+    }
+    for (const [sub, list] of Object.entries(subGroups)) {
+      const subEl = document.createElement('div');
+      subEl.className = 'palette-subcategory';
+      subEl.textContent = ComponentRegistry.subcategoryLabel(sub);
+      _list.appendChild(subEl);
       for (const def of list) _list.appendChild(buildItem(def));
     }
   }
@@ -126,12 +154,16 @@ const Palette = (() => {
       // canvas and clipped the top of the part.
       let W, H, vOffset;
       if (isDip) {
-        // Real DIP-8 footprint (4 pin columns wide, straddling the center
-        // channel top-to-bottom) drawn at DIP_GHOST_SCALE (the board's
-        // current zoom) — matches the on-screen size an already-placed IC
-        // renders at while being dragged, per direct feedback that a
-        // fixed scale (both 1.0 and a guessed 0.5) didn't match that.
-        const dipPinSpanW = 3*HOLE_PITCH;
+        // Real DIP footprint (perSide pin columns wide, straddling the
+        // center channel top-to-bottom) drawn at DIP_GHOST_SCALE (the
+        // board's current zoom) — matches the on-screen size an already-
+        // placed IC renders at while being dragged, per direct feedback that
+        // a fixed scale (both 1.0 and a guessed 0.5) didn't match that.
+        // perSide generalizes this from the original DIP-8-only (4 pins per
+        // row) shape to any DIP leg count, e.g. 8 for a 16-pin part like the
+        // PT2399.
+        const perSideW = legCount/2;
+        const dipPinSpanW = (perSideW-1)*HOLE_PITCH;
         const dipRowSpanH = HOLE_PITCH+DIP_GAP;
         H = (dipRowSpanH + 8) * DIP_GHOST_SCALE;
         W = (dipPinSpanW + 8) * DIP_GHOST_SCALE;
@@ -179,20 +211,22 @@ const Palette = (() => {
       for (const p of (def.properties||[])) fakeInst.props[p.key] = p.default;
 
       if (isDip) {
-        // Mirrors board.js's drawIcInst geometry exactly: 4 pin columns at
-        // -1.5,-0.5,0.5,1.5 * HOLE_PITCH from center, body edge IC_TAB_LEN
-        // short of the real hole row, a short tab filling that gap. Kept
-        // in sync by comment rather than a shared constants module, since
-        // this app has no build step to import across files — see
-        // board.js's IC_TAB_LEN/IC_STUB_COLOR/IC_BODY_MARGIN for the
-        // source values these mirror.
+        // Mirrors board.js's drawIcInst geometry exactly: perSide pin
+        // columns evenly spaced around center, body edge IC_TAB_LEN short of
+        // the real hole row, a short tab filling that gap. Kept in sync by
+        // comment rather than a shared constants module, since this app has
+        // no build step to import across files — see board.js's
+        // IC_TAB_LEN/IC_STUB_COLOR/IC_BODY_MARGIN for the source values
+        // these mirror. Generalized from the original hardcoded 4-pin-per-
+        // row (DIP-8) shape ([-1.5,-0.5,0.5,1.5]) to any DIP leg count.
         const IC_TAB_LEN = HOLE_PITCH*0.1405 + 2;
         const IC_STUB_COLOR = '#8a8a8a';
         const IC_BODY_MARGIN = 4;
+        const perSide = legCount/2;
         const halfRowGapDip = HOLE_PITCH/2 + DIP_GAP/2;
         const bodyHalfHDip = halfRowGapDip - IC_TAB_LEN;
         const stubWDip = HOLE_PITCH*0.4;
-        const pinXs = [-1.5, -0.5, 0.5, 1.5].map(m => m*HOLE_PITCH);
+        const pinXs = Array.from({length:perSide}, (_,i) => (i-(perSide-1)/2)*HOLE_PITCH);
 
         ctx.fillStyle = IC_STUB_COLOR;
         for (const px of pinXs) {
@@ -204,7 +238,7 @@ const Palette = (() => {
           }
         }
 
-        const dipBodyW = 3*HOLE_PITCH + IC_BODY_MARGIN*2;
+        const dipBodyW = (perSide-1)*HOLE_PITCH + IC_BODY_MARGIN*2;
         Shapes.drawBody(ctx, def, fakeInst, null, dipBodyW, bodyHalfHDip*2);
       } else if (legCount===3) {
         // Standing style: body above, three parallel legs straight down —

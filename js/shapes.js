@@ -326,22 +326,29 @@ const Shapes = (() => {
       case 'transistor_pnp': drawTransistor(ctx,def,inst,col,bw,bh); break;
       case 'transistor_jfet_n': drawJfet(ctx,def,inst,bw,bh); break;
       case 'transistor_mosfet_n': drawMosfet(ctx,def,inst,bw,bh); break;
-      case 'opamp': {
-        // drawIcInst passes the REAL pin-span width and lead-row height
-        // through halfLen/ang (otherwise unused for an IC) so the body
-        // always matches where the leads actually terminate, rather than a
-        // static def.visual guess unrelated to this instance's real leg
-        // geometry. Falls back to the static size only for contexts that
-        // call drawBody without going through drawIcInst (e.g. a palette
-        // preview with no real placed legs yet).
-        const icW = halfLen || bw, icH = ang || bh;
-        drawOpamp(ctx,def,icW,icH);
-        break;
-      }
       case 'switch_spst':    drawSwitch(ctx,bw,bh,theme?.success||'#33cc66',theme?.alert||'#e6394a',Utils.isSwitchClosed(inst)); break;
       case 'power_supply':   drawPower(ctx,col,bw,bh,inst.props.voltage,!!inst.props.reverse_polarity,ang); break;
       case 'signal_generator':drawSigGen(ctx,col,bw,bh,inst.props.waveform,theme?.scopeTrace); break;
-      default: drawDefault(ctx,def,bw,bh,col);
+      default:
+        if (def.category === 'ic') {
+          // Any DIP-shaped IC (op-amp, PT2399, future parts) shares one real
+          // body renderer, dispatched by category rather than a hardcoded
+          // 'opamp' id — that hardcoding was a real bug: it meant PT2399
+          // silently fell through to this generic drawDefault box (a static
+          // def.visual-sized rounded rect with no relationship to its actual
+          // pin span), not the real DIP body shape every other IC gets.
+          // drawIcInst passes the REAL pin-span width and lead-row height
+          // through halfLen/ang (otherwise unused for an IC) so the body
+          // always matches where the leads actually terminate, rather than a
+          // static def.visual guess unrelated to this instance's real leg
+          // geometry. Falls back to the static size only for contexts that
+          // call drawBody without going through drawIcInst (e.g. a palette
+          // preview with no real placed legs yet).
+          const icW = halfLen || bw, icH = ang || bh;
+          drawOpamp(ctx,def,icW,icH);
+        } else {
+          drawDefault(ctx,def,bw,bh,col);
+        }
     }
   }
 

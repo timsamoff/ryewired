@@ -110,6 +110,26 @@ const Board = (() => {
     return col < 3 ? 0 : Math.floor((col-3)/5) + 1;
   }
 
+  // Best (most-centered) extraGroups() span any perSide-column-wide pin row
+  // can ever achieve, found by scanning real anchor columns rather than
+  // computing it from the board's group width directly — so it stays
+  // correct even if extraGroups' own math ever changes, with no second
+  // constant to keep in sync. Memoized since legSpanValid calls this on
+  // every placement/drag check and perSide only takes a few small values.
+  const _minSpanCache = new Map();
+  function minAchievableSpanFor(perSide) {
+    if (_minSpanCache.has(perSide)) return _minSpanCache.get(perSide);
+    let best = Infinity;
+    for (let anchor = perSide - 1; anchor <= 62; anchor++) {
+      const groups = [];
+      for (let i = 0; i < perSide; i++) groups.push(extraGroups(anchor - i));
+      const span = Math.max(...groups) - Math.min(...groups);
+      if (span < best) best = span;
+    }
+    _minSpanCache.set(perSide, best);
+    return best;
+  }
+
   // Placement-span validation: on a real breadboard, a part's legs only
   // land in useful holes when they don't stretch across gaps that don't
   // exist on the physical part. Two different rules, per component kind:
@@ -137,26 +157,45 @@ const Board = (() => {
     }
     if (defCategory === 'ic') {
       const groups = cols.map(extraGroups);
-      return Math.max(...groups) - Math.min(...groups) === 0; // the 4-pin row must stay within one group
+      const actualSpan = Math.max(...groups) - Math.min(...groups);
+      // DIP-8's 4-pin row fits inside one 5-hole group by construction, so
+      // "0 extra groups" was a correct hardcoded threshold — but only
+      // BECAUSE 4 columns fit in one group. A wider package (a 16-pin part
+      // like the PT2399, 8 pins per row) physically cannot fit inside one
+      // group no matter where it's centered, so a fixed "0 extra" threshold
+      // would make every possible placement invalid. minAchievableSpanFor
+      // finds the best any placement of this pin-row width can ever do, by
+      // scanning real anchor columns through the SAME extraGroups() this
+      // function already uses — so it can never drift out of sync with the
+      // board's actual group geometry, unlike a second hardcoded group-width
+      // constant would. The check then requires the ACTUAL span not exceed
+      // that minimum — still "as tight as physically possible for this
+      // package," just no longer assuming every package fits in one group
+      // the way DIP-8 happens to.
+      const perSideIc = legCount / 2;
+      return actualSpan <= minAchievableSpanFor(perSideIc);
     }
     return true; // 2-leg parts are the "stretch it like real lead wire" case, no span limit
   }
 
-  // Only 2 of every 5 columns are valid DIP-8 anchors (the 4-pin row must
-  // stay within one 5-hole group), so a user dropping by eye lands in an
-  // invalid 3-column dead zone more often than not. Rather than reject
-  // those drops outright, search outward from the requested anchor column
-  // for the nearest column that IS valid — same spirit as xyToHole's own
-  // snap-to-nearest-hole behavior, just one level up (snap to nearest
-  // valid PLACEMENT, not just nearest hole). Returns null only if nothing
-  // valid exists within the search radius (shouldn't happen in practice,
-  // since valid columns repeat every 5).
-  function nearestValidDipAnchor(col) {
-    const cols4 = c => [c, c-1, c-2, c-3];
-    if (col >= 3 && legSpanValid('ic', 8, cols4(col))) return col;
+  // Only 2 of every 5 columns are valid DIP anchors (the pin row must stay
+  // within one 5-hole group), so a user dropping by eye lands in an invalid
+  // dead zone more often than not. Rather than reject those drops outright,
+  // search outward from the requested anchor column for the nearest column
+  // that IS valid — same spirit as xyToHole's own snap-to-nearest-hole
+  // behavior, just one level up (snap to nearest valid PLACEMENT, not just
+  // nearest hole). Returns null only if nothing valid exists within the
+  // search radius (shouldn't happen in practice, since valid columns repeat
+  // every 5). `perSide` is the pin-row width (4 for DIP-8, 8 for a 16-pin
+  // part like the PT2399) — generalized from a hardcoded 4-column window so
+  // any DIP leg count works, not just the original 8-leg case.
+  function nearestValidDipAnchor(col, perSide) {
+    const colsN = c => Array.from({length: perSide}, (_, i) => c - i);
+    const legCount = perSide * 2;
+    if (col >= perSide-1 && legSpanValid('ic', legCount, colsN(col))) return col;
     for (let d = 1; d <= 5; d++) {
-      if (col+d <= 62 && col+d >= 3 && legSpanValid('ic', 8, cols4(col+d))) return col+d;
-      if (col-d >= 3 && legSpanValid('ic', 8, cols4(col-d))) return col-d;
+      if (col+d <= 62 && col+d >= perSide-1 && legSpanValid('ic', legCount, colsN(col+d))) return col+d;
+      if (col-d >= perSide-1 && legSpanValid('ic', legCount, colsN(col-d))) return col-d;
     }
     return null;
   }
@@ -747,13 +786,20 @@ const Board = (() => {
     const isDip=def.category==='ic' && legCount>=8;
 
     if(isDip){
-      // Mirrors drawIcInst's real DIP-8 geometry exactly (same constants,
-      // same tab/body math) rather than the generic 2/3-leg ghost shape
-      // below, which collapses a leg_span:0 part to zero width.
+      // Mirrors drawIcInst's real DIP geometry exactly (same constants, same
+      // tab/body math) rather than the generic 2/3-leg ghost shape below,
+      // which collapses a leg_span:0 part to zero width. perSide generalizes
+      // this from the original hardcoded 4-pin-per-row (DIP-8) shape to any
+      // DIP leg count (8 for a 16-pin part like the PT2399): pinXs spaces
+      // perSide columns evenly around center (same [-1.5,-0.5,0.5,1.5]
+      // pattern for perSide=4, extending to [-3.5..3.5] for perSide=8), and
+      // the body width covers perSide-1 hole-gaps instead of the DIP-8-only
+      // literal 3.
+      const perSide=legCount/2;
       const halfRowGap=HOLE_PITCH/2+DIP_GAP/2;
       const bodyHalfH=halfRowGap-IC_TAB_LEN;
       const STUB_W=HOLE_PITCH*0.4;
-      const pinXs=[-1.5,-0.5,0.5,1.5].map(m=>m*HOLE_PITCH);
+      const pinXs=Array.from({length:perSide},(_,i)=>(i-(perSide-1)/2)*HOLE_PITCH);
       const fakeInst={defId:def.id,legs:[],props:{},failed:false,_brightness:0,_state:false};
       for(const p of(def.properties||[])) fakeInst.props[p.key]=p.default;
 
@@ -767,7 +813,7 @@ const Board = (() => {
           ctx.fillRect(px-STUB_W/2,top,STUB_W,h);
         }
       }
-      Shapes.drawBody(ctx,def,fakeInst,c,3*HOLE_PITCH+IC_BODY_MARGIN*2,bodyHalfH*2);
+      Shapes.drawBody(ctx,def,fakeInst,c,(perSide-1)*HOLE_PITCH+IC_BODY_MARGIN*2,bodyHalfH*2);
       ctx.restore();
       return;
     }
@@ -1143,14 +1189,18 @@ const Board = (() => {
       const def=ComponentRegistry.getById(defId);
       if(def){
         if(def.category==='ic' && (def.legs||0)>=8){
-          // DIP-8: the ghost is centered on the cursor (pins span
-          // -1.5..+1.5 * HOLE_PITCH), but buildDipLegs anchors pin 1 (the
-          // rightmost pin) at the passed column, not the center — so the
-          // snap offset has to be +1.5*HOLE_PITCH, not the generic 2/3-leg
-          // span/2 math below (which for this part's leg_span:0 would
-          // wrongly fall back to a single HOLE_PITCH/2 offset and land the
-          // real part shifted from where the ghost showed it).
-          snapX=x-(1.5*HOLE_PITCH);
+          // DIP package: the ghost is centered on the cursor (pins span
+          // -(perSide/2-0.5)..+(perSide/2-0.5) * HOLE_PITCH), but
+          // buildDipLegs anchors pin 1 (the rightmost pin) at the passed
+          // column, not the center — so the snap offset has to match that
+          // half-span, not the generic 2/3-leg span/2 math below (which for
+          // this part's leg_span:0 would wrongly fall back to a single
+          // HOLE_PITCH/2 offset and land the real part shifted from where
+          // the ghost showed it). 1.5 for DIP-8 (perSide=4), 3.5 for a
+          // 16-pin part like the PT2399 (perSide=8) — generalized from the
+          // original hardcoded 1.5 so any DIP leg count lands correctly.
+          const perSide=(def.legs||8)/2;
+          snapX=x-((perSide/2-0.5)*HOLE_PITCH);
         } else {
           const span=def.leg_span||1;
           snapX=x-(span*HOLE_PITCH/2);
@@ -1161,12 +1211,12 @@ const Board = (() => {
     if(typeof hole.row==='number'){
       const dropDef=ComponentRegistry.getById(defId);
       if(dropDef?.category==='ic' && (dropDef.legs||0)>=8){
-        // Only 2 of every 5 columns are valid DIP-8 anchors, so a drop
-        // aimed by eye lands in the invalid 3-column dead zone more often
-        // than not — snap to the nearest valid anchor instead of
-        // rejecting, the same way xyToHole already snaps to the nearest
-        // hole rather than requiring pixel-perfect aim.
-        const snapped=nearestValidDipAnchor(hole.col);
+        // Only 2 of every 5 columns are valid DIP anchors, so a drop aimed
+        // by eye lands in the invalid dead zone more often than not — snap
+        // to the nearest valid anchor instead of rejecting, the same way
+        // xyToHole already snaps to the nearest hole rather than requiring
+        // pixel-perfect aim.
+        const snapped=nearestValidDipAnchor(hole.col, (dropDef.legs||8)/2);
         if(snapped!=null) hole.col=snapped;
       }
     }
@@ -1263,7 +1313,8 @@ const Board = (() => {
       const def=ComponentRegistry.getById(defId);
       if(def){
         if(def.category==='ic' && (def.legs||0)>=8){
-          snapX=x-(1.5*HOLE_PITCH); // see onDrop's matching comment
+          const perSide=(def.legs||8)/2; // see onDrop's matching comment
+          snapX=x-((perSide/2-0.5)*HOLE_PITCH);
         } else {
           const span=def.leg_span||1;
           snapX=x-(span*HOLE_PITCH/2);
@@ -1275,7 +1326,7 @@ const Board = (() => {
     {
       const pasteDef=ComponentRegistry.getById(defId);
       if(pasteDef?.category==='ic' && (pasteDef.legs||0)>=8){
-        const snapped=nearestValidDipAnchor(hole.col);
+        const snapped=nearestValidDipAnchor(hole.col, (pasteDef.legs||8)/2);
         if(snapped!=null) hole.col=snapped;
       }
     }

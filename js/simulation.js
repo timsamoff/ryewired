@@ -346,6 +346,21 @@ const Simulation = (() => {
         break;
       }
 
+      case 'pt2399_delay': {
+        // Same per-unit state pattern as opamp_dual — OP1 is slot 0, OP2 is
+        // slot 1 (see the opampEdges push order in the DC-edges loop above).
+        inst._opampState = opampStates?.get(inst) || null;
+        // Only supply over-voltage makes sense as a failure mode here, same
+        // reasoning as opamp_dual — no negative-rail concept in this app, and
+        // the datasheet's rated 4.5-5.5V window is narrow enough that this is
+        // the realistic way a PT2399 actually dies in a hand-built pedal
+        // (fed 9V directly instead of through the required 5V regulator).
+        const pmP = def.model_params?.PT2399 || {};
+        const supplyMaxP = pmP.supply_max || 5.5;
+        if ((_activeSupplyV ?? 0) > supplyMaxP) fail(inst, def, 'over_voltage');
+        break;
+      }
+
       case 'resistor': {
         const R = resolvedValue(inst, 'resistance', 1000);
         const rating = parseWatts(inst.props.power_rating || '0.25W');
@@ -881,6 +896,55 @@ const Simulation = (() => {
           const vpNet   = netOf(inst.legs[pIdx].row, inst.legs[pIdx].col);
           opampEdges.push({ inst, unit, vpNet, vmNet, voutNet, aol, headroomLo, headroomHi, railHi, railLo });
         }
+
+      } else if (btype === 'pt2399_delay') {
+        // Real 16-pin pinout (see leg_labels in pt2399.json):
+        // 0 VCC, 1 REF, 2 AGND, 3 DGND, 4 CLK_O, 5 VCO, 6 CC1, 7 CC0,
+        // 8 OP1-OUT, 9 OP1-IN, 10 OP2-IN, 11 OP2-OUT, 12 LPF2-IN, 13 LPF2-OUT,
+        // 14 LPF1-OUT, 15 LPF-IN. Only VCC/REF/AGND and the OP1/OP2 pins
+        // participate in the DC solve — VCO/CC0/CC1/LPF*/CLK_O set the
+        // internal delay-line's clock/filtering and are read directly off
+        // the netlist by the audio engine (Stage 2+), not stamped here.
+        const mkP = 'PT2399';
+        const pmP = def.model_params?.[mkP] || {};
+        const aolP = pmP.aol || 100000;
+        const headroomP = pmP.output_swing_headroom ?? 0.3;
+        const railLoP = 0, railHiP = _activeSupplyV ?? 5;
+
+        const vccNet = netOf(inst.legs[0].row, inst.legs[0].col);
+        const refNet = netOf(inst.legs[1].row, inst.legs[1].col);
+        const agndNet = netOf(inst.legs[2].row, inst.legs[2].col);
+        // REF self-biases to ~VCC/2 on a real PT2399 via an internal resistor
+        // divider from VCC and AGND — not a fixed node (this app's fixedNodes
+        // is reserved for the physical supply/battery), just two ordinary
+        // resistor edges landing on REF, so it settles near VCC/2 as a real
+        // consequence of the network solve, same as any other resistor
+        // divider on this board. Value itself doesn't matter, only that both
+        // legs match (so the midpoint is exactly VCC/2) and it's stiff enough
+        // not to meaningfully load VCC — 20k is a reasonable, unverified
+        // internal-impedance guess since the datasheet doesn't publish one.
+        resistorEdges.push({ a: vccNet, b: refNet, R: 20000 });
+        resistorEdges.push({ a: refNet, b: agndNet, R: 20000 });
+
+        // OP1 and OP2 are real internal op-amps, but single-ended in the
+        // datasheet: only one input pin each is brought out (OP1-IN,
+        // OP2-IN), with the other input tied internally to REF rather than
+        // exposed as a second leg. Modeled as the same ideal-op-amp VCVS as
+        // opamp_dual, just with the hidden input pinned to refNet instead of
+        // a second real leg — electrically honest to how a real inverting-
+        // gain stage built around OP1/OP2 actually biases against REF.
+        const op1OutNet = netOf(inst.legs[8].row, inst.legs[8].col);
+        const op1InNet  = netOf(inst.legs[9].row, inst.legs[9].col);
+        const op2InNet  = netOf(inst.legs[10].row, inst.legs[10].col);
+        const op2OutNet = netOf(inst.legs[11].row, inst.legs[11].col);
+        // unit 0/1 (not strings) — opampStates' per-inst array is keyed by
+        // numeric slot (see its build site below), same convention as
+        // opamp_dual's two DIP-8 units regardless of what a real datasheet
+        // calls each stage.
+        opampEdges.push({ inst, unit: 0, vpNet: refNet, vmNet: op1InNet, voutNet: op1OutNet,
+                           aol: aolP, headroomLo: headroomP, headroomHi: headroomP, railHi: railHiP, railLo: railLoP });
+        opampEdges.push({ inst, unit: 1, vpNet: refNet, vmNet: op2InNet, voutNet: op2OutNet,
+                           aol: aolP, headroomLo: headroomP, headroomHi: headroomP, railHi: railHiP, railLo: railLoP });
       }
     }
 
@@ -1541,7 +1605,35 @@ const Simulation = (() => {
         // correctly re-enter linear mode once an overdriven input recedes.
         const linearVout = e.aol * (vp - vm);
         const highClamp = e.railHi - e.headroomHi, lowClamp = e.railLo + e.headroomLo;
-        const newState = linearVout > highClamp ? 'sat_high' : (linearVout < lowClamp ? 'sat_low' : 'linear');
+        // A real op-amp genuinely in saturation drives vp-vm to a real error
+        // signal (millivolts+), so aol*(vp-vm) overshoots the clamp by many
+        // multiples, not a hair. But vp/vm here can themselves be solved
+        // nodes (e.g. a divider-referenced input, not a fixed rail) that are
+        // still converging from a cold start elsewhere in the SAME iterative
+        // pass — a not-yet-settled few-microvolt gap, times aol~1e5, can
+        // cross the clamp by a tiny margin and get mistaken for real
+        // saturation. Found on a PT2399 test circuit (unity-gain loop
+        // referenced to an internally-generated ~VCC/2 node, zero real error
+        // signal) that latched sat_high from a 6%-over-threshold prediction
+        // on iteration 0 and then stayed there — a genuine stable fixed
+        // point of the WRONG branch, not oscillation, so "state stopped
+        // changing" never caught it. SAT_LATCH_MARGIN requires overshooting
+        // by a real multiple (2x the clamp's distance from the linear
+        // window's edge) before LATCHING INTO saturation — asymmetric on
+        // purpose: recovering FROM saturation back to linear keeps the exact
+        // boundary test above, since a real stage crossing back into range
+        // isn't the noise-amplification case this guards against.
+        // Both clamps are structurally positive in every real configuration
+        // here (railHi/headroom come from real, positive supply/headroom
+        // values), so a plain multiple is a safe "further past the boundary"
+        // test — not defended against a negative clamp, which would mean a
+        // misconfigured component and should surface as a visibly wrong
+        // result rather than be silently absorbed here.
+        const SAT_LATCH_MARGIN = 2;
+        const alreadyLatched = opampStateArr[idx] !== 'linear';
+        const enteringHigh = linearVout > highClamp && (alreadyLatched || linearVout > highClamp * SAT_LATCH_MARGIN);
+        const enteringLow  = linearVout < lowClamp  && (alreadyLatched || linearVout < lowClamp  * SAT_LATCH_MARGIN);
+        const newState = enteringHigh ? 'sat_high' : (enteringLow ? 'sat_low' : 'linear');
         if (newState !== opampStateArr[idx]) { opampStateArr[idx] = newState; changed = true; }
       });
       if (!changed) break;

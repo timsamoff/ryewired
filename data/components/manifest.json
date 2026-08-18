@@ -6,6 +6,7 @@
   "opamp.json",
   "potentiometer.json",
   "power_supply.json",
+  "pt2399.json",
   "resistor.json",
   "signal_generator.json",
   "switch.json",

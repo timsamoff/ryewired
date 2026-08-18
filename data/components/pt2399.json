@@ -1,0 +1,25 @@
+{
+  "id": "pt2399",
+  "labelKey": "component.pt2399.label",
+  "category": "ic",
+  "subcategory": "timer",
+  "symbol": "U",
+  "descriptionKey": "component.pt2399.description",
+  "legs": 16,
+  "leg_span": 0,
+  "leg_labels": ["VCC", "REF", "AGND", "DGND", "CLK_O", "VCO", "CC1", "CC0",
+                 "OP1-OUT", "OP1-IN", "OP2-IN", "OP2-OUT", "LPF2-IN", "LPF2-OUT", "LPF1-OUT", "LPF1-IN"],
+  "model_params": {
+    "PT2399": { "aol": 100000, "output_swing_headroom": 0.3, "supply_min": 4.5, "supply_max": 5.5 }
+  },
+  "behavior": { "type": "pt2399_delay" },
+  "failure_modes": {
+    "over_voltage": { "result": "burn", "messageKey": "component.pt2399.failure.over_voltage" }
+  },
+  "visual": {
+    "body_color": "#1a1a1a",
+    "body_width": 60,
+    "body_height": 33,
+    "lead_length": 10
+  }
+}

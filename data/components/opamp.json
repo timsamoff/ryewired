@@ -2,6 +2,7 @@
   "id": "opamp",
   "labelKey": "component.opamp.label",
   "category": "ic",
+  "subcategory": "linear",
   "symbol": "U",
   "descriptionKey": "component.opamp.description",
   "legs": 8,
