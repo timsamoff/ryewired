@@ -79,11 +79,19 @@ const ComponentRegistry = (() => {
     // net-solver-compatible leg identities (the net builder only ever
     // treats row/col as opaque string-key pieces, same as how rail rows
     // like 'rtp' already work) without ever colliding with real board
-    // coordinates or another switch's pins. `_extSlot` records which panel
+    // coordinates or another switch's pins. `extSlot` records which panel
     // slot this instance occupies, since legs alone no longer carry that
     // (unlike every other component, whose legs ARE board coordinates) —
     // board.js's placement/rendering/hit-testing reads this directly rather
-    // than re-deriving slot position from the virtual leg rows.
+    // than re-deriving slot position from the virtual leg rows. Deliberately
+    // NOT underscore-prefixed: getLayoutData strips every `_`-prefixed key
+    // as transient solver state that must never be saved (see that
+    // function's own comment), and extSlot is genuine placement data, not
+    // solver output — an underscore prefix here silently dropped it from
+    // every saved .rye file, so a reload always fell back to {row:0,col:0}
+    // and stacked every switch into the panel's first slot. Found as a real,
+    // reproducible bug: place 2+ switches in different slots, save, reload —
+    // all of them come back piled on top of each other.
     const isSwitch = def.behavior?.type === 'switch_mpdt' || def.behavior?.type === 'switch_spst';
     const legs = isSwitch
       ? buildSwitchLegs(instanceId, def.behavior.rows || 1, def.behavior.cols || 2)
@@ -102,7 +110,7 @@ const ComponentRegistry = (() => {
       failureType: null,
       _voltage:    0, _current: 0, _audioNode: null
     };
-    if (isSwitch) inst._extSlot = { row, col };
+    if (isSwitch) inst.extSlot = { row, col };
     applyModelDefaults(inst);
     applyToleranceRoll(inst, def);
     return inst;

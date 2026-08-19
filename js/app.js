@@ -420,7 +420,17 @@ function pasteFromClipboard() {
 
 // ── Zoom ──────────────────────────────────────────────────────────────────────
 
-function initZoom()  { applyZoom(1.0); }
+// Fits immediately rather than painting at 100% first — an unscaled first
+// paint reliably overflows #board-scroll and forces a scrollbar to appear,
+// which then silently shrinks clientWidth/clientHeight for whatever measures
+// them next. The deferred setTimeout(fitBoard,100) in initApp() re-fits
+// after other layout (fonts, sidebar) has settled, but if that first fit
+// already measured a scrollbar-narrowed container, its result permanently
+// disagreed with a later manual "Fit to Window" click (which always measures
+// a scrollbar-free container, since the board is already fitted by then) —
+// found as a real, reproducible 65% vs 66% mismatch between page-load and
+// the Fit to Window button on the same window size.
+function initZoom()  { fitBoard(); }
 function zoomIn()    { applyZoom(Math.min(ZOOM_MAX, snapZoom(_zoomLevel + ZOOM_STEP))); }
 function zoomOut()   { applyZoom(Math.max(ZOOM_MIN, snapZoom(_zoomLevel - ZOOM_STEP))); }
 function snapZoom(v) { return Math.round(v / ZOOM_STEP) * ZOOM_STEP; }

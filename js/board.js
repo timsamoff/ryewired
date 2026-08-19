@@ -48,10 +48,21 @@ const Board = (() => {
   const SW_PIN_PITCH   = HOLE_PITCH;
   const SW_BODY_MARGIN = 10; // body edge past the outermost pin, each side
   const SW_TOGGLE_H    = 16; // height of the position-toggle strip drawn below the pin grid
+  const SW_TOGGLE_BOTTOM_PAD = 6; // extra room below the toggle pill itself, before the switch's own bottom edge — does NOT move the pill (toggleY is unchanged), just extends the body/slot centering to make room under it, per direct instruction
+  // The toggle itself: a thin HORIZONTAL rounded-rect "pill" track
+  // (web-toggle style) spanning the switch's own body width (minus a little
+  // padding each side), with a round knob that slides left/center/right
+  // between its 2 or 3 stops — wide and thin, not a tall narrow bar, per
+  // direct instruction. Track width is derived per-switch from bodyW (each
+  // switch has a different real body width), so only the height/padding/
+  // knob radius are fixed constants here.
+  const SW_TOGGLE_PAD_X  = 6; // gap between the pill's ends and the body's own edges
+  const SW_TOGGLE_TRACK_H = SW_TOGGLE_H - 8; // pill height, thin relative to the strip (2px shorter than before)
+  const SW_TOGGLE_KNOB_R  = SW_TOGGLE_TRACK_H/2 - 1;
   const SW_MAX_ROWS    = 4; // 4PDT is currently the widest-pole switch this app supports — bump this (and add the matching component) if a wider one is ever needed
   const SW_MAX_COLS    = 3;
   const SW_BODY_W      = (SW_MAX_COLS-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2;
-  const SW_BODY_H      = (SW_MAX_ROWS-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2 + SW_TOGGLE_H;
+  const SW_BODY_H      = (SW_MAX_ROWS-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2 + SW_TOGGLE_H + SW_TOGGLE_BOTTOM_PAD;
   const EXT_SLOT_W     = SW_BODY_W + 16; // breathing room around the largest switch body
   const EXT_SLOT_H     = SW_BODY_H + 16;
   const LABEL_PAD    = 8;
@@ -303,7 +314,7 @@ const Board = (() => {
     const EL=buildExtPanelLayout();
     const occupied = new Set();
     for (const p of _placed) {
-      if (p._extSlot) occupied.add(p._extSlot.row+','+p._extSlot.col);
+      if (p.extSlot) occupied.add(p.extSlot.row+','+p.extSlot.col);
     }
     for (let r=0; r<EL.rows; r++) {
       for (let cc=0; cc<EL.cols; cc++) {
@@ -336,7 +347,7 @@ const Board = (() => {
     // exactly the kind of failure this project's own verification
     // philosophy (extract and run the real function against real data,
     // don't just read the code) exists to catch. switchPinXY needs the
-    // owning INSTANCE (for its _extSlot), not just the row string, so the
+    // owning INSTANCE (for its extSlot), not just the row string, so the
     // instanceId is parsed back out of the virtual row and looked up in
     // _placed.
     if (typeof row==='string' && row.startsWith('sw:')) {
@@ -376,7 +387,7 @@ const Board = (() => {
   }
 
   // Real pixel position of one pin on a placed switch, derived from its
-  // slot center (_extSlot) and the switch's OWN real pin-grid shape (not a
+  // slot center (extSlot) and the switch's OWN real pin-grid shape (not a
   // shared max-size box — a 1x2 SPST centers 2 pins, a 3x3 3PDT centers 9,
   // each sized/centered to its own real footprint, per direct feedback that
   // stretching every switch to the largest one's body looked wrong). The
@@ -389,16 +400,42 @@ const Board = (() => {
   function switchPinXY(inst,rowIdx,colIdx) {
     const def=ComponentRegistry.getById(inst.defId);
     const {rows,cols}=switchShape(def);
-    const slot=inst._extSlot||{row:0,col:0};
+    const slot=inst.extSlot||{row:0,col:0};
     const {x:cx,y:cy}=extSlotCenter(slot.row,slot.col);
-    // Pin grid is centered on the slot; toggle strip sits below it, so the
-    // pin grid's own vertical center is offset UP from the slot center by
-    // half the toggle height (matches this switch's own body composition:
-    // pin grid + toggle stacked, body vertically centered in the slot).
+    // Pin grid center stays anchored at the same offset above the slot
+    // center regardless of SW_TOGGLE_BOTTOM_PAD — that constant only adds
+    // room below the toggle pill, it does not re-center the pin+pill
+    // assembly within the (now slightly taller) body. See drawSwitchInst's
+    // matching comment for why.
     const gridCx=cx, gridCy=cy-SW_TOGGLE_H/2;
     const px=gridCx + (colIdx-(cols-1)/2)*SW_PIN_PITCH;
     const py=gridCy + (rowIdx-(rows-1)/2)*SW_PIN_PITCH;
     return {x:px,y:py};
+  }
+
+  // World-space hit rect for a placed switch's toggle pill, used both by the
+  // renderer (drawSwitchInst) and by onClick's toggle-only hit test — a
+  // single source of geometry so the clickable area always matches exactly
+  // what's drawn, per direct instruction that clicking must only work when
+  // clicking the toggle itself, not anywhere on the switch body.
+  function switchToggleRect(inst) {
+    const def=ComponentRegistry.getById(inst.defId);
+    const {rows,cols}=switchShape(def);
+    const bodyW=(cols-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2;
+    const slot=inst.extSlot||{row:0,col:0};
+    const {x:cx,y:cy}=extSlotCenter(slot.row,slot.col);
+    const gridCy=cy-SW_TOGGLE_H/2;
+    const gridH=(rows-1)*SW_PIN_PITCH;
+    // Matches drawSwitchInst's toggleY formula exactly — the original,
+    // already-liked vertical placement (see that function's comment). Not
+    // affected by SW_TOGGLE_BOTTOM_PAD — that only extends the body further
+    // below the pill, it doesn't move the pill itself.
+    const toggleY=gridCy+gridH/2+SW_BODY_MARGIN+SW_TOGGLE_H/2;
+    // Matches drawSwitchInst's trackHalfW/trackHalfH exactly (bodyW-derived
+    // width, thin height), plus a little slack beyond the pill's own drawn
+    // size so it's comfortably clickable without spilling into the pin grid.
+    const hw=(bodyW/2-SW_TOGGLE_PAD_X)+4, hh=SW_TOGGLE_TRACK_H/2+3;
+    return {cx, cy:toggleY, left:cx-hw, right:cx+hw, top:toggleY-hh, bottom:toggleY+hh};
   }
 
   // ── Component geometry ────────────────────────────────────────────────────────
@@ -458,7 +495,7 @@ const Board = (() => {
   // INTO), so center is just the slot center directly rather than derived
   // from pin positions, and ang is always 0.
   function switchGeometry(inst,pts,useOffset){
-    const slot=inst._extSlot||{row:0,col:0};
+    const slot=inst.extSlot||{row:0,col:0};
     const {x:cx,y:cy}=extSlotCenter(slot.row,slot.col);
     const off=useOffset?{x:_dragOffsetX,y:_dragOffsetY}:{x:0,y:0};
     return {cx:cx+off.x,cy:cy+off.y,ang:0,len:SW_BODY_W,pts};
@@ -493,9 +530,19 @@ const Board = (() => {
         // toggle test that silently never registered a hit.
         const {rows,cols}=switchShape(def);
         const bw2=((cols-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2)/2+6;
-        const bh2=((rows-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2 + SW_TOGGLE_H)/2+6;
+        // Body is NOT symmetric around geo.cy (the slot center) once
+        // SW_TOGGLE_BOTTOM_PAD is nonzero — it extends further below cy than
+        // above, since gridCy (the pin grid's own center) stays anchored at
+        // its original offset rather than being re-derived to re-center the
+        // taller body (see drawSwitchInst's comment on why). True top/bottom
+        // extents, relative to geo.cy, mirror drawSwitchInst's own bodyTop/
+        // bodyH math exactly rather than assuming a single symmetric half-height.
+        const gridH2=(rows-1)*SW_PIN_PITCH;
+        const gridCyLocal=-SW_TOGGLE_H/2;
+        const bodyTop2=gridCyLocal-gridH2/2-SW_BODY_MARGIN-6;
+        const bodyH2=gridH2+SW_BODY_MARGIN*2+SW_TOGGLE_H+SW_TOGGLE_BOTTOM_PAD+12;
         const dx2=x-geo.cx, dy2=y-geo.cy;
-        if(Math.abs(dx2)<bw2&&Math.abs(dy2)<bh2) return inst;
+        if(Math.abs(dx2)<bw2 && dy2>bodyTop2 && dy2<bodyTop2+bodyH2) return inst;
         continue;
       }
       const bh0=def.visual?.body_height||16;
@@ -949,7 +996,15 @@ const Board = (() => {
     const {rows,cols}=switchShape(def);
     const bodyW=(cols-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2;
     const gridH=(rows-1)*SW_PIN_PITCH;
-    const bodyH=gridH + SW_BODY_MARGIN*2 + SW_TOGGLE_H;
+    const bodyH=gridH + SW_BODY_MARGIN*2 + SW_TOGGLE_H + SW_TOGGLE_BOTTOM_PAD;
+    // gridCy stays anchored to the pins' ORIGINAL offset (-SW_TOGGLE_H/2, not
+    // re-derived from the padded total) — SW_TOGGLE_BOTTOM_PAD only grows the
+    // body/slot downward from here, it deliberately does not re-center the
+    // pin grid+pill assembly within the taller body, since that would shift
+    // the pins and the already-correctly-placed pill up along with it. A
+    // switch with bottom pad therefore sits very slightly high within its
+    // slot rather than dead-center — an accepted, purely cosmetic tradeoff
+    // for keeping the liked pin/pill placement completely untouched.
     const gridCy=-SW_TOGGLE_H/2; // local-space grid center, matches switchPinXY's world-space offset (ctx is already translated to the switch's own center by drawInst)
 
     ctx.fillStyle='#3a3a3a';
@@ -967,51 +1022,83 @@ const Board = (() => {
       }
     }
 
-    // Position toggle: a lever whose ANGLE reflects the real lever position
-    // (tilted toward whichever end it's thrown to, level in the middle for
-    // a real 3-position switch), positioned in the reserved strip below the
-    // pin grid rather than filling the whole body (a multi-pole switch's
-    // body is dominated by its pin grid, not the toggle itself). SPST keeps
-    // its own real open/closed semantics (see the "keep SPST's own model"
-    // decision) — ON/OFF label — everything else is the throw-select
-    // family, labeled by real 1/2/3 position (On-On's 2 positions still
-    // read as "1"/"2" here rather than "A"/"B": the pin LABELS stay A/B
-    // since those are the real terminal names, but the switch's PHYSICAL
-    // position is a lever angle, not a terminal name).
-    const toggleY=gridCy+gridH/2+SW_BODY_MARGIN;
+    // Position toggle: a thin vertical rounded-rect "pill" track (web-toggle
+    // style) with a round knob sliding between its 2 or 3 stops, positioned
+    // in the reserved strip below the pin grid rather than filling the whole
+    // body (a multi-pole switch's body is dominated by its pin grid, not the
+    // toggle itself). This geometry MIRRORS switchToggleRect's world-space
+    // math (same toggleY formula) so the clickable area onClick tests
+    // against lines up exactly with what's drawn here — don't let the two
+    // drift apart. SPST keeps its own real open/closed semantics (2 stops,
+    // ON/OFF) — everything else is the throw-select family with 2 or 3 stops
+    // reading real 1/2/3 position (the pin LABELS stay A/B, since those are
+    // the real terminal names; the physical knob position is what encodes
+    // which throw is active, not a text label alone).
+    // toggleY keeps the original, already-liked vertical placement (offset
+    // SW_BODY_MARGIN+SW_TOGGLE_H/2 below the bottom pin row's center) — an
+    // attempt earlier this session to recenter this against the strip's
+    // true midpoint moved it up and was explicitly reverted per direct
+    // feedback ("I liked the original spacing"). Only the pill's HEIGHT
+    // (SW_TOGGLE_TRACK_H) shrank by 2px; its vertical position did not move.
+    const toggleY=gridCy+gridH/2+SW_BODY_MARGIN+SW_TOGGLE_H/2;
     const isSpst=def.behavior?.type==='switch_spst';
     const onColor=c.success||'#33cc66', offColor=c.label;
-    if(isSpst){
-      const active=Utils.isSwitchClosed(inst);
-      ctx.strokeStyle=active?onColor:offColor;ctx.lineWidth=2;
-      ctx.beginPath();
-      ctx.moveTo(-bodyW/2+8,toggleY-4);
-      ctx.lineTo(bodyW/2-8,active?toggleY+4:toggleY-4);
+    // Track spans the switch's own body width, minus padding each side —
+    // wide and thin, filling the toggle strip horizontally rather than
+    // standing as a tall narrow bar.
+    const trackHalfW=bodyW/2-SW_TOGGLE_PAD_X, trackHalfH=SW_TOGGLE_TRACK_H/2;
+    const knobTravel=trackHalfW-SW_TOGGLE_KNOB_R-1.5;
+
+    function drawPill(active,knobFrac){
+      // knobFrac: -1 (left stop) .. 0 (middle) .. +1 (right stop)
+      ctx.fillStyle=active?'rgba(51,204,102,0.18)':'rgba(255,255,255,0.06)';
+      Shapes.roundRect(ctx,-trackHalfW,toggleY-trackHalfH,trackHalfW*2,SW_TOGGLE_TRACK_H,trackHalfH);
+      ctx.fill();
+      ctx.strokeStyle=active?onColor:offColor;ctx.lineWidth=1.25;
+      Shapes.roundRect(ctx,-trackHalfW,toggleY-trackHalfH,trackHalfW*2,SW_TOGGLE_TRACK_H,trackHalfH);
       ctx.stroke();
       ctx.fillStyle=active?onColor:offColor;
-      ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';
-      ctx.fillText(active?'ON':'OFF',0,toggleY+SW_TOGGLE_H/2-2);
+      ctx.beginPath();ctx.arc(knobFrac*knobTravel,toggleY,SW_TOGGLE_KNOB_R,0,Math.PI*2);ctx.fill();
+    }
+
+    if(isSpst){
+      const active=Utils.isSwitchClosed(inst);
+      drawPill(active, active?1:-1);
     } else {
       const maxPos = inst.props?.throw_type==='On-On' ? 2 : 3;
       const position = Utils.clamp(parseInt(inst.props?.position,10)||1, 1, maxPos);
-      // Lever tilt: -1 at position 1, 0 at the middle (only reachable when
-      // maxPos===3), +1 at the last position — an On-On switch has no real
-      // middle, so its 2 positions map to the two extremes directly.
-      const tilt = maxPos===2 ? (position===1?-1:1) : (position-2);
+      // Knob position: -1 at position 1, 0 at the middle (only reachable
+      // when maxPos===3), +1 at the last position — an On-On switch has no
+      // real middle, so its 2 positions map to the two extremes directly.
+      const knobFrac = maxPos===2 ? (position===1?-1:1) : (position-2);
       const active = !(maxPos===3 && position===2 && inst.props?.throw_type==='On-Off-On'); // true neutral middle only for On-Off-On
-      ctx.strokeStyle=active?onColor:offColor;ctx.lineWidth=2;
-      ctx.beginPath();
-      ctx.moveTo(-bodyW/2+8,toggleY-4);
-      ctx.lineTo(bodyW/2-8,toggleY-4+tilt*4);
-      ctx.stroke();
-      ctx.fillStyle=active?onColor:offColor;
-      ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';
-      ctx.fillText(String(position),0,toggleY+SW_TOGGLE_H/2-2);
+      drawPill(active, knobFrac);
     }
 
     if(isFail){
       ctx.globalAlpha=1;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillStyle=c.alert;
       ctx.fillText('✕',0,gridCy);
+    }
+  }
+
+  // Lets palette.js's OS drag-image canvas (a completely separate <canvas>
+  // from the board's own, built fresh per dragstart) render a real switch
+  // body via drawSwitchInst, instead of duplicating its pin-grid/toggle-pill
+  // geometry a second time. drawSwitchInst draws through this module's
+  // private `ctx` closure variable (not a parameter — same as every other
+  // draw* function here), so this swaps it to the caller's context for the
+  // one call and restores it immediately after, translated so (0,0) in the
+  // caller's canvas is the switch's own local origin, matching how drawInst
+  // sets up drawSwitchInst normally (see drawInst's ctx.translate(cx,cy)).
+  function drawSwitchGhost(targetCtx, def, colors){
+    const prevCtx=ctx;
+    ctx=targetCtx;
+    try{
+      const fakeInst={defId:def.id,legs:[],props:{},failed:false,_brightness:0,_state:false};
+      for(const p of(def.properties||[])) fakeInst.props[p.key]=p.default;
+      drawSwitchInst(fakeInst,def,colors,false,false,1);
+    } finally {
+      ctx=prevCtx;
     }
   }
 
@@ -1081,6 +1168,23 @@ const Board = (() => {
     const bw=def.visual?.body_width||28,bh=def.visual?.body_height||14;
     const legCount=def.legs||2;
     const isDip=def.category==='ic' && legCount>=8;
+    const isSwitch=def.behavior?.type==='switch_mpdt'||def.behavior?.type==='switch_spst';
+
+    if(isSwitch){
+      // Ghosts should look like the real thing being dropped, not a generic
+      // leaded body — per direct instruction. drawSwitchInst already draws
+      // purely in local ctx space (no dependency on inst.extSlot), so it's
+      // reused as-is here, just translated to the cursor instead of a real
+      // slot center.
+      const fakeInst={defId:def.id,legs:[],props:{},failed:false,_brightness:0,_state:false};
+      for(const p of(def.properties||[])) fakeInst.props[p.key]=p.default;
+      ctx.save();
+      ctx.translate(mx,my);
+      ctx.globalAlpha=0.72;
+      drawSwitchInst(fakeInst,def,c,false,false,0.72);
+      ctx.restore();
+      return;
+    }
 
     if(isDip){
       // Mirrors drawIcInst's real DIP geometry exactly (same constants, same
@@ -1452,6 +1556,15 @@ const Board = (() => {
     const {x,y}=eventToCanvas(e);
     const inst=hitTestComp(x,y);if(!inst) return;
     const def=ComponentRegistry.getById(inst.defId);
+    // Toggling only fires when the click actually lands on the toggle pill
+    // itself, not anywhere on the switch's body/pin grid — per direct
+    // instruction. hitTestComp still selects/drags on the whole body (that's
+    // unrelated and unchanged); this is an extra, narrower gate specific to
+    // the toggle action.
+    if((def?.behavior?.type==='switch_spst'||def?.behavior?.type==='switch_mpdt')){
+      const r=switchToggleRect(inst);
+      if(x<r.left||x>r.right||y<r.top||y>r.bottom) return;
+    }
     if(def?.behavior?.type==='switch_spst'){
       const t=inst.props.type;
       if(t!=='Momentary (NO)' && t!=='Momentary (NC)'){
@@ -1805,5 +1918,6 @@ const Board = (() => {
     setDragGhost,setStartWire,clearWire,setSelected,getSelected,getSelectedWireObj,deleteSelected,
     onSelect,onPlace,holeToXY,xyToHole,redraw,setZoom,getZoom:()=>_zoom,getBoardWidth:boardWidth,
     beginPaste,cancelPaste,beginPasteWire,cancelPasteWire,isPastingWire,cancelActivePaste,
-    holeOccupied,rowDisplayLabel};
+    holeOccupied,rowDisplayLabel,drawSwitchGhost,switchShape,getColors:C,
+    SW_PIN_PITCH,SW_BODY_MARGIN,SW_TOGGLE_H,SW_TOGGLE_BOTTOM_PAD};
 })();

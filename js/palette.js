@@ -137,6 +137,7 @@ const Palette = (() => {
       const halfLen = span*HOLE_PITCH/2; // real hole spacing, not body_width — matches board.js
       const isPowerSupply = def.id === 'power_supply';
       const isDip = def.category === 'ic' && legCount >= 8;
+      const isSwitch = def.behavior?.type === 'switch_mpdt' || def.behavior?.type === 'switch_spst';
       // Match the size an ALREADY-PLACED IC renders at when dragged on-
       // canvas — that path draws through the board's own zoomed/DPR-scaled
       // canvas, so its on-screen size is real-board-units * current zoom.
@@ -153,7 +154,21 @@ const Palette = (() => {
       // bw0 as its radius (not bh0), so a bh0-only estimate under-sized the
       // canvas and clipped the top of the part.
       let W, H, vOffset;
-      if (isDip) {
+      if (isSwitch) {
+        // Real per-switch pin-grid footprint (via Board.switchShape, the
+        // same helper board.js's own in-canvas ghost/renderer use), so this
+        // OS drag-image matches the actual switch body instead of a generic
+        // leaded shape. Board's own switch geometry constants (SW_PIN_PITCH/
+        // SW_BODY_MARGIN/SW_TOGGLE_H/SW_TOGGLE_BOTTOM_PAD) are exported for
+        // exactly this reuse.
+        const {rows, cols} = Board.switchShape(def);
+        const bodyW = (cols-1)*Board.SW_PIN_PITCH + Board.SW_BODY_MARGIN*2;
+        const bodyH = (rows-1)*Board.SW_PIN_PITCH + Board.SW_BODY_MARGIN*2 + Board.SW_TOGGLE_H + Board.SW_TOGGLE_BOTTOM_PAD;
+        const PAD = 8;
+        W = bodyW + PAD*2;
+        H = bodyH + PAD*2;
+        vOffset = 0;
+      } else if (isDip) {
         // Real DIP footprint (perSide pin columns wide, straddling the
         // center channel top-to-bottom) drawn at DIP_GHOST_SCALE (the
         // board's current zoom) — matches the on-screen size an already-
@@ -210,7 +225,15 @@ const Palette = (() => {
       const fakeInst = {defId:def.id, props:{}, _brightness:0, _state:false};
       for (const p of (def.properties||[])) fakeInst.props[p.key] = p.default;
 
-      if (isDip) {
+      if (isSwitch) {
+        // Reuses board.js's own drawSwitchInst (via the drawSwitchGhost
+        // wrapper) rather than a third copy of the pin-grid/toggle-pill
+        // geometry — this is the actual OS drag-cursor image, so it must
+        // match what board.js's in-canvas ghost and the placed-instance
+        // renderer both already draw, per direct feedback that a generic
+        // leaded body doesn't look like the real switch being dragged.
+        Board.drawSwitchGhost(ctx, def, Board.getColors());
+      } else if (isDip) {
         // Mirrors board.js's drawIcInst geometry exactly: perSide pin
         // columns evenly spaced around center, body edge IC_TAB_LEN short of
         // the real hole row, a short tab filling that gap. Kept in sync by
