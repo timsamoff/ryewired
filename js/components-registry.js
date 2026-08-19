@@ -65,16 +65,36 @@ const ComponentRegistry = (() => {
     const props = {};
     for (const p of (def.properties||[])) props[p.key] = p.default;
 
+    const instanceId = Utils.uid(def.symbol||'C');
+
     const span     = def.leg_span || 1;
     const legCount = def.legs     || 2;
-    const legs     = buildLegs(legCount, span, row, col);
+    // ALL switches (SPST/SPDT/DPDT/3PDT) live in the External Switches
+    // PANEL, a genuinely separate surface with no board-hole coordinates at
+    // all (see board.js's buildExtPanelLayout) — `row`/`col` here mean SLOT
+    // row/col in that panel's uniform grid, not board holes. Each row of
+    // pins (a "pole" for the throw-select family, the single connection for
+    // SPST) gets its own private virtual leg-row namespace
+    // ('sw:<instanceId>:<rowIdx>', col 0..cols-1) so they're real, wireable,
+    // net-solver-compatible leg identities (the net builder only ever
+    // treats row/col as opaque string-key pieces, same as how rail rows
+    // like 'rtp' already work) without ever colliding with real board
+    // coordinates or another switch's pins. `_extSlot` records which panel
+    // slot this instance occupies, since legs alone no longer carry that
+    // (unlike every other component, whose legs ARE board coordinates) —
+    // board.js's placement/rendering/hit-testing reads this directly rather
+    // than re-deriving slot position from the virtual leg rows.
+    const isSwitch = def.behavior?.type === 'switch_mpdt' || def.behavior?.type === 'switch_spst';
+    const legs = isSwitch
+      ? buildSwitchLegs(instanceId, def.behavior.rows || 1, def.behavior.cols || 2)
+      : buildLegs(legCount, span, row, col);
     // Note: power_supply's default vertical orientation is applied in
     // board.js's onDrop, not here — that needs real pixel/hole math
     // (to correctly handle drops directly onto a rail) that this module,
     // which only deals in row/col numbers, doesn't have access to.
 
     const inst = {
-      instanceId:  Utils.uid(def.symbol||'C'),
+      instanceId,
       defId,
       legs,
       props,
@@ -82,6 +102,7 @@ const ComponentRegistry = (() => {
       failureType: null,
       _voltage:    0, _current: 0, _audioNode: null
     };
+    if (isSwitch) inst._extSlot = { row, col };
     applyModelDefaults(inst);
     applyToleranceRoll(inst, def);
     return inst;
@@ -226,6 +247,29 @@ const ComponentRegistry = (() => {
   }
 
   function clampCol(col) { return Math.max(0, Math.min(62, col)); }
+
+  // Switch leg layout (SPST/SPDT/DPDT/3PDT, anything living in the External
+  // Switches panel): each ROW of pins (a "pole" for the throw-select
+  // family; the single pair of terminals for SPST) gets its own private
+  // virtual row ('sw:<instanceId>:<rowIdx>') with `cols` columns (SPST: 2,
+  // just the two terminals; the throw-select family: 3, throw-A/common/
+  // throw-B) — NOT board-hole coordinates, since these live in the
+  // External Switches PANEL, a wholly separate surface with no hole grid
+  // at all (see board.js's buildExtPanelLayout). The virtual-row scheme
+  // keeps these legs real, wireable, net-solver node identities
+  // (buildNetMap only ever treats row/col as opaque string-key pieces)
+  // while guaranteeing they can never collide with real board coordinates
+  // or another switch's pins, matching the "poles don't auto-bond, only
+  // explicit wires connect anything" decision made when this panel was
+  // scoped.
+  function buildSwitchLegs(instanceId, rows, cols) {
+    const legs = [];
+    for (let r = 0; r < rows; r++) {
+      const rowKey = 'sw:' + instanceId + ':' + r;
+      for (let cc = 0; cc < cols; cc++) legs.push({ row: rowKey, col: cc });
+    }
+    return legs;
+  }
 
   return { load, getAll, getById, search, createInstance, applyModelDefaults, rerollTolerance, categoryLabel, subcategoryLabel };
 })();

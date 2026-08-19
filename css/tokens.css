@@ -53,6 +53,7 @@
   --board-hole:         #4A3E34;
   --board-hole-shadow:  #251E16;
   --board-stripe:       #F0EDE5;
+  --board-ext-panel-bg: #1C1512; /* External Switches panel: slightly lighter than --bg-base (#0D0A08, the dark canvas), NOT the tan board — a separate off-board surface, not more board */
   --board-bus-r:        var(--rw-red);
   --board-bus-b:        var(--rw-blue);
   --board-bus-r-bg:     rgba(176, 32, 46, 0.07);

@@ -21,6 +21,39 @@ const Board = (() => {
   const RAIL_STRIP_H = 2*HOLE_PITCH+RAIL_PAD_V*2;
   const RAIL_TO_GRID = 10;
   const DIP_GAP      = 18;
+  // External Switches panel — a genuinely SEPARATE surface in the dark
+  // canvas background below the board, not an extension of the board's own
+  // hole grid (an earlier version of this tried that; it read as "more
+  // board," not as an external/off-board area, and per direct feedback that
+  // was the wrong metaphor entirely). No board coordinates apply here at
+  // all: switches snap to an INVISIBLE uniform grid of slots (one switch
+  // per slot, sized to fit the largest switch — a 3PDT — so every slot is
+  // the same size regardless of which switch occupies it), and each
+  // switch's own body renders its real pins as the actual wire-snap points,
+  // not board holes underneath it.
+  const EXT_GAP_ABOVE  = 5;  // true empty gap between the board's bottom edge and the panel's top edge
+  const EXT_SLOT_ROWS  = 3;  // how many slot-rows tall the panel starts at (tune after seeing it, per direct instruction)
+  const EXT_PANEL_PAD  = 12; // inner padding between the panel's rounded edge and the first/last slot
+  const EXT_LABEL_H    = 20; // space reserved for the "External Switches" heading inside the panel
+  // A switch's own pin pitch reuses HOLE_PITCH so a jumper from a board hole
+  // to a switch pin doesn't visually change scale mid-run. Every switch
+  // renders its OWN body sized to its real (rows,cols) pin-grid shape (see
+  // switchShape/drawSwitchInst) — SW_BODY_W/SW_BODY_H below are ONLY the
+  // largest possible shape (3PDT, 3x3), used purely to size the uniform
+  // slot grid every switch snaps into (per direct instruction: every switch
+  // gets a slot this size regardless of its own real footprint, so smaller
+  // switches sit centered with breathing room rather than the grid
+  // resizing per switch) — they are NOT what gets drawn for a smaller
+  // switch, which computes its own bodyW/bodyH from its own shape instead.
+  const SW_PIN_PITCH   = HOLE_PITCH;
+  const SW_BODY_MARGIN = 10; // body edge past the outermost pin, each side
+  const SW_TOGGLE_H    = 16; // height of the position-toggle strip drawn below the pin grid
+  const SW_MAX_ROWS    = 4; // 4PDT is currently the widest-pole switch this app supports — bump this (and add the matching component) if a wider one is ever needed
+  const SW_MAX_COLS    = 3;
+  const SW_BODY_W      = (SW_MAX_COLS-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2;
+  const SW_BODY_H      = (SW_MAX_ROWS-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2 + SW_TOGGLE_H;
+  const EXT_SLOT_W     = SW_BODY_W + 16; // breathing room around the largest switch body
+  const EXT_SLOT_H     = SW_BODY_H + 16;
   const LABEL_PAD    = 8;
   const LEG_HIT_R    = 10;
   const LEG_DOT_R    = 6;
@@ -62,6 +95,7 @@ const Board = (() => {
   const cv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const C  = () => ({
     boardBg:   cv('--board-bg'),    stripe:    cv('--board-stripe'),
+    extPanelBg: cv('--board-ext-panel-bg'), extPanelLabel: cv('--text-dim'),
     hole:      cv('--board-hole'),  holeShadow:cv('--board-hole-shadow'),
     railRedBg: cv('--board-bus-r-bg'), railBlueBg:cv('--board-bus-b-bg'),
     railRed:   cv('--board-bus-r'), railBlue:  cv('--board-bus-b'),
@@ -204,6 +238,7 @@ const Board = (() => {
     return ML + col*HOLE_PITCH + extraGroups(col)*GROUP_GAP + HOLE_PITCH/2;
   }
 
+
   function buildLayout() {
     let y=MT;
     const rtMin=y+RAIL_PAD_V+HOLE_PITCH/2, rtPlu=rtMin+HOLE_PITCH;
@@ -215,6 +250,7 @@ const Board = (() => {
     y+=RAIL_TO_GRID;
     const rbMin=y+RAIL_PAD_V+HOLE_PITCH/2, rbPlu=rbMin+HOLE_PITCH;
     y+=RAIL_STRIP_H+MB;
+    const boardBottomY=y; // the board CARD's own bottom edge — external panel geometry is computed from this, in buildExtPanelLayout, but stays a fully separate rect (no shared coordinate system)
     return {
       railTopMinusY:rtMin, railTopPlusY:rtPlu,
       railBotMinusY:rbMin, railBotPlusY:rbPlu,
@@ -222,14 +258,93 @@ const Board = (() => {
       railBotStripTop:MT+RAIL_STRIP_H+RAIL_TO_GRID+10*HOLE_PITCH+DIP_GAP+RAIL_TO_GRID,
       railBotStripBot:MT+RAIL_STRIP_H+RAIL_TO_GRID+10*HOLE_PITCH+DIP_GAP+RAIL_TO_GRID+RAIL_STRIP_H,
       gridTopY, dipGapCenterY:MT+RAIL_STRIP_H+RAIL_TO_GRID+5*HOLE_PITCH+DIP_GAP/2,
-      rowY, totalHeight:y,
+      rowY, boardBottomY,
+      totalHeight:y,
     };
+  }
+
+  // The External Switches panel's own geometry — a genuinely separate rect
+  // (own rounded outline, own background fill, own coordinate space for
+  // switch slots) sitting in the canvas below the board CARD, not part of
+  // buildLayout's board-hole coordinate system at all. Kept as its own
+  // function (not folded into buildLayout) specifically so nothing here can
+  // accidentally leak into holeToXY/xyToHole, which must stay board-hole-
+  // only. `slotRows` is mutable at runtime (see setExtSlotRows) since it's
+  // the one dimension expected to need tuning by eye.
+  let _extSlotRows = EXT_SLOT_ROWS;
+  function setExtSlotRows(n){ _extSlotRows = Math.max(1, n|0); }
+  function extSlotCols(){ return Math.max(1, Math.floor((boardWidth()-EXT_PANEL_PAD*2) / EXT_SLOT_W)); }
+  function buildExtPanelLayout() {
+    const L=_layout;
+    const panelTop = L.boardBottomY + EXT_GAP_ABOVE;
+    const cols = extSlotCols();
+    const gridW = cols*EXT_SLOT_W;
+    const gridLeft = (boardWidth()-gridW)/2; // centered — panel is full board width, slots may not fill it exactly
+    const gridTop = panelTop+EXT_LABEL_H;
+    const panelH = EXT_LABEL_H + _extSlotRows*EXT_SLOT_H + EXT_PANEL_PAD;
+    return { panelTop, panelH, panelBot:panelTop+panelH, cols, rows:_extSlotRows, gridLeft, gridTop };
+  }
+
+  // Pixel center of a given (row,col) slot — the ONLY thing switch
+  // placement/rendering ever needs from this panel; nothing else here
+  // pretends to be board-hole-compatible.
+  function extSlotCenter(row,col) {
+    const EL=buildExtPanelLayout();
+    return { x: EL.gridLeft+col*EXT_SLOT_W+EXT_SLOT_W/2, y: EL.gridTop+row*EXT_SLOT_H+EXT_SLOT_H/2 };
+  }
+
+  // First empty slot, row-major (fills the top row left-to-right before
+  // moving down) — "new switches stack under the first" falls out of this
+  // ordering for free, no special-cased stacking logic needed. Grows the
+  // panel by one more row (via setExtSlotRows) rather than rejecting the
+  // drop once every currently-visible slot is full, since there's no real
+  // reason to cap how many switches a user can add.
+  function findFreeExtSlot() {
+    const EL=buildExtPanelLayout();
+    const occupied = new Set();
+    for (const p of _placed) {
+      if (p._extSlot) occupied.add(p._extSlot.row+','+p._extSlot.col);
+    }
+    for (let r=0; r<EL.rows; r++) {
+      for (let cc=0; cc<EL.cols; cc++) {
+        if (!occupied.has(r+','+cc)) return { row:r, col:cc };
+      }
+    }
+    setExtSlotRows(EL.rows+1);
+    return { row: EL.rows, col: 0 };
   }
 
   const boardWidth  = () => holeX(COLS-1)+HOLE_PITCH/2+MR;
   const boardHeight = () => (_layout||buildLayout()).totalHeight;
+  // Full canvas height: the board card PLUS the true gap PLUS the External
+  // Switches panel — used for canvas sizing/clearing, never for the board
+  // card's own rounded-rect fill (that stays boardHeight(), so the board's
+  // own silhouette doesn't stretch to include the panel — they are two
+  // separate rounded shapes, not one continuous card, per direct feedback
+  // that the earlier hole-grid version reading as "more board" was wrong).
+  const canvasHeight = () => buildExtPanelLayout().panelBot;
 
   function holeToXY(row,col) {
+    // Switch pins ('sw:<instanceId>:<poleIdx>' virtual rows — see
+    // buildSwitchLegs in components-registry.js) don't live in the board's
+    // hole grid at all, so they need their own resolution path here rather
+    // than falling through to L.rowY[row] (undefined for a string this
+    // function was never taught about). This is the single choke point
+    // EVERY wire endpoint, hit-test, and drag operation already calls
+    // through — found missing only by a real click-to-toggle test that
+    // silently failed (holeToXY returned {x, y:undefined} with no error),
+    // exactly the kind of failure this project's own verification
+    // philosophy (extract and run the real function against real data,
+    // don't just read the code) exists to catch. switchPinXY needs the
+    // owning INSTANCE (for its _extSlot), not just the row string, so the
+    // instanceId is parsed back out of the virtual row and looked up in
+    // _placed.
+    if (typeof row==='string' && row.startsWith('sw:')) {
+      const parts=row.split(':'); // ['sw', instanceId, poleIdx]
+      const inst=_placed.find(p=>p.instanceId===parts[1]);
+      if (inst) return switchPinXY(inst, parseInt(parts[2],10)||0, col);
+      return {x:0,y:0}; // instance not found (stale wire after deletion) — same "don't crash" spirit as every other fallback here
+    }
     const L=_layout, x=holeX(col);
     const y=row==='rtp'?L.railTopPlusY:row==='rtm'?L.railTopMinusY
            :row==='rbp'?L.railBotPlusY:row==='rbm'?L.railBotMinusY
@@ -251,8 +366,52 @@ const Board = (() => {
     return {x:(e.clientX-r.left)/_zoom, y:(e.clientY-r.top)/_zoom};
   }
 
+  // Real (rows,cols) pin-grid shape for a switch def — every switch type
+  // living in the External Switches panel declares this on its own
+  // behavior block (SPST: 1x2, the two real terminals; SPDT/DPDT/3PDT:
+  // rows=poles, cols=3 for throw-A/common/throw-B). Centralized here so
+  // every switch-aware function reads it the same way.
+  function switchShape(def) {
+    return { rows: def?.behavior?.rows||1, cols: def?.behavior?.cols||2 };
+  }
+
+  // Real pixel position of one pin on a placed switch, derived from its
+  // slot center (_extSlot) and the switch's OWN real pin-grid shape (not a
+  // shared max-size box — a 1x2 SPST centers 2 pins, a 3x3 3PDT centers 9,
+  // each sized/centered to its own real footprint, per direct feedback that
+  // stretching every switch to the largest one's body looked wrong). The
+  // External Switches panel has no hole grid for holeToXY to consult, so
+  // switch instances need this parallel path instead. `rowIdx` is which
+  // row of pins (0-based, top row first), `colIdx` is 0..cols-1 — matches
+  // buildSwitchLegs' leg order exactly (leg i belongs to row
+  // floor(i/cols), col i%cols), so callers can derive one from the other
+  // consistently.
+  function switchPinXY(inst,rowIdx,colIdx) {
+    const def=ComponentRegistry.getById(inst.defId);
+    const {rows,cols}=switchShape(def);
+    const slot=inst._extSlot||{row:0,col:0};
+    const {x:cx,y:cy}=extSlotCenter(slot.row,slot.col);
+    // Pin grid is centered on the slot; toggle strip sits below it, so the
+    // pin grid's own vertical center is offset UP from the slot center by
+    // half the toggle height (matches this switch's own body composition:
+    // pin grid + toggle stacked, body vertically centered in the slot).
+    const gridCx=cx, gridCy=cy-SW_TOGGLE_H/2;
+    const px=gridCx + (colIdx-(cols-1)/2)*SW_PIN_PITCH;
+    const py=gridCy + (rowIdx-(rows-1)/2)*SW_PIN_PITCH;
+    return {x:px,y:py};
+  }
+
   // ── Component geometry ────────────────────────────────────────────────────────
   function instLegPixels(inst,useOffset) {
+    const def=ComponentRegistry.getById(inst.defId);
+    if(def?.behavior?.type==='switch_mpdt'||def?.behavior?.type==='switch_spst'){
+      const {cols}=switchShape(def);
+      return inst.legs.map((l,i)=>{
+        const {x,y}=switchPinXY(inst,Math.floor(i/cols),i%cols);
+        if(useOffset) return {x:x+_dragOffsetX,y:y+_dragOffsetY};
+        return {x,y};
+      });
+    }
     return inst.legs.map(l=>{
       const {x,y}=holeToXY(l.row,l.col);
       if(useOffset) return {x:x+_dragOffsetX,y:y+_dragOffsetY};
@@ -264,6 +423,7 @@ const Board = (() => {
     const pts=useOffset?instLegPixels(inst,true):instLegPixels(inst,false);
     const def=ComponentRegistry.getById(inst.defId);
     if(def?.category==='ic') return icGeometry(inst,pts);
+    if(def?.behavior?.type==='switch_mpdt'||def?.behavior?.type==='switch_spst') return switchGeometry(inst,pts,useOffset);
     const a=pts[0], b=pts[pts.length-1];
     const cx=(a.x+b.x)/2, cy=(a.y+b.y)/2;
     const ang=Math.atan2(b.y-a.y,b.x-a.x);
@@ -293,6 +453,17 @@ const Board = (() => {
     return {cx,cy,ang,len:maxX-minX,pts};
   }
 
+  // Multi-pole switches always render upright in their panel slot (no
+  // rotate control — the slot grid has no meaningful orientation to rotate
+  // INTO), so center is just the slot center directly rather than derived
+  // from pin positions, and ang is always 0.
+  function switchGeometry(inst,pts,useOffset){
+    const slot=inst._extSlot||{row:0,col:0};
+    const {x:cx,y:cy}=extSlotCenter(slot.row,slot.col);
+    const off=useOffset?{x:_dragOffsetX,y:_dragOffsetY}:{x:0,y:0};
+    return {cx:cx+off.x,cy:cy+off.y,ang:0,len:SW_BODY_W,pts};
+  }
+
   function hitTestComp(x,y) {
     for(let i=_placed.length-1;i>=0;i--) {
       const inst=_placed[i], def=ComponentRegistry.getById(inst.defId);
@@ -309,6 +480,22 @@ const Board = (() => {
         const lx=dx*Math.cos(-geo.ang)-dy*Math.sin(-geo.ang);
         const ly=dx*Math.sin(-geo.ang)+dy*Math.cos(-geo.ang);
         if(Math.abs(lx)<pinHalfW+margin&&Math.abs(ly)<pinHalfH+margin) return inst;
+        continue;
+      }
+      if(def.behavior?.type==='switch_mpdt'||def.behavior?.type==='switch_spst'){
+        // Real per-switch body size (matches drawSwitchInst exactly, NOT
+        // the schema's static visual.body_width/height — those are unused
+        // for these parts, since every switch draws its own body sized to
+        // its real (rows,cols) pin-grid shape, see switchShape). Without
+        // this branch, hit-testing fell through to the generic 2-leg body
+        // box using the static visual size, which doesn't match ANY
+        // switch's real rendered footprint — found by a real click-to-
+        // toggle test that silently never registered a hit.
+        const {rows,cols}=switchShape(def);
+        const bw2=((cols-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2)/2+6;
+        const bh2=((rows-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2 + SW_TOGGLE_H)/2+6;
+        const dx2=x-geo.cx, dy2=y-geo.cy;
+        if(Math.abs(dx2)<bw2&&Math.abs(dy2)<bh2) return inst;
         continue;
       }
       const bh0=def.visual?.body_height||16;
@@ -394,7 +581,7 @@ const Board = (() => {
   // ── Canvas init (DPR-aware) ───────────────────────────────────────────────────
   function initCanvas() {
     _dpr=window.devicePixelRatio||1;
-    const W=boardWidth(), H=boardHeight();
+    const W=boardWidth(), H=canvasHeight();
     canvas.width=Math.round(W*_dpr); canvas.height=Math.round(H*_dpr);
     canvas.style.width=W+'px'; canvas.style.height=H+'px';
     ctx.setTransform(_dpr,0,0,_dpr,0,0);
@@ -404,14 +591,14 @@ const Board = (() => {
   function render(ghostX,ghostY) {
     const c=C();
     ctx.setTransform(_dpr,0,0,_dpr,0,0);
-    ctx.clearRect(0,0,boardWidth(),boardHeight());
+    ctx.clearRect(0,0,boardWidth(),canvasHeight());
     // Wires draw AFTER components (not before) so every jumper sits above
     // every component, at all times — not just while dragging. Newest-
     // wire-on-top falls out for free within drawWires itself: addWire()
     // appends to the end of _wires, and a canvas paints array entries in
     // order, so a later wire is always painted over an earlier one without
     // needing any separate z-index concept.
-    drawBoardSurface(c); drawComponents(c); drawWires(c);
+    drawBoardSurface(c); drawExternalSwitchPanel(c); drawComponents(c); drawWires(c);
     if(_paletteGhost) drawPaletteGhost(ghostX??_mouseX,ghostY??_mouseY,c);
     drawMeasurementReadout();
   }
@@ -460,6 +647,26 @@ const Board = (() => {
     ctx.fillStyle=c.label; ctx.font='bold 9px IBM Plex Mono,monospace'; ctx.textAlign='center';
     ctx.fillText('DIP',ML/2,L.dipGapCenterY+3); ctx.fillText('DIP',W-MR/2,L.dipGapCenterY+3);
     drawRailStrip(c,'top'); drawRailStrip(c,'bot'); drawMainGrid(c);
+  }
+
+  // A genuinely SEPARATE surface for multi-pole switches (SPDT/DPDT/3PDT),
+  // sitting in the dark canvas background below the board — its own rounded
+  // rect, its own (slightly-lighter-than-canvas, not lighter-than-board)
+  // fill, a true gap above it, and NO visible holes: the grid inside it is
+  // invisible, switches snap to uniform slots by center point only (see
+  // extSlotCenter), and a placed switch draws its own real pins as the
+  // actual wire-connection points. This replaced an earlier version that
+  // extended the board's own hole grid downward — per direct feedback that
+  // read as "more board," not as a separate off-board area, which is the
+  // whole point of a panel meant to represent point-to-point wiring to a
+  // physically separate part.
+  function drawExternalSwitchPanel(c){
+    const W=boardWidth(), EL=buildExtPanelLayout();
+    ctx.fillStyle=c.extPanelBg;
+    Shapes.roundRect(ctx,0,EL.panelTop,W,EL.panelH,10);
+    ctx.fill();
+    ctx.fillStyle=c.extPanelLabel; ctx.font='bold 9px IBM Plex Mono,monospace'; ctx.textAlign='center';
+    ctx.fillText(I18n.t('app.board.externalSwitchesLabel'),W/2,EL.panelTop+14);
   }
 
   function drawRailStrip(c,side) {
@@ -620,6 +827,13 @@ const Board = (() => {
     // they get their own complete draw path rather than threading an extra
     // branch through the 2-leg/3-leg logic below.
     if(def.category==='ic'){ drawIcInst(inst,def,c,isSel,isFail,alpha,geo); ctx.restore(); return; }
+    // Switches living in the External Switches panel (SPST/SPDT/DPDT/3PDT):
+    // no stretchy leads at all — a real switch's pins ARE the body, wires
+    // connect directly to them, not through a drawn lead to a board hole.
+    // Own complete draw path, same "structurally different enough to not
+    // thread through the 2/3-leg logic below" reasoning as the IC branch
+    // above.
+    if(def.behavior?.type==='switch_mpdt'||def.behavior?.type==='switch_spst'){ drawSwitchInst(inst,def,c,isSel,isFail,alpha); ctx.restore(); return; }
 
     const halfLen=len/2;
     const bw=def.visual?.body_width||28, bh=def.visual?.body_height||14;
@@ -716,6 +930,89 @@ const Board = (() => {
       ctx.fillText('✕',0,failY);
     }
     ctx.restore();
+  }
+
+  // Draws a multi-pole switch (SPDT/DPDT/3PDT): the real pin grid on top
+  // (one row per pole, 3 columns for throw-A/common/throw-B — the ACTUAL
+  // wire-connection points, not board holes) and a position-toggle strip
+  // below it, matching the real-hardware look a plain SPST already had via
+  // Shapes.drawSwitch, just generalized to however many rows/cols this
+  // part's real pin grid has. Sized to THIS switch's own real (rows,cols)
+  // shape (switchShape), not a fixed max-size box shared by every switch
+  // type — per direct feedback that stretching every switch to the largest
+  // one's body looked wrong, and every switch should be proportioned to
+  // its own real footprint. ctx is already translated/rotated to the
+  // switch's own center (ang is always 0 for these — see switchGeometry),
+  // so pin positions here are LOCAL offsets from switchPinXY's world
+  // coordinates, same "subtract cx/cy" pattern drawIcInst uses just below.
+  function drawSwitchInst(inst,def,c,isSel,isFail,alpha){
+    const {rows,cols}=switchShape(def);
+    const bodyW=(cols-1)*SW_PIN_PITCH + SW_BODY_MARGIN*2;
+    const gridH=(rows-1)*SW_PIN_PITCH;
+    const bodyH=gridH + SW_BODY_MARGIN*2 + SW_TOGGLE_H;
+    const gridCy=-SW_TOGGLE_H/2; // local-space grid center, matches switchPinXY's world-space offset (ctx is already translated to the switch's own center by drawInst)
+
+    ctx.fillStyle='#3a3a3a';
+    Shapes.roundRect(ctx,-bodyW/2,gridCy-gridH/2-SW_BODY_MARGIN,bodyW,bodyH,4);
+    ctx.fill();
+    if(isSel){ctx.strokeStyle=c.warning;ctx.lineWidth=2;ctx.stroke();}
+
+    // Real pins: same visual weight as an IC's pin stubs (lighter than a
+    // plain lead), since these ARE the connection points a wire snaps to.
+    ctx.fillStyle=IC_STUB_COLOR;
+    for(let r=0;r<rows;r++){
+      for(let cc=0;cc<cols;cc++){
+        const px=(cc-(cols-1)/2)*SW_PIN_PITCH, py=gridCy+(r-(rows-1)/2)*SW_PIN_PITCH;
+        ctx.beginPath();ctx.arc(px,py,LEG_DOT_R*0.6,0,Math.PI*2);ctx.fill();
+      }
+    }
+
+    // Position toggle: a lever whose ANGLE reflects the real lever position
+    // (tilted toward whichever end it's thrown to, level in the middle for
+    // a real 3-position switch), positioned in the reserved strip below the
+    // pin grid rather than filling the whole body (a multi-pole switch's
+    // body is dominated by its pin grid, not the toggle itself). SPST keeps
+    // its own real open/closed semantics (see the "keep SPST's own model"
+    // decision) — ON/OFF label — everything else is the throw-select
+    // family, labeled by real 1/2/3 position (On-On's 2 positions still
+    // read as "1"/"2" here rather than "A"/"B": the pin LABELS stay A/B
+    // since those are the real terminal names, but the switch's PHYSICAL
+    // position is a lever angle, not a terminal name).
+    const toggleY=gridCy+gridH/2+SW_BODY_MARGIN;
+    const isSpst=def.behavior?.type==='switch_spst';
+    const onColor=c.success||'#33cc66', offColor=c.label;
+    if(isSpst){
+      const active=Utils.isSwitchClosed(inst);
+      ctx.strokeStyle=active?onColor:offColor;ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.moveTo(-bodyW/2+8,toggleY-4);
+      ctx.lineTo(bodyW/2-8,active?toggleY+4:toggleY-4);
+      ctx.stroke();
+      ctx.fillStyle=active?onColor:offColor;
+      ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';
+      ctx.fillText(active?'ON':'OFF',0,toggleY+SW_TOGGLE_H/2-2);
+    } else {
+      const maxPos = inst.props?.throw_type==='On-On' ? 2 : 3;
+      const position = Utils.clamp(parseInt(inst.props?.position,10)||1, 1, maxPos);
+      // Lever tilt: -1 at position 1, 0 at the middle (only reachable when
+      // maxPos===3), +1 at the last position — an On-On switch has no real
+      // middle, so its 2 positions map to the two extremes directly.
+      const tilt = maxPos===2 ? (position===1?-1:1) : (position-2);
+      const active = !(maxPos===3 && position===2 && inst.props?.throw_type==='On-Off-On'); // true neutral middle only for On-Off-On
+      ctx.strokeStyle=active?onColor:offColor;ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.moveTo(-bodyW/2+8,toggleY-4);
+      ctx.lineTo(bodyW/2-8,toggleY-4+tilt*4);
+      ctx.stroke();
+      ctx.fillStyle=active?onColor:offColor;
+      ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';
+      ctx.fillText(String(position),0,toggleY+SW_TOGGLE_H/2-2);
+    }
+
+    if(isFail){
+      ctx.globalAlpha=1;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillStyle=c.alert;
+      ctx.fillText('✕',0,gridCy);
+    }
   }
 
   // Draws an IC (DIP-N package): 8 (or however many) straight leads from
@@ -1164,6 +1461,23 @@ const Board = (() => {
         inst.props.state=(inst.props.state==='Closed')?'Open':'Closed';Simulation.notifyStateChange(inst);Storage.markDirty();History.push();render();
       }
     }
+    if(def?.behavior?.type==='switch_mpdt'){
+      // A real mechanical toggle can't skip a position — clicking always
+      // advances in the CURRENT direction of travel and reverses at either
+      // end (1->2->3->2->1...), not a plain wrap-around cycle. Direction is
+      // tracked in _mpdtDir (runtime only, not serialized — a fresh load
+      // always starts as if just having arrived from below, matching how a
+      // freshly-placed switch has no prior click history).
+      const maxPos = inst.props?.throw_type==='On-On' ? 2 : 3;
+      const cur = Utils.clamp(parseInt(inst.props?.position,10)||1, 1, maxPos);
+      let dir = inst._mpdtDir || 1;
+      let next = cur + dir;
+      if (next > maxPos) { dir = -1; next = cur + dir; }
+      else if (next < 1)  { dir = 1;  next = cur + dir; }
+      inst._mpdtDir = dir;
+      inst.props.position = String(Utils.clamp(next, 1, maxPos));
+      Simulation.notifyStateChange(inst);Storage.markDirty();History.push();render();
+    }
   }
 
   function onDrop(e){
@@ -1171,6 +1485,17 @@ const Board = (() => {
     const defId=e.dataTransfer.getData('text/plain');if(!defId) return;
     if(typeof isCircuitEngaged==='function' && isCircuitEngaged()){
       if(typeof setStatus==='function') setStatus(I18n.t('app.board.stopToAdd'));
+      return;
+    }
+    // Every switch (SPST/SPDT/DPDT/3PDT) always routes into the External
+    // Switches panel regardless of where the user actually drops it — they
+    // can't physically exist anywhere else on this board (no board-hole
+    // coordinates apply to any of them). Bypasses the whole xyToHole/DIP-
+    // anchor snap path below entirely, since that machinery is board-hole-
+    // specific and doesn't apply here.
+    const dropDefEarly=ComponentRegistry.getById(defId);
+    if(dropDefEarly?.behavior?.type==='switch_mpdt'||dropDefEarly?.behavior?.type==='switch_spst'){
+      finalizePlacement(defId, findFreeExtSlot(), null);
       return;
     }
     const {x,y}=eventToCanvas(e);

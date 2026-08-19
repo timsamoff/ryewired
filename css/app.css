@@ -305,6 +305,34 @@ input, select, textarea { font-family: var(--font-ui); }
 #board-scroll::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
 #board-scroll::-webkit-scrollbar-corner { background: var(--bg-base); }
 
+/* Sized explicitly (via JS, see app.js's applyZoom) to the board's SCALED
+   (post-zoom) pixel dimensions — this is what #board-scroll actually
+   measures for scrollWidth/scrollHeight, so overflow/scrollbars reflect the
+   real visible footprint. #board-transform inside stays unscaled in LAYOUT
+   terms and is only shrunk visually via CSS transform below it, which is
+   deliberate: transform is purely visual and never affects a scrolling
+   ancestor's measured overflow, which is exactly why scrollbars used to
+   show even when the zoomed-out board visibly fit — #board-scroll was
+   always measuring #board-transform's full UNSCALED size regardless of
+   the visual scale applied to it. This wrapper fixes that without changing
+   how the zoom animation itself works.
+   transition height/width intentionally left off transform's own list;
+   size changes at zoom time are effectively instant (no animatable jump
+   in scroll geometry), while the visual scale keeps its own smooth easing. */
+#board-zoom-box {
+  overflow: hidden;
+  /* #board-scroll is display:flex (row direction), and a flex item shrinks
+     below its own explicit width by default (flex-shrink:1) to fit the
+     container's main axis — exactly backwards from what's needed here: the
+     box's explicit width (set in JS, see app.js's applyZoom) is meant to
+     genuinely overflow #board-scroll when zoomed in, so THAT triggers the
+     horizontal scrollbar. Without this, the box silently shrank to fit no
+     matter how wide it was told to be, and the horizontal scrollbar could
+     never appear (vertical worked because flex-shrink only governs the
+     row-direction container's MAIN axis, not the cross axis). */
+  flex-shrink: 0;
+}
+
 /* Board canvas wrapped in a transform container for zoom */
 #board-transform {
   position: relative; /* anchors #trace-overlay-canvas below */
@@ -475,6 +503,20 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
 .prop-range-wrap { display: flex; align-items: center; gap: 8px; }
 .prop-range-wrap input[type="range"] { flex: 1; accent-color: var(--accent); }
 .prop-range-value { font-family: var(--font-mono); font-size: 11px; color: var(--accent); min-width: 38px; text-align: right; }
+
+/* On-On-On throw table (see properties-panel.js's buildThrowTableField) —
+   one row per pole, one A/B/Open dropdown per position. Kept compact since
+   it can run to several rows for a 3PDT. */
+.prop-throw-table .prop-throw-row {
+  display: grid; grid-template-columns: 44px repeat(3, 1fr); gap: 4px; margin-bottom: 4px;
+}
+.prop-throw-table .prop-throw-header { margin-bottom: 6px; }
+.prop-throw-pole-label, .prop-throw-pos-label {
+  font-family: var(--font-mono); font-size: 9px; color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center;
+}
+.prop-throw-pole-label { justify-content: flex-start; text-transform: uppercase; letter-spacing: 0.06em; }
+.prop-throw-cell { padding: 3px 4px; font-size: 11px; text-align: center; }
 
 .prop-audio-btn {
   width: 100%; padding: 7px; background: var(--bg-input);

@@ -14,7 +14,7 @@
       "hintKey": "component.switch_spst.state.hint",
       "_i18nNote": "options ARE matched literally ('Closed') by js/utils.js's isSwitchClosed() and js/board.js's toggle. Same landmine — needs a stable non-text identifier before this can be localized." }
   ],
-  "behavior": { "type": "switch_spst" },
+  "behavior": { "type": "switch_spst", "rows": 1, "cols": 2 },
   "failure_modes": {},
   "visual": {
     "body_color": "#333333",

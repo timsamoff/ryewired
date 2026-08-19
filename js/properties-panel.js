@@ -327,6 +327,14 @@ const PropertiesPanel = (() => {
           if (magnitude >= 1000) unitLabel = 'µA';
         }
       }
+      // The On-On-On truth table only means anything once that throw type
+      // is actually selected — hidden otherwise, same as how this app
+      // generally avoids showing controls with no live effect.
+      if (prop.key==='throw_table' && inst.props?.throw_type!=='On-On-On') continue;
+      if (prop.type==='throw_table') {
+        html += buildThrowTableField(prop, inst.props[prop.key]||{}, def.behavior?.rows||1);
+        continue;
+      }
       html += buildPropField(prop, inst.props[prop.key], placeholder, unitLabel);
     }
 
@@ -395,10 +403,17 @@ const PropertiesPanel = (() => {
       rotateLeg90(inst, -1); // counter-clockwise = -90°
     });
 
-    // Property change listeners
-    _content.querySelectorAll('.prop-input, input[type="range"]').forEach(el => {
+    // Property change listeners. Throw-table cells write into a NESTED
+    // object (props.throw_table[pole-position]), not a flat props[key] the
+    // way every other field does, so they're excluded here and get their
+    // own listener below rather than teaching onPropChange a special case
+    // for one property's internal shape.
+    _content.querySelectorAll('.prop-input:not(.prop-throw-cell), input[type="range"]').forEach(el => {
       el.addEventListener('input',  onPropChange);
       el.addEventListener('change', onPropChange);
+    });
+    _content.querySelectorAll('.prop-throw-cell').forEach(el => {
+      el.addEventListener('change', onThrowTableChange);
     });
     wireCustomSelects();
 
@@ -526,6 +541,44 @@ const PropertiesPanel = (() => {
     // tooltip.hint-wrap in app.css) and the same 500ms-show/instant-hide
     // behavior as everywhere else in the app, instead of a second,
     // inconsistent tooltip mechanism.
+    if (!resolved.hint) return html;
+    return html.replace('class="prop-label"', `class="prop-label" data-hint="${escapeAttr(resolved.hint)}"`);
+  }
+
+  // On-On-On throw table: one row per pole, one A/B/Open dropdown per
+  // position (1/2/3). No default pattern is ever pre-filled here (see the
+  // component JSON's own note — real on-on-on switches vary by
+  // manufacturer, verified against multiple sources, so this app never
+  // presumes a specific part's internal wiring). Each dropdown carries
+  // data-pole/data-position instead of the generic data-key value-write
+  // path, since the value lives in a nested object (props.throw_table),
+  // not a flat prop — handled by its own change listener (see wireUp)
+  // rather than onPropChange's generic props[key]=value.
+  function buildThrowTableField(prop, table, poles) {
+    const resolved = resolvePropText(prop);
+    const posLabel = n => I18n.t('app.properties.throwTablePosition', { n });
+    let rows = '';
+    for (let p = 0; p < poles; p++) {
+      let cells = '';
+      for (let pos = 1; pos <= 3; pos++) {
+        const cellKey = p+'-'+pos;
+        const cur = table[cellKey] || '';
+        cells += `
+          <select class="prop-input prop-throw-cell" data-pole="${p}" data-position="${pos}">
+            <option value="" ${cur===''?'selected':''}>${I18n.t('app.properties.throwTableOpen')}</option>
+            <option value="A" ${cur==='A'?'selected':''}>A</option>
+            <option value="B" ${cur==='B'?'selected':''}>B</option>
+          </select>`;
+      }
+      rows += `<div class="prop-throw-row"><span class="prop-throw-pole-label">${I18n.t('app.properties.throwTablePole',{n:p+1})}</span>${cells}</div>`;
+    }
+    const header = `<div class="prop-throw-row prop-throw-header"><span class="prop-throw-pole-label"></span>`
+      + [1,2,3].map(n=>`<span class="prop-throw-pos-label">${posLabel(n)}</span>`).join('') + `</div>`;
+    const html = `
+      <div class="prop-group prop-throw-table" data-key="${prop.key}">
+        <label class="prop-label">${resolved.label}</label>
+        ${header}${rows}
+      </div>`;
     if (!resolved.hint) return html;
     return html.replace('class="prop-label"', `class="prop-label" data-hint="${escapeAttr(resolved.hint)}"`);
   }
@@ -775,6 +828,23 @@ const PropertiesPanel = (() => {
       // the panel is closed and reopened.
       show(_currentInst);
     }
+  }
+
+  // Writes one cell of props.throw_table (see buildThrowTableField) — a
+  // nested object, not a flat prop, so it can't go through onPropChange's
+  // generic props[key]=rawVal path. Deleting the key entirely for "Open"
+  // (rather than storing an empty string) keeps a freshly-placed switch's
+  // saved .rye lean and matches this app's existing convention for
+  // optional metadata (see onPropChange's title/description handling).
+  function onThrowTableChange(e) {
+    if (!_currentInst) return;
+    const pole = e.target.dataset.pole, position = e.target.dataset.position;
+    if (pole==null || position==null) return;
+    const cellKey = pole+'-'+position;
+    if (!_currentInst.props.throw_table) _currentInst.props.throw_table = {};
+    if (e.target.value === '') delete _currentInst.props.throw_table[cellKey];
+    else _currentInst.props.throw_table[cellKey] = e.target.value;
+    Board.redraw(); Storage.markDirty(); History.pushDebounced();
   }
 
   function hide() {

@@ -2429,6 +2429,54 @@ const Simulation = (() => {
       union(k1, k2);
     }
 
+    // Multi-pole throw-select switches (SPDT/DPDT/3PDT): each pole is 3 legs
+    // [throw-A, common, throw-B] (matches buildSwitchLegs' col order and the
+    // real leg_labels in each switch's component JSON). Per pole, per the
+    // switch's current position, the common leg unions to whichever throw
+    // (if any) is actually connected at that position — never both, and for
+    // On-Off-On's middle position or an On-On-On cell left unset, neither
+    // (an open pole is simply not unioned to anything, same as an open
+    // switch_spst leaving its two legs on separate nets).
+    for (const inst of placed) {
+      const def = ComponentRegistry.getById(inst.defId);
+      if (def?.behavior?.type !== 'switch_mpdt') continue;
+      const poles = def.behavior.rows || 1;
+      if (inst.legs.length < poles*3) continue;
+      const throwType = inst.props?.throw_type || 'On-On';
+      const position = Utils.clamp(parseInt(inst.props?.position, 10) || 1, 1, 3);
+
+      for (let p = 0; p < poles; p++) {
+        const legA = inst.legs[p*3], legCom = inst.legs[p*3+1], legB = inst.legs[p*3+2];
+        let throw_ = null; // 'A' | 'B' | null (open)
+
+        if (throwType === 'On-On') {
+          // Only 2 real positions ever apply — position is clamped to 1/2
+          // by the click-toggle and properties panel, but clamp again here
+          // defensively since a hand-edited .rye could carry position:3.
+          throw_ = (Utils.clamp(position, 1, 2) === 1) ? 'A' : 'B';
+        } else if (throwType === 'On-Off-On') {
+          // Real neutral middle: position 2 connects neither throw.
+          throw_ = position === 1 ? 'A' : position === 3 ? 'B' : null;
+        } else if (throwType === 'On-On-On') {
+          // No universal contact pattern exists for real on-on-on switches
+          // (verified against multiple sources — manufacturers differ), so
+          // this is ENTIRELY user-authored per instance via throw_table,
+          // never a built-in guess. An unset cell reads as open, the same
+          // honest "don't know" default the property itself starts at.
+          const cell = inst.props?.throw_table?.[p+'-'+position];
+          throw_ = (cell === 'A' || cell === 'B') ? cell : null;
+        }
+
+        if (throw_ === null) continue;
+        const comKey = key(legCom.row, legCom.col);
+        const throwLeg = throw_ === 'A' ? legA : legB;
+        const throwKey = key(throwLeg.row, throwLeg.col);
+        if (!parent[comKey]) parent[comKey]=comKey;
+        if (!parent[throwKey]) parent[throwKey]=throwKey;
+        union(comKey, throwKey);
+      }
+    }
+
     return { find, key };
   }
 

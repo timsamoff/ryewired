@@ -425,25 +425,72 @@ function zoomIn()    { applyZoom(Math.min(ZOOM_MAX, snapZoom(_zoomLevel + ZOOM_S
 function zoomOut()   { applyZoom(Math.max(ZOOM_MIN, snapZoom(_zoomLevel - ZOOM_STEP))); }
 function snapZoom(v) { return Math.round(v / ZOOM_STEP) * ZOOM_STEP; }
 
-function fitBoard() {
-  const scroll = document.getElementById('board-scroll');
+// Real UNSCALED board size (CSS/logical pixels, not canvas.width which is
+// DPR-inflated) — the board canvas's own width/height plus the workbench
+// strip's height stacked above it, since #board-transform wraps both
+// canvases as one block. Shared by fitBoard (what needs to shrink to fit)
+// and applyZoom (what #board-zoom-box needs to be explicitly sized to at
+// the chosen zoom level — see that function's own comment for why).
+function boardUnscaledSize() {
   const canvas = document.getElementById('board-canvas');
-  if (!scroll || !canvas) return;
-  const aW = scroll.clientWidth  - 56;
-  const aH = scroll.clientHeight - 56;
-  // Use CSS (logical) size, not canvas.width which is DPR-inflated
+  if (!canvas) return null;
   const bW = parseFloat(canvas.style.width)  || canvas.clientWidth;
   const stripH = (typeof WorkbenchStrip !== 'undefined' && WorkbenchStrip.getVisualHeight) ? WorkbenchStrip.getVisualHeight() : 0;
   const bH = (parseFloat(canvas.style.height) || canvas.clientHeight) + stripH;
-  if (!bW || !bH) return;
-  const raw = Math.min(aW / bW, aH / bH, 1.0);
-  applyZoom(Math.max(ZOOM_MIN, snapZoom(raw)));
+  if (!bW || !bH) return null;
+  return { bW, bH };
 }
 
-function applyZoom(level) {
-  _zoomLevel = Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level)) * 10) / 10;
+function fitBoard() {
+  const scroll = document.getElementById('board-scroll');
+  if (!scroll) return;
+  const size = boardUnscaledSize();
+  if (!size) return;
+  const aW = scroll.clientWidth  - 56;
+  const aH = scroll.clientHeight - 56;
+  const raw = Math.min(aW / size.bW, aH / size.bH, 1.0);
+  // Round DOWN, not to nearest (snapZoom's usual Math.round) — this is
+  // specifically "fit," where the result must never exceed the space
+  // actually available. Rounding to nearest could snap UP past the true
+  // fit ratio (e.g. a true fit of 0.267 rounds to 0.3, which is too large),
+  // reintroducing exactly the scrollbar this function exists to avoid —
+  // found by a real narrow-viewport test that still showed a horizontal
+  // scrollbar immediately after auto-fit, with no zooming-in involved.
+  //
+  // Floors to a 1% grid (FIT_STEP), not the 10% ZOOM_STEP the manual zoom
+  // buttons use — flooring a real fit ratio like 0.6156 to the coarse 10%
+  // grid gives 0.6 and visibly wastes usable space (confirmed: a real
+  // 1400x900 window's true fit was 61.56%, and the old 10%-floor showed
+  // 60% when 61% was still comfortably available).
+  const FIT_STEP = 0.01;
+  const floored = Math.floor(raw / FIT_STEP) * FIT_STEP;
+  applyZoom(Math.max(ZOOM_MIN, floored), FIT_STEP);
+}
+
+// `granularity` defaults to ZOOM_STEP (10%) for the manual zoom in/out
+// buttons — clean, predictable steps. fitBoard() passes a finer 1% step
+// instead, since snapping a fit ratio to 10% can waste up to ~10% of the
+// space that was actually available (a real fit of 61.56% would floor to
+// 60% on the coarse grid) — see fitBoard's own comment for the numbers
+// that surfaced this.
+function applyZoom(level, granularity) {
+  const step = granularity || ZOOM_STEP;
+  _zoomLevel = Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level)) / step) * step;
+  _zoomLevel = Math.round(_zoomLevel * 100) / 100; // clean up float drift (e.g. 0.6099999999999999)
   const t=document.getElementById('board-transform');
   if (t) t.style.transform=`scale(${_zoomLevel})`;
+  // #board-zoom-box is sized to the SCALED footprint explicitly (not left
+  // to inherit #board-transform's unscaled size) — see the CSS comment on
+  // #board-zoom-box for why this is what actually fixes scrollbars showing
+  // when the zoomed-out board visibly fits: a CSS transform never shrinks
+  // what a scrolling ancestor measures for overflow, only this element's
+  // own explicit width/height does.
+  const box = document.getElementById('board-zoom-box');
+  const size = boardUnscaledSize();
+  if (box && size) {
+    box.style.width  = (size.bW * _zoomLevel) + 'px';
+    box.style.height = (size.bH * _zoomLevel) + 'px';
+  }
   const el=document.getElementById('zoom-level');
   if (el) el.textContent=Math.round(_zoomLevel*100)+'%';
   Board.setZoom(_zoomLevel);

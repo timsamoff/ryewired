@@ -1,0 +1,29 @@
+{
+  "id": "switch_dpdt",
+  "labelKey": "component.switch_dpdt.label",
+  "category": "switch",
+  "symbol": "SW",
+  "descriptionKey": "component.switch_dpdt.description",
+  "legs": 6,
+  "leg_span": 2,
+  "leg_labels": ["A1", "COM1", "B1", "A2", "COM2", "B2"],
+  "properties": [
+    { "key": "throw_type", "labelKey": "component.switch_mpdt.throw_type.label", "type": "select",
+      "options": ["On-On","On-Off-On","On-On-On"], "default": "On-On",
+      "hintKey": "component.switch_mpdt.throw_type.hint",
+      "_i18nNote": "options ARE matched literally by js/simulation.js's switch_mpdt net-union logic and js/board.js's click-toggle position-count/direction logic. Same landmine as switch_spst's type/state — needs a stable non-text identifier before this can be localized." },
+    { "key": "position", "labelKey": "component.switch_mpdt.position.label", "type": "select", "options": ["1","2","3"], "default": "1",
+      "hintKey": "component.switch_mpdt.position.hint",
+      "_i18nNote": "1-indexed, matched literally by js/simulation.js. For On-On throw_type only 1/2 are ever valid; the properties panel and click-toggle both cap the range to whatever throw_type currently allows." },
+    { "key": "throw_table", "labelKey": "component.switch_mpdt.throw_table.label", "type": "throw_table", "default": {},
+      "hintKey": "component.switch_mpdt.throw_table.hint",
+      "_i18nNote": "Only shown/used when throw_type is On-On-On — real DPDT/3PDT on-on-on switches wire poles to throws differently between manufacturers (verified: no single standard exists), so this has NO default pattern and starts fully empty (see CLAUDE.md-style honesty note: don't presume a specific part's wiring). Stored as a flat object keyed 'pole-position' (0-indexed pole, 1-indexed position), value 'A'/'B'/'' (empty = open at that position). js/properties-panel.js renders this as a per-pole/per-position dropdown grid sized to this def's behavior.rows (pole count); js/simulation.js reads it directly for switch_mpdt net-union when throw_type is On-On-On." }
+  ],
+  "behavior": { "type": "switch_mpdt", "rows": 2, "cols": 3 },
+  "failure_modes": {},
+  "visual": {
+    "body_color": "#333333",
+    "body_width": 40,
+    "body_height": 18
+  }
+}
