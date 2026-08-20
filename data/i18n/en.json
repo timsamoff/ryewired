@@ -90,7 +90,7 @@
   "app.menu.view": "View",
   "app.menu.oscilloscope": "Oscilloscope",
   "app.menu.spectrumAnalyzer": "Spectrum Analyzer",
-  "app.menu.togglePalette": "Toggle Palette",
+  "app.menu.togglePalette": "Toggle Components",
   "app.menu.toggleProperties": "Toggle Properties",
   "app.menu.fitBoard": "Fit Board to Window",
   "app.menu.language": "Language…",

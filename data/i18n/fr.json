@@ -90,7 +90,7 @@
   "app.menu.view": "Affichage",
   "app.menu.oscilloscope": "Oscilloscope",
   "app.menu.spectrumAnalyzer": "Analyseur de spectre",
-  "app.menu.togglePalette": "Afficher/masquer la palette",
+  "app.menu.togglePalette": "Afficher/masquer les composants",
   "app.menu.toggleProperties": "Afficher/masquer les propriétés",
   "app.menu.fitBoard": "Ajuster la plaque à la fenêtre",
   "app.menu.language": "Langue…",

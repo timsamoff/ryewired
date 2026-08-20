@@ -298,6 +298,18 @@ input, select, textarea { font-family: var(--font-ui); }
 #board-scroll {
   flex: 1; overflow: auto; padding: 28px;
   display: flex; align-items: flex-start; justify-content: flex-start;
+  /* A flex item's default min-width is `auto`, which resolves to its
+     content's intrinsic minimum — and #board-zoom-box (its child) is given
+     an EXPLICIT pixel width by JS (see app.js's applyZoom). Without this,
+     #board-scroll refuses to shrink below whatever #board-zoom-box's width
+     happened to be at the LAST zoom, so closing a side panel frees real
+     layout space but clientWidth (what fitBoard() measures) stays capped at
+     the pre-toggle size — a classic flexbox trap. This is why zooming
+     on panel-toggle silently did nothing from the default fit state, and
+     only started working after some unrelated reflow (a window resize,
+     opening DevTools) happened to break the deadlock via a different path.
+     min-width: 0 lets the flex item actually shrink to fit the row. */
+  min-width: 0;
 }
 
 #board-scroll::-webkit-scrollbar { width: 8px; height: 8px; }

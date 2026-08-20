@@ -458,7 +458,26 @@ function fitBoard() {
   if (!size) return;
   const aW = scroll.clientWidth  - 56;
   const aH = scroll.clientHeight - 56;
-  const raw = Math.min(aW / size.bW, aH / size.bH, 1.0);
+  // With BOTH side panels open, fit by min(width,height) as before — the
+  // whole board (including the External Switches panel below it) stays
+  // visible with no scrolling, even if that means a smaller zoom%. With
+  // either panel closed, the user explicitly wants the freed-up space to
+  // grow the board's WIDTH rather than being capped by whatever the height
+  // ratio allows — on a short/wide screen (e.g. a 1536x864 effective
+  // viewport from a 250%-scaled 4K display), height is very often the
+  // tighter constraint, and closing a panel to free horizontal space was
+  // producing NO visible zoom change at all, which read as "the fix doesn't
+  // work" — it wasn't broken, height was just still binding. Fitting to
+  // width alone once a panel is closed accepts a vertical scrollbar as the
+  // tradeoff, which is exactly what was asked for.
+  const palette = document.getElementById('palette');
+  const props   = document.getElementById('props-panel');
+  const bothPanelsOpen = palette && props
+    && palette.style.display  !== 'none'
+    && props.style.display    !== 'none';
+  const raw = bothPanelsOpen
+    ? Math.min(aW / size.bW, aH / size.bH, 1.0)
+    : Math.min(aW / size.bW, 1.0);
   // Round DOWN, not to nearest (snapZoom's usual Math.round) — this is
   // specifically "fit," where the result must never exceed the space
   // actually available. Rounding to nearest could snap UP past the true
@@ -553,7 +572,24 @@ function togglePanel(panelId, btnId) {
 
 function toggleSidebar(id) {
   const el=document.getElementById(id);
-  if (el) el.style.display=el.style.display==='none'?'':'none';
+  if (!el) return;
+  el.style.display=el.style.display==='none'?'':'none';
+  // Collapsing/restoring a sidebar changes how much width #board-scroll
+  // actually has, same as a window resize — refit so the board grows back
+  // up to fill the newly available space instead of staying at whatever
+  // zoom% fit the OLD (narrower) layout. A single requestAnimationFrame
+  // here previously worked in automated (Playwright/Chromium) testing but
+  // was reported as unreliable in real-world use on at least one real
+  // machine/browser — the board resize logic only kicked in once something
+  // else (e.g. opening devtools, which itself triggers window's 'resize'
+  // event) forced a reflow through a different path. requestAnimationFrame
+  // only guarantees "before the next paint," not that a full layout pass
+  // has actually run — so on some browsers/GPU-compositing paths a single
+  // rAF can still read stale clientWidth/clientHeight. Matching the
+  // window-resize handler's own timing model (a real setTimeout delay, not
+  // a single animation frame) is what that path already relies on and is
+  // proven reliable — so this uses the same approach instead of trusting rAF.
+  setTimeout(fitBoard, 50);
 }
 
 // ── Help ──────────────────────────────────────────────────────────────────────
