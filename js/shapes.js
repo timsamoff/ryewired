@@ -66,14 +66,51 @@ const Shapes = (() => {
     ctx.fillText('–',r*0.55,r*0.22);
   }
 
+  // hex '#rrggbb' -> [r,g,b], 0-255 each.
+  function hexToRgb(hex){
+    const n=parseInt(hex.slice(1),16);
+    return [(n>>16)&255,(n>>8)&255,n&255];
+  }
+  // Blends an [r,g,b] toward white by `amount` (0 = no change, 1 = pure white).
+  function mixWhite(rgb,amount){
+    return rgb.map(c=>Math.round(c+(255-c)*amount));
+  }
+  function rgba(rgb,a){ return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`; }
+
   function drawLED(ctx,hex,bw,bh,brightness){
     brightness=brightness||0;
-    if(brightness>0.05){
-      const g=ctx.createRadialGradient(0,0,0,0,0,bw*(1+brightness*1.5));
-      g.addColorStop(0,hex+Math.round(brightness*200).toString(16).padStart(2,'0'));
-      g.addColorStop(1,'transparent');
-      ctx.beginPath();ctx.arc(0,0,bw*(1+brightness*1.5),0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    const rgb=hexToRgb(hex);
+    const lit=brightness>0.05;
+
+    // Ambient bloom: a soft, wide wash on the board surface AROUND the LED
+    // (drawn first, so the body sits on top of it). This alone used to read
+    // as a drop shadow — per direct feedback comparing against a reference
+    // LED simulator, because the LED's own opaque body then completely
+    // covered the glow's brightest point, leaving only a dim outer ring
+    // visible peeking past the body's silhouette. Kept, but as only HALF
+    // the effect now (see the overlay pass below, drawn after the body,
+    // which is what actually fixes that).
+    if(lit){
+      // ONE continuous fade, not a separate bright-color "plateau" partway
+      // out — an earlier version had a core stop, a saturated-color mid
+      // stop, THEN a lighter outer stop before transparent, and at high
+      // brightness that created a visible dim ring: the additive overlay
+      // pass below (which brightens the LED's own case) and this bloom's
+      // own bright zone didn't hand off smoothly, leaving a gap of
+      // relatively low combined brightness between them. Per direct
+      // feedback: the overlay already makes the LED itself read as bright
+      // enough, so this bloom only needs to fade smoothly outward from
+      // there, not carry its own separate hot zone. Lightens toward white
+      // as it goes (not just fading the LED's raw saturated hue toward
+      // transparent) so the tail blends cleanly into the board's light tan
+      // surface instead of desaturating toward gray.
+      const radius=bw*(1.3+brightness*1.9);
+      const g=ctx.createRadialGradient(0,0,0,0,0,radius);
+      g.addColorStop(0, rgba(mixWhite(rgb,0.6), brightness*0.55));
+      g.addColorStop(1, rgba(mixWhite(rgb,0.85),0));
+      ctx.beginPath();ctx.arc(0,0,radius,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
     }
+
     const r=bw/2,h=bh/2;
     // Body mirrored horizontally from a plain left-flat/right-dome LED:
     // dome (anode, '+') on the LEFT, flat face (cathode, '–') on the
@@ -84,11 +121,34 @@ const Shapes = (() => {
     ctx.scale(-1,1);
     ctx.beginPath();ctx.moveTo(-r,-h);ctx.lineTo(-r,h);ctx.lineTo(r*0.3,h);
     ctx.arc(0,0,r,Math.PI*0.5,-Math.PI*0.5,true);ctx.lineTo(r*0.3,-h);ctx.closePath();
-    ctx.fillStyle=brightness>0.05?hex:hex+'88';ctx.fill();
+    ctx.fillStyle=lit?hex:hex+'88';ctx.fill();
     ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=0.8;ctx.stroke();
     ctx.strokeStyle='rgba(255,255,255,0.6)';ctx.lineWidth=1.5;
     ctx.beginPath();ctx.moveTo(-r,-h);ctx.lineTo(-r,h);ctx.stroke();
     ctx.restore();
+
+    // Overlay glow: drawn AFTER the body with an ADDITIVE blend mode
+    // ('lighter' — pixel colors sum rather than replace), so light appears
+    // to wash OVER the case itself rather than stopping at its silhouette —
+    // this is the actual fix for the "looks like a drop shadow" complaint,
+    // since a shadow, by definition, never brightens the object casting it.
+    // Smaller/tighter than the ambient bloom above (the case itself is what
+    // should look lit, not just its surroundings), same white-core-to-hue
+    // gradient shape so it still reads as THIS LED's color, not a generic
+    // white flash.
+    if(lit){
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      const overlayRgb=mixWhite(rgb,0.7+brightness*0.25);
+      const overlayRadius=bw*(0.55+brightness*0.55);
+      const og=ctx.createRadialGradient(0,0,0,0,0,overlayRadius);
+      og.addColorStop(0,   rgba(overlayRgb, brightness*0.9));
+      og.addColorStop(0.6, rgba(rgb,        brightness*0.45));
+      og.addColorStop(1,   'transparent');
+      ctx.beginPath();ctx.arc(0,0,overlayRadius,0,Math.PI*2);ctx.fillStyle=og;ctx.fill();
+      ctx.restore();
+    }
+
     ctx.font='bold 7px monospace';ctx.textAlign='center';
     ctx.fillStyle='rgba(255,255,255,0.7)';ctx.fillText('+',-r*0.35,3);
     ctx.fillStyle='rgba(255,255,255,0.5)';ctx.fillText('–',r*0.5,3);
