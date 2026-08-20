@@ -1,0 +1,1076 @@
+{
+  "components": [
+    {
+      "instanceId": "SW_SPST",
+      "defId": "switch_spst",
+      "legs": [
+        {
+          "row": "sw:SW_SPST:0",
+          "col": 0
+        },
+        {
+          "row": "sw:SW_SPST:0",
+          "col": 1
+        }
+      ],
+      "props": {
+        "title": "SW_SPST",
+        "type": "Latching",
+        "state": "Open"
+      },
+      "extSlot": {
+        "row": 0,
+        "col": 0
+      }
+    },
+    {
+      "instanceId": "R1",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 9,
+          "col": 1
+        },
+        {
+          "row": 7,
+          "col": 2
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R1"
+      }
+    },
+    {
+      "instanceId": "LED1",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 6,
+          "col": 3
+        },
+        {
+          "row": 5,
+          "col": 4
+        }
+      ],
+      "props": {
+        "color": "Blue",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "SPST"
+      }
+    },
+    {
+      "instanceId": "SW_SPDT",
+      "defId": "switch_spdt",
+      "legs": [
+        {
+          "row": "sw:SW_SPDT:0",
+          "col": 0
+        },
+        {
+          "row": "sw:SW_SPDT:0",
+          "col": 1
+        },
+        {
+          "row": "sw:SW_SPDT:0",
+          "col": 2
+        }
+      ],
+      "props": {
+        "title": "SW_SPDT",
+        "throw_type": "On-On",
+        "type": "Latching",
+        "position": "1"
+      },
+      "extSlot": {
+        "row": 0,
+        "col": 1
+      }
+    },
+    {
+      "instanceId": "R2",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 9,
+          "col": 6
+        },
+        {
+          "row": 7,
+          "col": 7
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R2"
+      }
+    },
+    {
+      "instanceId": "LED2",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 6,
+          "col": 8
+        },
+        {
+          "row": 5,
+          "col": 9
+        }
+      ],
+      "props": {
+        "color": "Yellow",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "SPDT-A"
+      }
+    },
+    {
+      "instanceId": "R3",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 9,
+          "col": 11
+        },
+        {
+          "row": 7,
+          "col": 12
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R3"
+      }
+    },
+    {
+      "instanceId": "LED3",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 6,
+          "col": 13
+        },
+        {
+          "row": 5,
+          "col": 14
+        }
+      ],
+      "props": {
+        "color": "Red",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "SPDT-B"
+      }
+    },
+    {
+      "instanceId": "SW_DPDT",
+      "defId": "switch_dpdt",
+      "legs": [
+        {
+          "row": "sw:SW_DPDT:0",
+          "col": 0
+        },
+        {
+          "row": "sw:SW_DPDT:0",
+          "col": 1
+        },
+        {
+          "row": "sw:SW_DPDT:0",
+          "col": 2
+        },
+        {
+          "row": "sw:SW_DPDT:1",
+          "col": 0
+        },
+        {
+          "row": "sw:SW_DPDT:1",
+          "col": 1
+        },
+        {
+          "row": "sw:SW_DPDT:1",
+          "col": 2
+        }
+      ],
+      "props": {
+        "title": "SW_DPDT",
+        "throw_type": "On-On",
+        "type": "Latching",
+        "position": "1"
+      },
+      "extSlot": {
+        "row": 0,
+        "col": 2
+      }
+    },
+    {
+      "instanceId": "R4",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 9,
+          "col": 16
+        },
+        {
+          "row": 7,
+          "col": 17
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R4"
+      }
+    },
+    {
+      "instanceId": "LED4",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 6,
+          "col": 18
+        },
+        {
+          "row": 5,
+          "col": 19
+        }
+      ],
+      "props": {
+        "color": "Blue",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "DPDT-P1-A"
+      }
+    },
+    {
+      "instanceId": "R5",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 9,
+          "col": 21
+        },
+        {
+          "row": 7,
+          "col": 22
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R5"
+      }
+    },
+    {
+      "instanceId": "LED5",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 6,
+          "col": 23
+        },
+        {
+          "row": 5,
+          "col": 24
+        }
+      ],
+      "props": {
+        "color": "Blue",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "DPDT-P1-B"
+      }
+    },
+    {
+      "instanceId": "R6",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 9,
+          "col": 26
+        },
+        {
+          "row": 7,
+          "col": 27
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R6"
+      }
+    },
+    {
+      "instanceId": "LED6",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 6,
+          "col": 28
+        },
+        {
+          "row": 5,
+          "col": 29
+        }
+      ],
+      "props": {
+        "color": "Red",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "DPDT-P2-A"
+      }
+    },
+    {
+      "instanceId": "R7",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 9,
+          "col": 31
+        },
+        {
+          "row": 7,
+          "col": 32
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R7"
+      }
+    },
+    {
+      "instanceId": "LED7",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 6,
+          "col": 33
+        },
+        {
+          "row": 5,
+          "col": 34
+        }
+      ],
+      "props": {
+        "color": "Green",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "DPDT-P2-B"
+      }
+    },
+    {
+      "instanceId": "SW_3PDT",
+      "defId": "switch_3pdt",
+      "legs": [
+        {
+          "row": "sw:SW_3PDT:0",
+          "col": 0
+        },
+        {
+          "row": "sw:SW_3PDT:0",
+          "col": 1
+        },
+        {
+          "row": "sw:SW_3PDT:0",
+          "col": 2
+        },
+        {
+          "row": "sw:SW_3PDT:1",
+          "col": 0
+        },
+        {
+          "row": "sw:SW_3PDT:1",
+          "col": 1
+        },
+        {
+          "row": "sw:SW_3PDT:1",
+          "col": 2
+        },
+        {
+          "row": "sw:SW_3PDT:2",
+          "col": 0
+        },
+        {
+          "row": "sw:SW_3PDT:2",
+          "col": 1
+        },
+        {
+          "row": "sw:SW_3PDT:2",
+          "col": 2
+        }
+      ],
+      "props": {
+        "title": "SW_3PDT",
+        "throw_type": "On-On",
+        "type": "Latching",
+        "position": "1"
+      },
+      "extSlot": {
+        "row": 0,
+        "col": 3
+      }
+    },
+    {
+      "instanceId": "R8",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 0,
+          "col": 3
+        },
+        {
+          "row": 2,
+          "col": 4
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R8"
+      }
+    },
+    {
+      "instanceId": "LED8",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 3,
+          "col": 5
+        },
+        {
+          "row": 4,
+          "col": 6
+        }
+      ],
+      "props": {
+        "color": "White",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "3PDT-P1-A"
+      }
+    },
+    {
+      "instanceId": "R9",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 0,
+          "col": 8
+        },
+        {
+          "row": 2,
+          "col": 9
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R9"
+      }
+    },
+    {
+      "instanceId": "LED9",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 3,
+          "col": 10
+        },
+        {
+          "row": 4,
+          "col": 11
+        }
+      ],
+      "props": {
+        "color": "Red",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "3PDT-P1-B"
+      }
+    },
+    {
+      "instanceId": "R10",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 0,
+          "col": 13
+        },
+        {
+          "row": 2,
+          "col": 14
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R10"
+      }
+    },
+    {
+      "instanceId": "LED10",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 3,
+          "col": 15
+        },
+        {
+          "row": 4,
+          "col": 16
+        }
+      ],
+      "props": {
+        "color": "Blue",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "3PDT-P2-A"
+      }
+    },
+    {
+      "instanceId": "R11",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 0,
+          "col": 18
+        },
+        {
+          "row": 2,
+          "col": 19
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R11"
+      }
+    },
+    {
+      "instanceId": "LED11",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 3,
+          "col": 20
+        },
+        {
+          "row": 4,
+          "col": 21
+        }
+      ],
+      "props": {
+        "color": "White",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "3PDT-P2-B"
+      }
+    },
+    {
+      "instanceId": "R12",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 0,
+          "col": 23
+        },
+        {
+          "row": 2,
+          "col": 24
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R12"
+      }
+    },
+    {
+      "instanceId": "LED12",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 3,
+          "col": 25
+        },
+        {
+          "row": 4,
+          "col": 26
+        }
+      ],
+      "props": {
+        "color": "Red",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "3PDT-P3-A"
+      }
+    },
+    {
+      "instanceId": "R13",
+      "defId": "resistor",
+      "legs": [
+        {
+          "row": 0,
+          "col": 28
+        },
+        {
+          "row": 2,
+          "col": 29
+        }
+      ],
+      "props": {
+        "resistance": 1000,
+        "resistance__unit": "Ω",
+        "power_rating": "0.25W",
+        "tolerance": "5%",
+        "title": "R13"
+      }
+    },
+    {
+      "instanceId": "LED13",
+      "defId": "led",
+      "legs": [
+        {
+          "row": 3,
+          "col": 30
+        },
+        {
+          "row": 4,
+          "col": 31
+        }
+      ],
+      "props": {
+        "color": "Green",
+        "forward_voltage": 2,
+        "max_current_ma": 20,
+        "title": "3PDT-P3-B"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "r1": 6,
+      "c1": 2,
+      "r2": 7,
+      "c2": 3,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W2",
+      "r1": "rtm",
+      "c1": 4,
+      "r2": 9,
+      "c2": 4,
+      "color": "#000000"
+    },
+    {
+      "id": "WS0.6172443365977018",
+      "r1": "rtp",
+      "c1": 1,
+      "r2": "sw:SW_SPST:0",
+      "c2": 0,
+      "color": "#ff0000"
+    },
+    {
+      "id": "WS0.4437838242240961",
+      "r1": "sw:SW_SPST:0",
+      "c1": 1,
+      "r2": 8,
+      "c2": 1,
+      "color": "#33cc66"
+    },
+    {
+      "id": "W3",
+      "r1": 6,
+      "c1": 7,
+      "r2": 7,
+      "c2": 8,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W4",
+      "r1": "rtm",
+      "c1": 9,
+      "r2": 9,
+      "c2": 9,
+      "color": "#000000"
+    },
+    {
+      "id": "W5",
+      "r1": 6,
+      "c1": 12,
+      "r2": 7,
+      "c2": 13,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W6",
+      "r1": "rtm",
+      "c1": 14,
+      "r2": 9,
+      "c2": 14,
+      "color": "#000000"
+    },
+    {
+      "id": "W7",
+      "r1": "rtp",
+      "c1": 6,
+      "r2": "sw:SW_SPDT:0",
+      "c2": 1,
+      "color": "#ff0000"
+    },
+    {
+      "id": "W8",
+      "r1": "sw:SW_SPDT:0",
+      "c1": 0,
+      "r2": 8,
+      "c2": 6,
+      "color": "#33cc66"
+    },
+    {
+      "id": "W9",
+      "r1": "sw:SW_SPDT:0",
+      "c1": 2,
+      "r2": 8,
+      "c2": 11,
+      "color": "#3399ff"
+    },
+    {
+      "id": "W10",
+      "r1": 6,
+      "c1": 17,
+      "r2": 7,
+      "c2": 18,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W11",
+      "r1": "rtm",
+      "c1": 19,
+      "r2": 9,
+      "c2": 19,
+      "color": "#000000"
+    },
+    {
+      "id": "W12",
+      "r1": 6,
+      "c1": 22,
+      "r2": 7,
+      "c2": 23,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W13",
+      "r1": "rtm",
+      "c1": 24,
+      "r2": 9,
+      "c2": 24,
+      "color": "#000000"
+    },
+    {
+      "id": "W14",
+      "r1": "rtp",
+      "c1": 16,
+      "r2": "sw:SW_DPDT:0",
+      "c2": 1,
+      "color": "#ff0000"
+    },
+    {
+      "id": "W15",
+      "r1": "sw:SW_DPDT:0",
+      "c1": 0,
+      "r2": 8,
+      "c2": 16,
+      "color": "#33cc66"
+    },
+    {
+      "id": "W16",
+      "r1": "sw:SW_DPDT:0",
+      "c1": 2,
+      "r2": 8,
+      "c2": 21,
+      "color": "#3399ff"
+    },
+    {
+      "id": "W17",
+      "r1": 6,
+      "c1": 27,
+      "r2": 7,
+      "c2": 28,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W18",
+      "r1": "rtm",
+      "c1": 29,
+      "r2": 9,
+      "c2": 29,
+      "color": "#000000"
+    },
+    {
+      "id": "W19",
+      "r1": 6,
+      "c1": 32,
+      "r2": 7,
+      "c2": 33,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W20",
+      "r1": "rtm",
+      "c1": 34,
+      "r2": 9,
+      "c2": 34,
+      "color": "#000000"
+    },
+    {
+      "id": "W21",
+      "r1": "rtp",
+      "c1": 26,
+      "r2": "sw:SW_DPDT:1",
+      "c2": 1,
+      "color": "#ff0000"
+    },
+    {
+      "id": "W22",
+      "r1": "sw:SW_DPDT:1",
+      "c1": 0,
+      "r2": 8,
+      "c2": 26,
+      "color": "#33cc66"
+    },
+    {
+      "id": "W23",
+      "r1": "sw:SW_DPDT:1",
+      "c1": 2,
+      "r2": 8,
+      "c2": 31,
+      "color": "#3399ff"
+    },
+    {
+      "id": "W24",
+      "r1": "rtp",
+      "c1": 1,
+      "r2": "rbp",
+      "c2": 1,
+      "color": "#ff0000"
+    },
+    {
+      "id": "W25",
+      "r1": "rtm",
+      "c1": 2,
+      "r2": "rbm",
+      "c2": 2,
+      "color": "#000000"
+    },
+    {
+      "id": "W26",
+      "r1": 3,
+      "c1": 4,
+      "r2": 2,
+      "c2": 5,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W27",
+      "r1": "rbm",
+      "c1": 6,
+      "r2": 0,
+      "c2": 6,
+      "color": "#000000"
+    },
+    {
+      "id": "W28",
+      "r1": 3,
+      "c1": 9,
+      "r2": 2,
+      "c2": 10,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W29",
+      "r1": "rbm",
+      "c1": 11,
+      "r2": 0,
+      "c2": 11,
+      "color": "#000000"
+    },
+    {
+      "id": "W30",
+      "r1": "rbp",
+      "c1": 3,
+      "r2": "sw:SW_3PDT:0",
+      "c2": 1,
+      "color": "#ff0000"
+    },
+    {
+      "id": "W31",
+      "r1": "sw:SW_3PDT:0",
+      "c1": 0,
+      "r2": 1,
+      "c2": 3,
+      "color": "#33cc66"
+    },
+    {
+      "id": "W32",
+      "r1": "sw:SW_3PDT:0",
+      "c1": 2,
+      "r2": 1,
+      "c2": 8,
+      "color": "#3399ff"
+    },
+    {
+      "id": "W33",
+      "r1": 3,
+      "c1": 14,
+      "r2": 2,
+      "c2": 15,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W34",
+      "r1": "rbm",
+      "c1": 16,
+      "r2": 0,
+      "c2": 16,
+      "color": "#000000"
+    },
+    {
+      "id": "W35",
+      "r1": 3,
+      "c1": 19,
+      "r2": 2,
+      "c2": 20,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W36",
+      "r1": "rbm",
+      "c1": 21,
+      "r2": 0,
+      "c2": 21,
+      "color": "#000000"
+    },
+    {
+      "id": "W37",
+      "r1": "rbp",
+      "c1": 13,
+      "r2": "sw:SW_3PDT:1",
+      "c2": 1,
+      "color": "#ff0000"
+    },
+    {
+      "id": "W38",
+      "r1": "sw:SW_3PDT:1",
+      "c1": 0,
+      "r2": 1,
+      "c2": 13,
+      "color": "#33cc66"
+    },
+    {
+      "id": "W39",
+      "r1": "sw:SW_3PDT:1",
+      "c1": 2,
+      "r2": 1,
+      "c2": 18,
+      "color": "#3399ff"
+    },
+    {
+      "id": "W40",
+      "r1": 3,
+      "c1": 24,
+      "r2": 2,
+      "c2": 25,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W41",
+      "r1": "rbm",
+      "c1": 26,
+      "r2": 0,
+      "c2": 26,
+      "color": "#000000"
+    },
+    {
+      "id": "W42",
+      "r1": 3,
+      "c1": 29,
+      "r2": 2,
+      "c2": 30,
+      "color": "#ffaa00"
+    },
+    {
+      "id": "W43",
+      "r1": "rbm",
+      "c1": 31,
+      "r2": 0,
+      "c2": 31,
+      "color": "#000000"
+    },
+    {
+      "id": "W44",
+      "r1": "rbp",
+      "c1": 23,
+      "r2": "sw:SW_3PDT:2",
+      "c2": 1,
+      "color": "#ff0000"
+    },
+    {
+      "id": "W45",
+      "r1": "sw:SW_3PDT:2",
+      "c1": 0,
+      "r2": 1,
+      "c2": 23,
+      "color": "#33cc66"
+    },
+    {
+      "id": "W46",
+      "r1": "sw:SW_3PDT:2",
+      "c1": 2,
+      "r2": 1,
+      "c2": 28,
+      "color": "#3399ff"
+    }
+  ],
+  "permanentDevices": {
+    "power": {
+      "voltage": 9,
+      "current_limit_ma": 500,
+      "reverse_polarity": false,
+      "power_on": true,
+      "battery_sag": 0,
+      "internal_resistance": 1
+    }
+  }
+}
