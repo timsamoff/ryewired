@@ -369,6 +369,29 @@ const Board = (() => {
     const check=(row,col)=>{const {x,y}=holeToXY(row,col);const d=Math.hypot(px-x,py-y);if(d<bestD){bestD=d;best={row,col};}};
     for(const row of ['rtp','rtm','rbp','rbm']){const {y}=holeToXY(row,0);if(Math.abs(py-y)<snap*1.5) for(let c=0;c<COLS;c++) check(row,c);}
     for(let r=0;r<=9;r++){const {y}=holeToXY(r,0);if(Math.abs(py-y)<snap*1.5) for(let c=0;c<COLS;c++) check(r,c);}
+    // Switch pins (External Switches panel): these live on virtual
+    // 'sw:<instanceId>:<rowIdx>' rows that holeToXY already resolves (see
+    // its own switch-pin branch above), but this is the SEARCH side —
+    // finding which pin, if any, is near a click point — so it needs its
+    // own scan rather than falling out of holeToXY's dispatch for free.
+    // Board-hole rows/rails are cheap to bound-check by Y-band first (a
+    // whole row shares one Y); switch pins don't share that structure since
+    // each switch instance has its own slot position, so this just checks
+    // every pin of every placed switch directly — the panel realistically
+    // holds a handful of switches at a time, not hundreds, so an unbounded
+    // scan here is not a real cost.
+    for(const inst of _placed){
+      const def=ComponentRegistry.getById(inst.defId);
+      if(def?.behavior?.type!=='switch_mpdt' && def?.behavior?.type!=='switch_spst') continue;
+      const {rows,cols}=switchShape(def);
+      for(let r=0;r<rows;r++){
+        for(let cc=0;cc<cols;cc++){
+          const {x,y}=switchPinXY(inst,r,cc);
+          const d=Math.hypot(px-x,py-y);
+          if(d<bestD){bestD=d;best={row:'sw:'+inst.instanceId+':'+r,col:cc};}
+        }
+      }
+    }
     return best;
   }
 
@@ -1854,10 +1877,31 @@ const Board = (() => {
   // (see buildNetMap in simulation.js), so connecting to an occupied node
   // just means using a different, free hole in that same column — exactly
   // how this works on a real breadboard.
+  //
+  // EXCEPTION: a switch pin ('sw:<instanceId>:<rowIdx>' virtual rows, see
+  // holeToXY/xyToHole/switchPinXY) is exempt from the "leg already there"
+  // half of this rule when the leg belongs to the switch pin's OWN row/col —
+  // i.e. it's still blocked from having a SECOND switch's leg land there
+  // (can't happen structurally, each instanceId's rows are private) or a
+  // wire already terminating there (that part of the rule still applies
+  // unchanged below), but a wire IS allowed to terminate at the exact same
+  // point the switch's own leg occupies. The "just use a different hole in
+  // the same bonded column" escape hatch the flat rule relies on does not
+  // exist for switches: each pin is a private, isolated point in the
+  // External Switches panel with no other empty hole sharing its net, unlike
+  // a real board's 5-hole strip where a component leg always leaves 4 spare
+  // holes on the same net. Without this exception, no switch pin could ever
+  // be wired to anything at all — confirmed as a real, reproduced bug where
+  // every click on a switch pin in Jumper mode silently exited to Select.
   function holeOccupied(row,col,excludeInstanceId,excludeWire){
+    const isSwitchPin = typeof row==='string' && row.startsWith('sw:');
     for(const p of _placed){
       if(p.instanceId===excludeInstanceId) continue;
-      for(const l of p.legs) if(l.row===row&&l.col===col) return true;
+      for(const l of p.legs){
+        if(l.row!==row||l.col!==col) continue;
+        if(isSwitchPin) continue; // this IS the switch's own leg at its own pin — not a collision, see comment above
+        return true;
+      }
     }
     for(const w of _wires){
       if(w===excludeWire) continue;
