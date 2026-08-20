@@ -1448,6 +1448,32 @@ const Board = (() => {
         // component swap — stays live regardless of engaged state.
         _pressedSwitchInst=inst;inst._pressed=true;Simulation.notifyStateChange(inst);render();
       }
+      if(def?.behavior?.type==='switch_mpdt' && inst.props?.type==='Momentary'
+         && (inst.props?.throw_type==='On-On'||inst.props?.throw_type==='On-Off-On')){
+        // Real (ON)-(ON) / (ON)-OFF-(ON) hardware: press-and-hold moves to
+        // the held position, release springs back to rest. Scoped to the
+        // toggle pill (like Latching's click-to-cycle), not the whole body —
+        // a real center-off paddle has two distinct physical push
+        // directions, and a single "press anywhere" can't tell which one
+        // was meant. Splitting the pill in half (left = push toward
+        // position 1, right = push toward position 3) is what actually
+        // recovers that distinction — mirrors the pill's own visual lean.
+        // A first version of this used the switch's PRIOR position to guess
+        // press direction, which was wrong: a momentary switch always sits
+        // at rest between presses, so that guess degenerated to always
+        // resolving the same direction, making the other position
+        // unreachable. Left/right click position is real, unambiguous
+        // input; whatever the switch happened to be sitting at is not.
+        const r=switchToggleRect(inst);
+        if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom){
+          const restPos = inst.props.throw_type==='On-On' ? 1 : 2;
+          const heldPos = inst.props.throw_type==='On-On' ? 2 : (x<r.cx ? 1 : 3);
+          inst._mpdtRestPos = restPos;
+          inst.props.position = String(heldPos);
+          _pressedSwitchInst=inst;inst._pressed=true;
+          Simulation.notifyStateChange(inst);render();
+        }
+      }
       if(!engaged){
         _dragMode='comp-pending';_dragInst=inst;
         _dragStartX=x;_dragStartY=y;_dragOffsetX=0;_dragOffsetY=0;
@@ -1467,9 +1493,26 @@ const Board = (() => {
     setSelected(null,null);
   }
 
+  // Shared release path for a currently-held momentary switch, used by both
+  // onMouseUp (release inside the canvas) and onWindowMouseUp (release
+  // anywhere else — the mouse can leave the canvas while still held down).
+  // For switch_mpdt, springs the position back to whatever rest position was
+  // recorded at press time (_mpdtRestPos, set in onMouseDown) rather than
+  // just clearing a flag the way SPST's open/closed state does — a
+  // throw-select switch's "released" state IS a specific position, not a
+  // separate boolean.
+  function releasePressedSwitch(){
+    if(!_pressedSwitchInst) return;
+    const inst=_pressedSwitchInst;
+    inst._pressed=false;
+    if(inst._mpdtRestPos!=null){ inst.props.position=String(inst._mpdtRestPos); inst._mpdtRestPos=null; }
+    Simulation.notifyStateChange(inst);render();
+    _pressedSwitchInst=null;
+  }
+
   function onMouseUp(e){
     if(e.button!==0) return;
-    if(_pressedSwitchInst){_pressedSwitchInst._pressed=false;Simulation.notifyStateChange(_pressedSwitchInst);render();_pressedSwitchInst=null;}
+    releasePressedSwitch();
     if(_dragMode==='leg-dragging'){
       if(_dragInst){
         const legDef=ComponentRegistry.getById(_dragInst.defId);
@@ -1538,7 +1581,7 @@ const Board = (() => {
   }
 
   function onWindowMouseUp(){
-    if(_pressedSwitchInst){_pressedSwitchInst._pressed=false;Simulation.notifyStateChange(_pressedSwitchInst);render();_pressedSwitchInst=null;}
+    releasePressedSwitch();
     if(_dragMode==='comp-dragging'||_dragMode==='leg-dragging'){
       if(_dragInst&&_savedLegs) _dragInst.legs=_savedLegs.map(l=>({...l}));
       _dragMode='idle';_dragOffsetX=0;_dragOffsetY=0;
@@ -1597,7 +1640,14 @@ const Board = (() => {
         inst.props.state=(inst.props.state==='Closed')?'Open':'Closed';Simulation.notifyStateChange(inst);Storage.markDirty();History.push();render();
       }
     }
-    if(def?.behavior?.type==='switch_mpdt'){
+    // Momentary mpdt switches are driven entirely by press/release
+    // (onMouseDown/releasePressedSwitch) — a click is just the mousedown+
+    // mouseup pair that already ran that logic, so the latching cycle below
+    // must not ALSO fire and move the position a second time. Same
+    // exclusion shape as SPST's Momentary (NO)/(NC) check just above.
+    const mpdtIsMomentary = def?.behavior?.type==='switch_mpdt' && inst.props?.type==='Momentary'
+      && (inst.props?.throw_type==='On-On'||inst.props?.throw_type==='On-Off-On');
+    if(def?.behavior?.type==='switch_mpdt' && !mpdtIsMomentary){
       // A real mechanical toggle can't skip a position — clicking always
       // advances in the CURRENT direction of travel and reverses at either
       // end (1->2->3->2->1...), not a plain wrap-around cycle. Direction is

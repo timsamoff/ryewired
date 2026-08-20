@@ -12,9 +12,13 @@
       "options": ["On-On","On-Off-On"], "default": "On-On",
       "hintKey": "component.switch_mpdt.throw_type.hint",
       "_i18nNote": "options ARE matched literally by js/simulation.js's switch_mpdt net-union logic and js/board.js's click-toggle position-count/direction logic. Same landmine as switch_spst's type/state — needs a stable non-text identifier before this can be localized. On-On-On deliberately excluded: a real single-pole switch has no 3-position detent mechanism (that's specifically a DPDT-and-up hardware feature), so offering it here would describe a part that doesn't exist." },
+    { "key": "type", "labelKey": "component.switch_mpdt.type.label", "type": "select",
+      "options": ["Latching","Momentary"], "default": "Latching",
+      "hintKey": "component.switch_mpdt.type.hint",
+      "_i18nNote": "options ARE matched literally by js/board.js's press/release handling. 'Momentary' is only meaningful (and only offered — properties-panel.js hides/resets it to Latching) when throw_type is On-On or On-Off-On, matching real (ON)-(ON) and (ON)-OFF-(ON) toggle switch hardware confirmed by research — spring-return has no coherent single rest position for On-On-On's independent per-pole throw_table, so Momentary is unavailable there, same reasoning as On-On-On being excluded from this switch type entirely." },
     { "key": "position", "labelKey": "component.switch_mpdt.position.label", "type": "select", "options": ["1","2","3"], "default": "1",
       "hintKey": "component.switch_mpdt.position.hint",
-      "_i18nNote": "1-indexed, matched literally by js/simulation.js. For On-On throw_type only 1/2 are ever valid; the properties panel and click-toggle both cap the range to whatever throw_type currently allows." }
+      "_i18nNote": "1-indexed, matched literally by js/simulation.js. For On-On throw_type only 1/2 are ever valid; the properties panel and click-toggle both cap the range to whatever throw_type currently allows. Accidentally DELETED (replaced instead of appended) when the 'type' property above was added earlier this session — restored, since this is the switch's real current/initial-position control (SPST's rough equivalent of 'Initial State') and dropping it silently removed it from the properties panel entirely." }
   ],
   "behavior": { "type": "switch_mpdt", "rows": 1, "cols": 3 },
   "failure_modes": {},

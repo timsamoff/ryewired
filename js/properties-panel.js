@@ -331,6 +331,12 @@ const PropertiesPanel = (() => {
       // is actually selected — hidden otherwise, same as how this app
       // generally avoids showing controls with no live effect.
       if (prop.key==='throw_table' && inst.props?.throw_type!=='On-On-On') continue;
+      // Momentary has no coherent rest position for On-On-On's independent
+      // per-pole throw_table — hidden there for the same "no live effect"
+      // reason, mirroring the throw_table exclusion just above. (switch_mpdt
+      // types other than DPDT never offer On-On-On at all, so this only
+      // actually triggers for DPDT switches.)
+      if (prop.key==='type' && def.behavior?.type==='switch_mpdt' && inst.props?.throw_type==='On-On-On') continue;
       if (prop.type==='throw_table') {
         html += buildThrowTableField(prop, inst.props[prop.key]||{}, def.behavior?.rows||1);
         continue;
@@ -826,6 +832,20 @@ const PropertiesPanel = (() => {
       // Re-render so the now-updated hfe/leakage fields (and any placeholder
       // depending on them) show immediately, rather than staying stale until
       // the panel is closed and reopened.
+      show(_currentInst);
+    }
+
+    if (key==='throw_type') {
+      // Momentary has no coherent rest position for On-On-On (see the
+      // matching "hidden" check in the render loop above) — reset it back
+      // to Latching rather than leaving a stale Momentary value sitting
+      // hidden in props, which would silently resume momentary behavior if
+      // the user later switches back to On-On/On-Off-On without having
+      // touched Action again. Re-render since the Action field's visibility
+      // (and the Position field's valid range) both depend on throw_type.
+      if (_currentInst.props?.type==='Momentary' && rawVal==='On-On-On') {
+        _currentInst.props.type = 'Latching';
+      }
       show(_currentInst);
     }
   }

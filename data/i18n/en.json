@@ -323,6 +323,8 @@
   "component.switch_4pdt.description": "Four-pole double-throw switch. Four poles move together, each selecting between two throws (A/B) — used for switching two independent stereo/dual circuits at once. Lives in the External Switches area below the board.",
   "component.switch_mpdt.throw_type.label": "Throw Type",
   "component.switch_mpdt.throw_type.hint": "On-On: the common always connects to one of the two throws, never neither. On-Off-On: a real neutral middle position connects nothing. (DPDT only) On-On-On: three real positions with no built-in wiring pattern — set it yourself in the Throw Table below, since real on-on-on switches wire differently between manufacturers. Other switch types don't offer On-On-On because real hardware isn't manufactured with that 3-position detent mechanism outside DPDT.",
+  "component.switch_mpdt.type.label": "Action",
+  "component.switch_mpdt.type.hint": "Latching stays in whichever position you leave it. Momentary springs back to a rest position when released — Position 1 is rest on On-On (matches real (ON)-(ON) hardware); the center Off position is rest on On-Off-On (matches real (ON)-OFF-(ON) hardware, momentary from either side). Only available for On-On and On-Off-On — On-On-On's per-pole Throw Table has no single rest position to spring back to.",
   "component.switch_mpdt.position.label": "Position",
   "component.switch_mpdt.position.hint": "Which lever position the switch is currently in. Click the switch itself on the board to change this live — it also updates here.",
   "component.switch_mpdt.throw_table.label": "Throw Table (On-On-On)",
