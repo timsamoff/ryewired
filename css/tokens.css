@@ -1,7 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   RYEWIRED — Shared Design Tokens
+   RYEWIRED — Shared Design Tokens + Base Rules
    Loaded by both app (css/app.css) and admin (admin/renderer/css/admin.css).
-   No rules here — variables only.
+   Variables, plus the small set of rules that were byte-identical (or
+   identical apart from one value) in both consumer stylesheets — moved here
+   so there is exactly one copy instead of two that have to be kept in sync
+   by hand. Each consumer file still carries its own DIFFERING values (e.g.
+   html/body's font-size) as an override after this file's @import.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
@@ -76,6 +80,13 @@
   --sim-running:        var(--success);
   --sim-running-pulse:  rgba(42, 122, 74, 0.3);
 
+  /* ── Hover/emphasis variants (previously hardcoded literals in
+     app.css/admin.css — pulled out to real tokens per the "no hardcoded
+     colors" convention, even where only one consumer currently uses them) ── */
+  --success-hover:      #35904E; /* brighter than --success, for .tb-run's hover state */
+  --alert-bright:       #ff5555; /* brighter than --alert, for a hover-only accent (admin's .row-del) */
+  --code-text:          #b8d7a3; /* soft green used for JSON/code-like readouts (admin's editor + test-preview) */
+
   /* ── Typography ── */
   --font-ui:            'Inter', system-ui, sans-serif;
   --font-mono:          'IBM Plex Mono', 'Consolas', monospace;
@@ -93,4 +104,66 @@
   /* ── Transitions ── */
   --t-fast:             0.08s ease;
   --t-med:              0.15s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Shared base rules
+   Byte-identical (or identical apart from one value) in both app.css and
+   admin.css before this consolidation. Each consumer file still sets its own
+   DIFFERING values (e.g. html/body's font-size) as an override loaded after
+   this file.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+button { font-family: var(--font-ui); cursor: pointer; }
+input, select, textarea { font-family: var(--font-ui); }
+
+/* Global scrollbar shape — each consumer may still override width/thumb
+   radius for its own density (app.css uses a slightly thicker 6px bar,
+   admin.css a finer 4px one), but the color/track treatment is shared. */
+::-webkit-scrollbar       { background: transparent; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-light); }
+
+/* Shared field/input shape — the surface/border/radius/color/outline/
+   transition treatment every text input in both apps uses (search boxes,
+   property fields, admin's .field). Listed as a selector group rather than
+   a class so nothing in either app's HTML has to change — each consumer
+   selector below still gets its OWN rule afterward (in app.css/admin.css)
+   for whatever genuinely differs per call site: font-family, exact padding
+   (icon offset varies per search box), focus-border color, placeholder
+   color. Only the properties that were byte-identical across every one of
+   these selectors live here (--border-focus and --accent resolve to the
+   same underlying color, confirmed, so folding that in changes nothing
+   visually). Adding a new text-input-shaped element to either app just
+   means adding its selector to this list, not copying the whole rule body
+   again. */
+#palette-search, #comp-search, .prop-input, .field, .custom-select .cs-trigger {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text-primary);
+  outline: none; transition: border-color var(--t-fast);
+}
+
+/* Shared panel-header bar shape (app's .panel-titlebar, admin's
+   .panel-header) — same height/padding/border/flex-alignment in both, but
+   NOT merged further than this: app.css's version puts the label text on a
+   nested <span> with its own color/size and a colored leading icon, while
+   admin.css's version styles the header container's text directly with a
+   different color/size and no icon — those are real, different structures,
+   not accidental drift, so only the truly-identical outer shape lives
+   here. */
+.panel-titlebar, .panel-header {
+  display: flex; align-items: center;
+  padding: 0 12px; height: 36px;
+  border-bottom: 1px solid var(--border);
 }

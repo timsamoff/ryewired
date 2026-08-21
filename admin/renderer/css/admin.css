@@ -1,21 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    RYEWIRED — Admin Stylesheet
-   Imports shared tokens from ../../css/tokens.css
+   Shared tokens + base rules (box-sizing reset, html/body base, button/input
+   font-family, base scrollbar shape) come from ../../css/tokens.css, loaded
+   via <link> before this file in admin's HTML — this file only carries the
+   values that differ from the main app's: a smaller base font-size.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-html, body {
-  width: 100%; height: 100%; overflow: hidden;
-  background: var(--bg-base); color: var(--text-primary);
-  font-family: var(--font-ui); font-size: 12px;
-  -webkit-font-smoothing: antialiased; user-select: none;
-}
-
-button { font-family: var(--font-ui); cursor: pointer; }
-input, select, textarea { font-family: var(--font-ui); }
+html, body { font-size: 12px; }
 
 /* ── Shell ──────────────────────────────────────────────────────────────── */
 
@@ -54,9 +45,10 @@ input, select, textarea { font-family: var(--font-ui); }
   display: flex; flex-direction: column; flex-shrink: 0;
 }
 
+/* Height/padding/border/flex-alignment shared with app's .panel-titlebar —
+   see tokens.css's shared rule. */
 .panel-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 12px; height: 36px; border-bottom: 1px solid var(--border);
+  justify-content: space-between;
   font-family: var(--font-mono); font-size: 9px; font-weight: 700;
   letter-spacing: 0.12em; color: var(--text-dim); text-transform: uppercase;
 }
@@ -75,11 +67,11 @@ input, select, textarea { font-family: var(--font-ui); }
   font-size: 10px; color: var(--text-dim); pointer-events: none;
 }
 
+/* Surface/border/radius/color/outline/transition shared with app's
+   #palette-search etc. — see tokens.css's shared selector group. */
 #comp-search {
-  width: 100%; background: var(--bg-input); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--text-primary);
-  font-family: var(--font-mono); font-size: 11px;
-  padding: 5px 8px 5px 26px; outline: none; transition: border-color var(--t-fast);
+  width: 100%; font-family: var(--font-mono); font-size: 11px;
+  padding: 5px 8px 5px 26px;
 }
 #comp-search:focus { border-color: var(--accent); }
 #comp-search::placeholder { color: var(--text-dim); }
@@ -144,11 +136,11 @@ input, select, textarea { font-family: var(--font-ui); }
 }
 .hint-text { font-family: var(--font-ui); font-size: 10px; color: var(--text-dim); font-weight: 400; text-transform: none; letter-spacing: 0; }
 
+/* Surface/border/radius/color/outline/transition shared with app's
+   .prop-input etc. — see tokens.css's shared selector group. */
 .field {
-  background: var(--bg-input); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--text-primary);
   font-family: var(--font-mono); font-size: 11px;
-  padding: 5px 8px; outline: none; transition: border-color var(--t-fast); -webkit-appearance: none;
+  padding: 5px 8px; -webkit-appearance: none;
 }
 .field:focus { border-color: var(--accent); }
 .field.short { max-width: 100px; }
@@ -174,7 +166,7 @@ input[type="color"].field { padding: 2px 4px; height: 28px; cursor: pointer; }
 }
 
 .row-del { background: none; border: none; color: var(--alert); cursor: pointer; font-size: 12px; padding: 2px 4px; border-radius: var(--radius-sm); transition: color var(--t-fast); }
-.row-del:hover { color: #ff5555; }
+.row-del:hover { color: var(--alert-bright); }
 
 #json-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-shrink: 0; }
 #json-status { font-family: var(--font-mono); font-size: 10px; color: var(--warning); margin-left: 6px; }
@@ -182,7 +174,7 @@ input[type="color"].field { padding: 2px 4px; height: 28px; cursor: pointer; }
 #json-editor {
   flex: 1; width: 100%; min-height: 380px;
   background: var(--bg-input); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: #b8d7a3;
+  border-radius: var(--radius-sm); color: var(--code-text);
   font-family: var(--font-mono); font-size: 11px;
   padding: 12px; outline: none; resize: none; tab-size: 2; line-height: 1.65;
 }
@@ -191,7 +183,7 @@ input[type="color"].field { padding: 2px 4px; height: 28px; cursor: pointer; }
 #test-preview {
   background: var(--bg-input); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 12px;
-  font-family: var(--font-mono); font-size: 10px; color: #b8d7a3;
+  font-family: var(--font-mono); font-size: 10px; color: var(--code-text);
   line-height: 1.7; white-space: pre-wrap; word-break: break-all; overflow-y: auto;
 }
 
@@ -208,7 +200,7 @@ input[type="color"].field { padding: 2px 4px; height: 28px; cursor: pointer; }
 .btn-primary {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 16px; background: var(--accent); border: none;
-  border-radius: var(--radius-sm); color: #fff;
+  border-radius: var(--radius-sm); color: var(--text-on-accent);
   font-family: var(--font-ui); font-size: 11px; font-weight: 600;
   cursor: pointer; transition: opacity var(--t-fast);
 }
@@ -222,7 +214,7 @@ input[type="color"].field { padding: 2px 4px; height: 28px; cursor: pointer; }
   color: var(--alert); font-family: var(--font-ui); font-size: 11px; font-weight: 600;
   cursor: pointer; transition: all var(--t-fast);
 }
-.btn-danger:hover { background: var(--alert); color: #fff; border-color: var(--alert); }
+.btn-danger:hover { background: var(--alert); color: var(--text-on-alert); border-color: var(--alert); }
 .btn-danger i { font-size: 11px; }
 
 .btn-small {
@@ -235,12 +227,10 @@ input[type="color"].field { padding: 2px 4px; height: 28px; cursor: pointer; }
 .btn-small:hover { border-color: var(--accent); color: var(--accent); }
 .btn-small i { font-size: 10px; }
 
+/* Track/thumb color come from tokens.css's shared rule — this app only
+   overrides size/radius (its own finer 4px bar). */
 ::-webkit-scrollbar       { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
-
-/* ── Remove @import since tokens loaded via <link> in HTML ── */
-/* (tokens.css variables available globally) */
+::-webkit-scrollbar-thumb { border-radius: 2px; }
 
 /* ── Failure modes help block ─────────────────────────────── */
 

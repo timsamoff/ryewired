@@ -7,22 +7,15 @@
 @import './tokens.css';
 
 /* ── Reset ────────────────────────────────────────────────────────────────── */
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* box-sizing reset, html/body base, button/input font-family, and the base
+   scrollbar shape all now live in tokens.css (shared with admin.css) — this
+   file only carries the values that differ from admin's: a larger base
+   font-size and this app's own line-height. */
 
 html, body {
-  width: 100%; height: 100%; overflow: hidden;
-  background: var(--bg-base);
-  color: var(--text-primary);
-  font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.4;
-  -webkit-font-smoothing: antialiased;
-  user-select: none;
 }
-
-button      { font-family: var(--font-ui); cursor: pointer; }
-input, select, textarea { font-family: var(--font-ui); }
 
 /* ── App shell ────────────────────────────────────────────────────────────── */
 
@@ -181,7 +174,7 @@ input, select, textarea { font-family: var(--font-ui); }
 }
 
 .tb-run { background: var(--success); border-color: var(--success); color: var(--text-on-accent); }
-.tb-run:hover:not(:disabled) { background: #35904E; border-color: #35904E; }
+.tb-run:hover:not(:disabled) { background: var(--success-hover); border-color: var(--success-hover); }
 .tb-run:disabled { background: var(--bg-raised); border-color: var(--border); color: var(--text-dim); cursor: not-allowed; }
 
 .tb-stop { background: none; border-color: var(--alert-dim); color: var(--alert); }
@@ -210,10 +203,10 @@ input, select, textarea { font-family: var(--font-ui); }
   display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
 }
 
+/* Height/padding/border/flex-alignment shared with admin's .panel-header —
+   see tokens.css's shared rule. */
 .panel-titlebar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 0 12px; height: 36px;
-  border-bottom: 1px solid var(--border); flex-shrink: 0;
+  gap: 8px; flex-shrink: 0;
 }
 
 .panel-titlebar i { font-size: 12px; color: var(--rw-red); }
@@ -238,11 +231,12 @@ input, select, textarea { font-family: var(--font-ui); }
   font-size: 11px; color: var(--text-dim); pointer-events: none;
 }
 
+/* Surface/border/radius/color/outline/transition shared with admin's
+   #comp-search etc. — see tokens.css's shared selector group. This rule
+   only carries what's specific to THIS input: width, font-size, and the
+   icon-offset padding. */
 #palette-search {
-  width: 100%; background: var(--bg-input); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--text-primary);
-  font-size: 12px; padding: 5px 8px 5px 28px; outline: none;
-  transition: border-color var(--t-fast);
+  width: 100%; font-size: 12px; padding: 5px 8px 5px 28px;
 }
 
 #palette-search:focus { border-color: var(--border-focus); }
@@ -464,14 +458,15 @@ input, select, textarea { font-family: var(--font-ui); }
   letter-spacing: 0.1em; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;
 }
 
+/* Surface/border/radius/color/outline/transition shared with admin's
+   .field etc. — see tokens.css's shared selector group. This rule only
+   carries what's specific to THIS field: width, font, and padding. */
 .prop-input {
-  width: 100%; background: var(--bg-input); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--text-primary);
-  font-size: 12px; font-family: var(--font-mono); padding: 6px 8px;
-  outline: none; transition: border-color var(--t-fast); -webkit-appearance: none;
+  width: 100%; font-size: 12px; font-family: var(--font-mono);
+  padding: 6px 8px; -webkit-appearance: none;
 }
 
-.prop-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(43,87,154,0.15); }
+.prop-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-subtle); }
 
 .prop-textarea {
   font-family: var(--font-ui); resize: vertical; min-height: 64px; line-height: 1.4;
@@ -909,7 +904,15 @@ input.prop-input[type="number"]:focus::-webkit-outer-spin-button {
 /* ── Tool cursors ─────────────────────────────────────────────────────────
    Native-style thin-line crosshairs, tinted per tool. A 1px colored line
    over a slightly wider white line underneath, so it reads clearly against
-   both the board and dark components without looking like an icon. */
+   both the board and dark components without looking like an icon.
+   The colors below are hardcoded hex (%23fff/%23C87820/%232B579A/%232A7A4A)
+   INSIDE data-URI SVG strings — this is a real, structural exception to the
+   "no hardcoded colors" rule, not an oversight: a data-URI is a static
+   string evaluated outside CSS's custom-property system, so var() cannot be
+   used inside one. These currently mirror --warning (#C87820), --rw-blue/
+   --accent (#2B579A), and --success (#2A7A4A) — if any of those token
+   values ever change, these three lines must be updated BY HAND to match,
+   since nothing will do it automatically. */
 body.wire-mode #board-canvas {
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='21' height='21' viewBox='0 0 21 21'%3E%3Cg stroke='%23fff' stroke-width='3'%3E%3Cline x1='10.5' y1='0' x2='10.5' y2='21'/%3E%3Cline x1='0' y1='10.5' x2='21' y2='10.5'/%3E%3C/g%3E%3Cg stroke='%23C87820' stroke-width='1'%3E%3Cline x1='10.5' y1='0' x2='10.5' y2='21'/%3E%3Cline x1='0' y1='10.5' x2='21' y2='10.5'/%3E%3C/g%3E%3C/svg%3E") 10 10, crosshair;
 }
@@ -922,10 +925,12 @@ body.probe-mode #board-canvas {
 body.dragging  #board-canvas { cursor: grabbing; }
 
 /* ── Scrollbars ───────────────────────────────────────────────────────────── */
+/* Track/thumb color come from tokens.css's shared rule — this app only
+   overrides size/radius (its own thicker 6px bar) and adds a hover state
+   admin.css doesn't have. */
 
 ::-webkit-scrollbar       { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb { border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--rw-brown); }
 
 /* ── Rotation controls ────────────────────────────────────────────────────── */
@@ -1104,13 +1109,12 @@ body.comp-selected:not(.wire-mode):not(.voltmeter-mode):not(.probe-mode) #board-
   width: 100%; height: 100%; left: 0; top: 0;
 }
 
+/* Surface/border/radius/color/outline/transition shared with admin's
+   .field etc. — see tokens.css's shared selector group. */
 .custom-select .cs-trigger {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  width: 100%; background: var(--bg-input); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--text-primary);
-  font-size: 12px; font-family: var(--font-mono); padding: 6px 8px;
+  width: 100%; font-size: 12px; font-family: var(--font-mono); padding: 6px 8px;
   text-align: left; cursor: pointer;
-  transition: border-color var(--t-fast);
 }
 .custom-select .cs-trigger:hover:not(:disabled) { border-color: var(--border-light); }
 .custom-select .cs-trigger:disabled { opacity: 0.5; cursor: default; }
