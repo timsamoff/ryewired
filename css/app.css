@@ -1145,8 +1145,15 @@ body.comp-selected:not(.wire-mode):not(.voltmeter-mode):not(.probe-mode) #board-
   transition: background var(--t-fast);
 }
 .custom-select .cs-item:hover { background: var(--accent-subtle); }
-.custom-select .cs-item.cs-selected { color: var(--accent); }
-.custom-select .cs-item.cs-selected::after { content: '\2713'; float: right; }
+/* SOLID accent background + light text, matching a native <select>'s own
+   selected-option highlight EXACTLY (confirmed against a real screenshot of
+   this app's own switch Throw Type dropdown, a native <select> under
+   LONG_SELECT_THRESHOLD options) — a first attempt used --accent-subtle
+   (a faint tint), which per direct comparison read as visibly weaker than
+   the native reference. No checkmark either, per direct feedback: the
+   highlight alone is enough of a "this one" signal, the same as the native
+   dropdown provides with none. */
+.custom-select .cs-item.cs-selected { background: var(--accent); color: var(--text-on-accent); }
 
 /* Slightly wider than the global 6px bar, since this one is the point. */
 .custom-select .cs-menu::-webkit-scrollbar       { width: 8px; }
