@@ -4,7 +4,6 @@
       "instanceId": "U1",
       "defId": "pt2399",
       "legs": [
-        { "row": 4, "col": 32 },
         { "row": 4, "col": 31 },
         { "row": 4, "col": 30 },
         { "row": 4, "col": 29 },
@@ -12,27 +11,28 @@
         { "row": 4, "col": 27 },
         { "row": 4, "col": 26 },
         { "row": 4, "col": 25 },
+        { "row": 4, "col": 24 },
+        { "row": 9, "col": 24 },
         { "row": 9, "col": 25 },
         { "row": 9, "col": 26 },
         { "row": 9, "col": 27 },
         { "row": 9, "col": 28 },
         { "row": 9, "col": 29 },
         { "row": 9, "col": 30 },
-        { "row": 9, "col": 31 },
-        { "row": 9, "col": 32 }
+        { "row": 9, "col": 31 }
       ],
       "props": { "model": "PT2399", "title": "U1" }
     },
     {
       "instanceId": "R1",
       "defId": "resistor",
-      "legs": [{ "row": 5, "col": 55 }, { "row": 6, "col": 26 }],
+      "legs": [{ "row": 5, "col": 55 }, { "row": 6, "col": 25 }],
       "props": { "resistance": 10000, "resistance__unit": "Ω", "power_rating": "0.5W", "tolerance": "5%", "title": "R1 (in)" }
     },
     {
       "instanceId": "R2",
       "defId": "resistor",
-      "legs": [{ "row": 6, "col": 28 }, { "row": 5, "col": 13 }],
+      "legs": [{ "row": 6, "col": 27 }, { "row": 5, "col": 13 }],
       "props": { "resistance": 10000, "resistance__unit": "Ω", "power_rating": "0.5W", "tolerance": "5%", "title": "R2 (wet)" }
     },
     {
@@ -55,15 +55,15 @@
     }
   ],
   "wires": [
-    { "id": "W1", "r1": "rtp", "c1": 32, "r2": 3, "c2": 32, "color": "#000000" },
-    { "id": "W2", "r1": "rtm", "c1": 30, "r2": 3, "c2": 30, "color": "#000000" },
+    { "id": "W1", "r1": "rtp", "c1": 31, "r2": 3, "c2": 31, "color": "#000000" },
+    { "id": "W2", "r1": "rtm", "c1": 29, "r2": 3, "c2": 29, "color": "#000000" },
 
-    { "id": "W3", "r1": 3, "c1": 27, "r2": 2, "c2": 19, "color": "#cc33cc" },
-    { "id": "W4", "r1": 2, "c1": 27, "r2": 0, "c2": 20, "color": "#cc33cc" },
+    { "id": "W3", "r1": 3, "c1": 26, "r2": 2, "c2": 19, "color": "#cc33cc" },
+    { "id": "W4", "r1": 2, "c1": 26, "r2": 0, "c2": 20, "color": "#cc33cc" },
     { "id": "W5", "r1": "rtm", "c1": 21, "r2": 0, "c2": 21, "color": "#000000" },
 
-    { "id": "W6", "r1": 7, "c1": 26, "r2": 2, "c2": 15, "color": "#00ccff" },
-    { "id": "W7", "r1": 7, "c1": 28, "r2": 2, "c2": 17, "color": "#ffaa00" },
+    { "id": "W6", "r1": 7, "c1": 25, "r2": 2, "c2": 15, "color": "#00ccff" },
+    { "id": "W7", "r1": 7, "c1": 27, "r2": 2, "c2": 17, "color": "#ffaa00" },
 
     { "id": "W8", "r1": 6, "c1": 13, "r2": 2, "c2": 12, "color": "#ff6699" },
     { "id": "W9", "r1": 6, "c1": 55, "r2": 2, "c2": 10, "color": "#ffffff" },
