@@ -126,23 +126,44 @@ const ComponentRegistry = (() => {
   function applyModelDefaults(inst) {
     const def = getById(inst.defId);
     const pm  = def?.model_params?.[inst.props.model];
-    if (!pm) return;
-    if ((def.properties||[]).some(p => p.key==='hfe') && pm.hfe != null) {
-      inst.props.hfe = pm.hfe;
-    }
-    if ((def.properties||[]).some(p => p.key==='leakage')) {
-      const leak = pm.icbo_na ?? pm.leakage_ua;
-      if (leak != null) {
-        inst.props.leakage = leak;
-        // Silicon's leakage is naturally tiny (tens of nA) and reads fine
-        // in nA; germanium's is orders of magnitude larger and is what
-        // pedal builders actually discuss in µA — default the display
-        // unit to whichever keeps the number in a sane, familiar range.
-        inst.props.leakage__unit = leak >= 1000 ? 'µA' : 'nA';
+    if (pm) {
+      if ((def.properties||[]).some(p => p.key==='hfe') && pm.hfe != null) {
+        inst.props.hfe = pm.hfe;
+      }
+      if ((def.properties||[]).some(p => p.key==='leakage')) {
+        const leak = pm.icbo_na ?? pm.leakage_ua;
+        if (leak != null) {
+          inst.props.leakage = leak;
+          // Silicon's leakage is naturally tiny (tens of nA) and reads fine
+          // in nA; germanium's is orders of magnitude larger and is what
+          // pedal builders actually discuss in µA — default the display
+          // unit to whichever keeps the number in a sane, familiar range.
+          inst.props.leakage__unit = leak >= 1000 ? 'µA' : 'nA';
+        }
+      }
+      if ((def.properties||[]).some(p => p.key==='zener_voltage') && pm.vz != null) {
+        inst.props.zener_voltage = pm.vz;
       }
     }
-    if ((def.properties||[]).some(p => p.key==='zener_voltage') && pm.vz != null) {
-      inst.props.zener_voltage = pm.vz;
+
+    // Same "sync the dependent field to whatever's currently selected"
+    // pattern as model_params above, but keyed on color_map/inst.props.color
+    // instead of model_params/inst.props.model — LED is the only component
+    // with a color_map today. This was a REAL bug, not just a missing
+    // feature: forward_voltage's own schema default (a flat 2.0) is always
+    // set by createInstance's generic "props[key] = schema default" loop,
+    // and every solver/audio-engine read site does
+    // `parseFloat(inst.props.forward_voltage) || color_map.vf` — since 2.0
+    // is always truthy, color_map's real per-color Vf (Blue 3.2V, White
+    // 3.3V, etc.) was NEVER reached for any LED placed through the normal
+    // flow. Every LED in this app, regardless of selected color, has always
+    // clipped/lit at exactly 2.0V. Fixed the same way applyModelDefaults
+    // already fixes the equivalent transistor-model problem: seed the
+    // dependent field from the map at placement AND whenever the selector
+    // changes (see properties-panel.js's onPropChange 'color' case).
+    if (def?.color_map && (def.properties||[]).some(p => p.key==='forward_voltage')) {
+      const cm = def.color_map[inst.props.color];
+      if (cm?.vf != null) inst.props.forward_voltage = cm.vf;
     }
   }
 

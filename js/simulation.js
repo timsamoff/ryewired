@@ -739,7 +739,21 @@ const Simulation = (() => {
         const Vf = parseFloat(inst.props.forward_voltage) || cm?.vf || 0.7;
         const a  = netOf(inst.legs[0].row, inst.legs[0].col);              // anode
         const b  = netOf(inst.legs[inst.legs.length-1].row, inst.legs[inst.legs.length-1].col); // cathode
-        diodeEdges.push({ a, b, Vf, inst });
+        // ron: per-edge "on" resistance, defaulting to the flat RON constant
+        // (plain diodes have no color_map, so this is unchanged for them).
+        // An LED's color_map.knee_softness scales RON up modestly — a real,
+        // physically-grounded difference between LED colors (the diode
+        // "ideality factor" genuinely varies by semiconductor material,
+        // e.g. GaN-based colors measured softer than GaAs-based ones — see
+        // led.json's color_map comment for the sourcing), represented here
+        // the simplest way this companion-model solver can express it: more
+        // on-resistance means the diode's voltage rises more with current
+        // instead of clamping hard at Vf, which is exactly what a softer
+        // knee is. Kept modest (RON*(1+softness), softness capped ~0.35) so
+        // it stays a secondary refinement, not a replacement for Vf as the
+        // dominant, reliably-audible effect.
+        const ron = RON * (1 + (cm?.knee_softness || 0));
+        diodeEdges.push({ a, b, Vf, inst, ron });
 
       } else if (btype === 'zener_diode') {
         const mk  = inst.props.model || '1N4742A';
@@ -1286,7 +1300,7 @@ const Simulation = (() => {
       diodeEdges.forEach((e, idx) => {
         if (e.a==null || e.b==null || e.a===e.b) return;
         const on = states[idx];
-        const g = 1/(on ? RON : ROFF);
+        const g = 1/(on ? (e.ron ?? RON) : ROFF);
         stampConductance(G, I, e.a, e.b, g);
         if (on) stampCurrentSource(I, e.a, e.b, g*e.Vf);
       });
@@ -1645,7 +1659,7 @@ const Simulation = (() => {
       const va = netIndex.has(e.a) ? V[netIndex.get(e.a)] : fixed.get(e.a);
       const vb = netIndex.has(e.b) ? V[netIndex.get(e.b)] : fixed.get(e.b);
       const on = states[idx];
-      const g = 1/(on ? RON : ROFF);
+      const g = 1/(on ? (e.ron ?? RON) : ROFF);
       diodeCurrents.set(e.inst, on ? Math.max(0, g*((va-vb) - e.Vf)) : 0);
     });
     zenerEdges.forEach((e, idx) => {

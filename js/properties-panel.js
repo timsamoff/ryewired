@@ -835,6 +835,15 @@ const PropertiesPanel = (() => {
       show(_currentInst);
     }
 
+    if (key==='color') {
+      // Same reasoning as 'model' above, for LED's color_map -> forward_voltage
+      // (see applyModelDefaults' own comment for why this matters — it was a
+      // real bug, not a missing feature, since forward_voltage's flat schema
+      // default previously made color_map's per-color Vf unreachable).
+      ComponentRegistry.applyModelDefaults(_currentInst);
+      show(_currentInst);
+    }
+
     if (key==='throw_type') {
       // Momentary has no coherent rest position for On-On-On (see the
       // matching "hidden" check in the render loop above) — reset it back

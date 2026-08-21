@@ -536,7 +536,7 @@ const AudioEngine = (() => {
     //
     // Where several diodes share a half, the LOWEST Vf wins: it starts
     // conducting first and holds the node before the others can.
-    const clampsByNet = new Map(); // net -> { pos, neg } thresholds in volts
+    const clampsByNet = new Map(); // net -> { pos, neg, posSoftness, negSoftness } — thresholds in volts, softness 0-1 (see knee softness note below)
     if (groundNet != null) {
       for (const inst of placed) {
         if (inst.failed || inst.legs.length < 2) continue;
@@ -550,7 +550,18 @@ const AudioEngine = (() => {
         else if (anodeNet === groundNet && cathodeNet !== groundNet) { net = cathodeNet; half = 'neg'; }
         else continue; // not a shunt-to-ground clipper; leave it to the walk as a series hop
 
-        const entry = clampsByNet.get(net) || { pos: Infinity, neg: Infinity };
+        const entry = clampsByNet.get(net) || { pos: Infinity, neg: Infinity, posSoftness: 0, negSoftness: 0 };
+        // Softness travels WITH the threshold it belongs to — "lowest Vf
+        // wins" (the comment above) means the winning component is also the
+        // one whose knee shape should be heard, not some other instance
+        // sharing the net. led.json's color_map.knee_softness is the only
+        // current source (see its own comment for the ideality-factor
+        // physics and why it's deliberately modest); a plain diode/Zener
+        // contributes 0 (sharp knee), matching this app's existing
+        // silicon/germanium/Zener clip behavior exactly as it was before
+        // this change — this only ever SOFTENS an LED's own clamp, it never
+        // changes anything about a circuit with no LEDs in it.
+        const softness = (bt === 'led') ? (def.color_map?.[inst.props.color]?.knee_softness || 0) : 0;
         if (bt === 'zener_diode') {
           // Unlike a plain diode/LED (which only ever conducts, and so only
           // ever clamps, ONE direction), a single Zener clamps BOTH halves
@@ -566,7 +577,8 @@ const AudioEngine = (() => {
           if (half === 'pos') { entry.pos = Math.min(entry.pos, ZENER_VF); entry.neg = Math.min(entry.neg, vz); }
           else                { entry.neg = Math.min(entry.neg, ZENER_VF); entry.pos = Math.min(entry.pos, vz); }
         } else {
-          entry[half] = Math.min(entry[half], forwardVoltage(inst, def));
+          const vf = forwardVoltage(inst, def);
+          if (vf < entry[half]) { entry[half] = vf; entry[half+'Softness'] = softness; }
         }
         clampsByNet.set(net, entry);
         used.add(inst.instanceId); // handled as a clamp, so never also built as a series stage
@@ -588,7 +600,7 @@ const AudioEngine = (() => {
       const toUnits = v => Utils.clamp(Number.isFinite(v) ? v / VOLTS_PER_SIGNAL_UNIT : 0.99, 0.01, 0.99);
       const sh = ctx.createWaveShaper();
       sh.oversample = CLIP_OVERSAMPLE;
-      sh.curve = makeClipCurve(toUnits(clamp.pos), toUnits(clamp.neg));
+      sh.curve = makeClipCurve(toUnits(clamp.pos), toUnits(clamp.neg), clamp.posSoftness, clamp.negSoftness);
       inBus.connect(sh);
       allNodes.push(sh);
       netTaps.set(net, sh); // downstream, and the probe, hear the CLAMPED signal
@@ -1572,13 +1584,28 @@ const AudioEngine = (() => {
   // 4096 points rather than 256: a stage whose swing is several volts needs
   // the pre/post scaling below, and at 256 points a quiet signal would be
   // quantized into a handful of steps.
-  function makeClipCurve(posThreshold, negThreshold = posThreshold) {
+  // posSoftness/negSoftness (0-1, default 0): widens the tanh transition
+  // region without changing what the curve ultimately asymptotes to —
+  // dividing the input by (1+softness) before the tanh stretches OUT the
+  // knee (reaches the same threshold, just more gradually), which is the
+  // standard soft-knee-widening technique and matches what a higher diode
+  // "ideality factor" physically does (see led.json's color_map comment for
+  // the real semiconductor-physics grounding). Only ever sourced from an
+  // LED's per-color knee_softness today (see ensureBus's shunt-clipper
+  // code) — every other caller omits these and gets the exact original
+  // sharp-tanh shape, so this is additive, not a change to existing
+  // circuits with no LEDs in them.
+  function makeClipCurve(posThreshold, negThreshold = posThreshold, posSoftness = 0, negSoftness = 0) {
     const n = 4096, curve = new Float32Array(n);
-    const shape = (mag, t) => t * Math.tanh(mag / t);
+    const shape = (mag, t, softness) => {
+      const k = 1 + Math.max(0, softness);
+      return t * Math.tanh(mag / (t * k));
+    };
     for (let i = 0; i < n; i++) {
       const x = (i * 2) / (n - 1) - 1; // spec's index->x mapping, spans exactly [-1,1]
       const t = Math.max(x >= 0 ? posThreshold : negThreshold, 1e-4);
-      curve[i] = Math.sign(x) * shape(Math.abs(x), t);
+      const softness = x >= 0 ? posSoftness : negSoftness;
+      curve[i] = Math.sign(x) * shape(Math.abs(x), t, softness);
     }
     return curve;
   }

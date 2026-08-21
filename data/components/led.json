@@ -20,14 +20,15 @@
     "over_current": { "threshold_multiplier": 1.5, "result": "burn", "messageKey": "component.led.failure.over_current" },
     "reverse_voltage": { "threshold_v": -5, "result": "silent_fail", "messageKey": "component.led.failure.reverse_voltage" }
   },
+  "_colorMapNote": "Vf: cross-checked against a real manufacturer voltage/current ratings table (Otto Controls, multiple LED indicator product lines) plus a guitar-pedal-specific clipping-diode source — both agree closely with what was already here, adjusted Blue and UV slightly to better match (Blue commonly 3.2-3.5V across the datasheet's product lines; UV consistently cited higher, ~3.8-4.0V, in pedal-building sources, the old 3.4 undersold it). Real parts vary by manufacturer/package/die — these are reasonable typical values, not a precise spec for any one physical part. knee_softness: how gradually the diode's I-V curve turns on near Vf, 0 = sharp/ideal-diode-like, higher = softer/more gradual — grounded in real semiconductor physics (the diode 'ideality factor', which published GaN/GaAs LED research shows genuinely differs by material/color: blue LEDs measured close to ideal ~1.16, green measured notably higher/softer ~1.78, tied to GaN's defect/tunneling conduction vs GaAs's more ideal radiative recombination). Kept deliberately MODEST here (0.15-0.4 range) rather than dramatic: real pedal builders report this as a subtle, disputed, manufacturer-variable effect ('the curves are just a rough guideline', 'couldn't really tell volume differences between the LEDs I tried') — the strong, reliable, audible effect is Vf/headroom (modeled above), softness is a genuine but secondary refinement, not a substitute for it. See js/simulation.js's diode-edge stamping and js/audio-engine.js's makeClipCurve for where this is consumed.",
   "color_map": {
-    "Red":    { "hex": "#ff2200", "vf": 2.0 },
-    "Green":  { "hex": "#00cc44", "vf": 2.1 },
-    "Blue":   { "hex": "#0044ff", "vf": 3.2 },
-    "Yellow": { "hex": "#ffcc00", "vf": 2.1 },
-    "White":  { "hex": "#ffffff", "vf": 3.3 },
-    "Orange": { "hex": "#ff7700", "vf": 2.0 },
-    "UV":     { "hex": "#8800ff", "vf": 3.4 }
+    "Red":    { "hex": "#ff2200", "vf": 2.0, "knee_softness": 0.15 },
+    "Green":  { "hex": "#00cc44", "vf": 2.1, "knee_softness": 0.35 },
+    "Blue":   { "hex": "#0044ff", "vf": 3.3, "knee_softness": 0.15 },
+    "Yellow": { "hex": "#ffcc00", "vf": 2.1, "knee_softness": 0.25 },
+    "White":  { "hex": "#ffffff", "vf": 3.3, "knee_softness": 0.3 },
+    "Orange": { "hex": "#ff7700", "vf": 2.0, "knee_softness": 0.2 },
+    "UV":     { "hex": "#8800ff", "vf": 3.8, "knee_softness": 0.25 }
   },
   "visual": {
     "body_width": 20,
