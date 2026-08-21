@@ -31,8 +31,8 @@
     "UV":     { "hex": "#8800ff", "vf": 3.8, "knee_softness": 0.25 }
   },
   "visual": {
-    "body_width": 20,
-    "body_height": 32,
+    "body_width": 15,
+    "body_height": 20,
     "lead_length": 10
   }
 }

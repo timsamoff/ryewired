@@ -117,10 +117,23 @@ const Shapes = (() => {
     // RIGHT — default orientation reads '+' on the left. Mirrored via
     // transform so the geometry can't drift out of sync with itself; text
     // is drawn afterward, outside the mirror, so glyphs stay upright.
+    //
+    // domeR clamped to min(r,h): the arc drawn below always starts/ends at
+    // (0,±domeR) regardless of what x-offset the straight sides use, so the
+    // two MUST match or the path silently draws a straight connecting
+    // segment between whatever mismatched points were given — which is
+    // exactly what produced a visible diagonal notch at the seam once
+    // body_width and body_height stopped being equal (this shape was
+    // apparently only ever tuned by eye at a roughly-square size; the old
+    // code connected to (r*0.3, ±h), a point that only coincides with the
+    // arc's real (0, ±r) start/end when r===h). Using the shared domeR for
+    // BOTH the straight-side endpoint and the arc radius keeps the path
+    // geometrically closed for any body_width/body_height combination.
+    const domeR=Math.min(r,h);
     ctx.save();
     ctx.scale(-1,1);
-    ctx.beginPath();ctx.moveTo(-r,-h);ctx.lineTo(-r,h);ctx.lineTo(r*0.3,h);
-    ctx.arc(0,0,r,Math.PI*0.5,-Math.PI*0.5,true);ctx.lineTo(r*0.3,-h);ctx.closePath();
+    ctx.beginPath();ctx.moveTo(-r,-h);ctx.lineTo(-r,h);ctx.lineTo(0,h);
+    ctx.arc(0,0,domeR,Math.PI*0.5,-Math.PI*0.5,true);ctx.lineTo(0,-h);ctx.closePath();
     ctx.fillStyle=lit?hex:hex+'88';ctx.fill();
     ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=0.8;ctx.stroke();
     ctx.strokeStyle='rgba(255,255,255,0.6)';ctx.lineWidth=1.5;
