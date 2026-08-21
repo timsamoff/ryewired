@@ -58,8 +58,8 @@
         }
       ],
       "props": {
-        "color": "Blue",
-        "forward_voltage": 2,
+        "color": "Green",
+        "forward_voltage": 2.1,
         "max_current_ma": 20,
         "title": "SPST"
       }
@@ -127,8 +127,8 @@
         }
       ],
       "props": {
-        "color": "Yellow",
-        "forward_voltage": 2,
+        "color": "White",
+        "forward_voltage": 3.3,
         "max_current_ma": 20,
         "title": "SPDT-A"
       }
@@ -168,8 +168,8 @@
         }
       ],
       "props": {
-        "color": "Red",
-        "forward_voltage": 2,
+        "color": "Yellow",
+        "forward_voltage": 2.1,
         "max_current_ma": 20,
         "title": "SPDT-B"
       }
@@ -249,8 +249,8 @@
         }
       ],
       "props": {
-        "color": "Blue",
-        "forward_voltage": 2,
+        "color": "White",
+        "forward_voltage": 3.3,
         "max_current_ma": 20,
         "title": "DPDT-P1-A"
       }
@@ -290,7 +290,7 @@
         }
       ],
       "props": {
-        "color": "Blue",
+        "color": "Orange",
         "forward_voltage": 2,
         "max_current_ma": 20,
         "title": "DPDT-P1-B"
@@ -331,8 +331,8 @@
         }
       ],
       "props": {
-        "color": "Red",
-        "forward_voltage": 2,
+        "color": "Yellow",
+        "forward_voltage": 2.1,
         "max_current_ma": 20,
         "title": "DPDT-P2-A"
       }
@@ -372,7 +372,7 @@
         }
       ],
       "props": {
-        "color": "Green",
+        "color": "Red",
         "forward_voltage": 2,
         "max_current_ma": 20,
         "title": "DPDT-P2-B"
@@ -465,7 +465,7 @@
         }
       ],
       "props": {
-        "color": "White",
+        "color": "Orange",
         "forward_voltage": 2,
         "max_current_ma": 20,
         "title": "3PDT-P1-A"
@@ -547,7 +547,7 @@
         }
       ],
       "props": {
-        "color": "Blue",
+        "color": "Red",
         "forward_voltage": 2,
         "max_current_ma": 20,
         "title": "3PDT-P2-A"
@@ -588,7 +588,7 @@
         }
       ],
       "props": {
-        "color": "White",
+        "color": "Orange",
         "forward_voltage": 2,
         "max_current_ma": 20,
         "title": "3PDT-P2-B"
@@ -629,8 +629,8 @@
         }
       ],
       "props": {
-        "color": "Red",
-        "forward_voltage": 2,
+        "color": "Yellow",
+        "forward_voltage": 2.1,
         "max_current_ma": 20,
         "title": "3PDT-P3-A"
       }
@@ -671,7 +671,7 @@
       ],
       "props": {
         "color": "Green",
-        "forward_voltage": 2,
+        "forward_voltage": 2.1,
         "max_current_ma": 20,
         "title": "3PDT-P3-B"
       }
@@ -695,7 +695,7 @@
       "color": "#000000"
     },
     {
-      "id": "WS0.6172443365977018",
+      "id": "WS0.6590301948947964",
       "r1": "rtp",
       "c1": 1,
       "r2": "sw:SW_SPST:0",
@@ -703,7 +703,7 @@
       "color": "#ff0000"
     },
     {
-      "id": "WS0.4437838242240961",
+      "id": "WS0.8872687820212106",
       "r1": "sw:SW_SPST:0",
       "c1": 1,
       "r2": 8,

@@ -100,7 +100,7 @@
       ],
       "props": {
         "color": "Yellow",
-        "forward_voltage": 2,
+        "forward_voltage": 2.1,
         "max_current_ma": 20,
         "title": "4PDT-P1-A"
       }
@@ -140,8 +140,8 @@
         }
       ],
       "props": {
-        "color": "Red",
-        "forward_voltage": 2,
+        "color": "Blue",
+        "forward_voltage": 3.3,
         "max_current_ma": 20,
         "title": "4PDT-P1-B"
       }
@@ -181,8 +181,8 @@
         }
       ],
       "props": {
-        "color": "Orange",
-        "forward_voltage": 2,
+        "color": "Blue",
+        "forward_voltage": 3.3,
         "max_current_ma": 20,
         "title": "4PDT-P2-A"
       }
@@ -222,8 +222,8 @@
         }
       ],
       "props": {
-        "color": "White",
-        "forward_voltage": 2,
+        "color": "Blue",
+        "forward_voltage": 3.3,
         "max_current_ma": 20,
         "title": "4PDT-P2-B"
       }
@@ -263,7 +263,7 @@
         }
       ],
       "props": {
-        "color": "White",
+        "color": "Orange",
         "forward_voltage": 2,
         "max_current_ma": 20,
         "title": "4PDT-P3-A"
@@ -304,8 +304,8 @@
         }
       ],
       "props": {
-        "color": "Blue",
-        "forward_voltage": 2,
+        "color": "Green",
+        "forward_voltage": 2.1,
         "max_current_ma": 20,
         "title": "4PDT-P3-B"
       }
@@ -345,8 +345,8 @@
         }
       ],
       "props": {
-        "color": "Blue",
-        "forward_voltage": 2,
+        "color": "White",
+        "forward_voltage": 3.3,
         "max_current_ma": 20,
         "title": "4PDT-P4-A"
       }
@@ -386,8 +386,8 @@
         }
       ],
       "props": {
-        "color": "White",
-        "forward_voltage": 2,
+        "color": "Green",
+        "forward_voltage": 2.1,
         "max_current_ma": 20,
         "title": "4PDT-P4-B"
       }
