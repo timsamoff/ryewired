@@ -785,13 +785,9 @@ const Board = (() => {
     for(let r=0;r<=9;r++){const y=L.rowY[r];const lbl=rowDisplayLabel(r);ctx.textAlign='right';ctx.fillText(lbl,ML-LABEL_PAD,y+3.5);ctx.textAlign='left';ctx.fillText(lbl,W-MR+LABEL_PAD,y+3.5);}
     ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';
     for(let col=0;col<COLS;col++){
-      // Labels ascend right-to-left (the 1-5 group sits at the right edge,
-      // up to 60 near the left, 3 unlabeled trailing holes at the far
-      // left) — the special "hole 1" edge label lives at the LAST column
-      // (COLS-1), and the every-5 markers are spaced 4 columns from that
-      // edge then every 5 after (matching real breadboard hole counting:
-      // 1,2,3,4,5 are 5 holes, so "5" is only 4 positions from "1").
-      if(col%5!==3 && col!==COLS-1) continue;
+      // Labels ascend right-to-left (hole 1 sits at the right edge, up to
+      // 63 at the left) — every column now gets its own number rather than
+      // only every-5 landmarks, per direct request for continuous numbering.
       const x=holeX(col);
       const displayNum = COLS - col;
       ctx.fillText(displayNum,x,L.rowY[5]-HOLE_PITCH/2-2);
