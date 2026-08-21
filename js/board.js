@@ -783,15 +783,33 @@ const Board = (() => {
     const L=_layout,W=boardWidth();
     ctx.font='10px IBM Plex Mono,monospace';ctx.fillStyle=c.label;
     for(let r=0;r<=9;r++){const y=L.rowY[r];const lbl=rowDisplayLabel(r);ctx.textAlign='right';ctx.fillText(lbl,ML-LABEL_PAD,y+3.5);ctx.textAlign='left';ctx.fillText(lbl,W-MR+LABEL_PAD,y+3.5);}
-    ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';
+    ctx.font='10px IBM Plex Mono,monospace';ctx.textAlign='center'; // same size as the row letters (was 8px)
+    // Vertically centered in the true gap between the nearest hole row's own
+    // VISIBLE edge and the colored rail band's own edge. An earlier version
+    // used `rowY[5]-HOLE_PITCH/2` as the hole row's "top edge", which is
+    // wrong — that's the midpoint toward the NEXT row, not the hole's own
+    // drawn boundary. drawMainHole's real hole radius is HOLE_R (plus its
+    // +0.5 shadow offset), so the hole's true visible edge is
+    // rowY-（HOLE_R+0.5), not rowY-HOLE_PITCH/2 — confirmed against a real
+    // pixel-measured screenshot (measured hole edge ~89.5 vs the old
+    // formula's assumed 84, a real ~5.5px error that visibly pulled the
+    // label toward the band). The +3 baseline correction (canvas fillText's
+    // default 'alphabetic' baseline sits below the glyph's visual center,
+    // not previously ctx.textBaseline='middle') was also re-measured
+    // directly (glyph center vs baseline-y passed) rather than reused
+    // as-is from the row-letter code, which is a different font weight/size
+    // pairing and isn't guaranteed to share the same correction.
+    const HOLE_EDGE=HOLE_R+0.5, BASELINE_CORRECTION=3;
+    const topLabelY=(L.railTopStripBot+(L.rowY[5]-HOLE_EDGE))/2+BASELINE_CORRECTION;
+    const botLabelY=(L.railBotStripTop+(L.rowY[0]+HOLE_EDGE))/2+BASELINE_CORRECTION;
     for(let col=0;col<COLS;col++){
       // Labels ascend right-to-left (hole 1 sits at the right edge, up to
       // 63 at the left) — every column now gets its own number rather than
       // only every-5 landmarks, per direct request for continuous numbering.
       const x=holeX(col);
       const displayNum = COLS - col;
-      ctx.fillText(displayNum,x,L.rowY[5]-HOLE_PITCH/2-2);
-      ctx.fillText(displayNum,x,L.rowY[0]+HOLE_PITCH/2+9);
+      ctx.fillText(displayNum,x,topLabelY);
+      ctx.fillText(displayNum,x,botLabelY);
     }
     for(let r=0;r<=9;r++) for(let col=0;col<COLS;col++) drawMainHole(r,col,c);
   }
