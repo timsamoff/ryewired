@@ -32,6 +32,13 @@ const Board = (() => {
   // switch's own body renders its real pins as the actual wire-snap points,
   // not board holes underneath it.
   const EXT_GAP_ABOVE  = 5;  // true empty gap between the board's bottom edge and the panel's top edge
+  // How far the panel's FILL (not its layout — panelTop/label position are
+  // untouched) extends upward, drawn behind the board so no seam or rounded
+  // corner shows at the top — same idea as workbench-strip.js's OVERLAP=16
+  // at the board's other edge. Generous margin past EXT_GAP_ABOVE (5) so
+  // the extension is safely tucked behind the board's own rounded bottom
+  // corners at every board width, not just barely covering the gap.
+  const EXT_EXTEND_UP = 24;
   const EXT_SLOT_ROWS  = 3;  // how many slot-rows tall the panel starts at (tune after seeing it, per direct instruction)
   const EXT_PANEL_PAD  = 12; // inner padding between the panel's rounded edge and the first/last slot
   const EXT_LABEL_H    = 20; // space reserved for the "External Switches" heading inside the panel
@@ -668,6 +675,11 @@ const Board = (() => {
     // appends to the end of _wires, and a canvas paints array entries in
     // order, so a later wire is always painted over an earlier one without
     // needing any separate z-index concept.
+    // Extension fill drawn FIRST (see its own comment) so the board's
+    // opaque surface, drawn right after, paints over the part that's meant
+    // to hide behind it. The label-only drawExternalSwitchPanel keeps its
+    // original position in this order, after components/wires.
+    drawExternalSwitchPanelExtension(c);
     drawBoardSurface(c); drawExternalSwitchPanel(c); drawComponents(c); drawWires(c);
     if(_paletteGhost) drawPaletteGhost(ghostX??_mouseX,ghostY??_mouseY,c);
     drawMeasurementReadout();
@@ -730,11 +742,35 @@ const Board = (() => {
   // read as "more board," not as a separate off-board area, which is the
   // whole point of a panel meant to represent point-to-point wiring to a
   // physically separate part.
+  // Draws ONLY the panel's fill, extended upward past its own panelTop so it
+  // continues behind the board canvas above it — same illusion as
+  // workbench-strip.js's OVERLAP trick at the board's TOP edge (draw taller
+  // than the visible area, let the neighboring opaque surface painted
+  // afterward cover the extension), just mirrored to the board's BOTTOM
+  // edge and achieved by DRAW ORDER instead of a separate canvas/negative
+  // margin, since the board and this panel share one canvas here. Must be
+  // called BEFORE drawBoardSurface (see render()) so the board's own
+  // opaque, rounded rect paints over this extension and hides the seam —
+  // calling it after would draw the extension ON TOP of the board instead.
+  // Square top corners (roundRectBottom, not roundRect) since that edge is
+  // now meant to disappear behind the board, not read as a rounded edge of
+  // its own — per direct instruction: no rounded corners or gap on top,
+  // matching the workbench strip's own top-of-board treatment.
+  function drawExternalSwitchPanelExtension(c){
+    const W=boardWidth(), EL=buildExtPanelLayout();
+    const extendedTop=EL.panelTop-EXT_EXTEND_UP;
+    ctx.fillStyle=c.extPanelBg;
+    Shapes.roundRectBottom(ctx,0,extendedTop,W,EL.panelH+EXT_EXTEND_UP,10);
+    ctx.fill();
+  }
+
+  // Label only — drawn in its own normal position (EL.panelTop, unchanged)
+  // AFTER drawComponents/drawWires in render()'s existing order, same as
+  // before this change. The panel's fill itself is now handled entirely by
+  // drawExternalSwitchPanelExtension above; this function no longer paints
+  // any background of its own.
   function drawExternalSwitchPanel(c){
     const W=boardWidth(), EL=buildExtPanelLayout();
-    ctx.fillStyle=c.extPanelBg;
-    Shapes.roundRect(ctx,0,EL.panelTop,W,EL.panelH,10);
-    ctx.fill();
     ctx.fillStyle=c.extPanelLabel; ctx.font='bold 9px IBM Plex Mono,monospace'; ctx.textAlign='center';
     ctx.fillText(I18n.t('app.board.externalSwitchesLabel'),W/2,EL.panelTop+14);
   }

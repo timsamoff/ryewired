@@ -18,6 +18,22 @@ const Shapes = (() => {
     ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
   }
 
+  // Square top corners, rounded bottom corners — the mirror of
+  // workbench-strip.js's own roundRectTop (which that module can't reuse
+  // from here directly, since it draws on a completely separate canvas/
+  // module, but the shape logic is the same idea flipped). Used by
+  // board.js's External Switches panel so its top edge can extend UP behind
+  // the board canvas (drawn afterward, painting over the extension) with no
+  // visible seam or rounded corner up there — the same illusion the
+  // workbench strip already uses at the board's TOP edge, just mirrored to
+  // the board's BOTTOM edge instead.
+  function roundRectBottom(ctx,x,y,w,h,r){
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w,y);
+    ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y);ctx.closePath();
+  }
+
   const BANDS=['#000','#8B4513','#f00','#f80','#ff0','#0a0','#00f','#808','#999','#fff'];
   // Standard resistor tolerance color-band code — brown=1%, red=2%,
   // gold=5%, silver=10%; 20% traditionally has no 4th band at all on a
@@ -426,7 +442,7 @@ const Shapes = (() => {
   }
 
   return {
-    roundRect, resBands,
+    roundRect, roundRectBottom, resBands,
     drawResistor, drawFilmCap, drawElectroCap, drawLED, drawPot,
     drawDiode, drawZener, drawOpamp, drawTransistor, drawSwitch, drawPower, drawSigGen, miniWave,
     drawDefault, drawBody, germCircleGeom
