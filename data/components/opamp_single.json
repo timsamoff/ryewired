@@ -1,0 +1,30 @@
+{
+  "id": "opamp_single",
+  "labelKey": "component.opamp_single.label",
+  "category": "ic",
+  "subcategory": "linear",
+  "symbol": "U",
+  "descriptionKey": "component.opamp_single.description",
+  "legs": 8,
+  "leg_span": 0,
+  "leg_labels": ["NC1", "IN-", "IN+", "VCC-", "NC2", "OUT", "VCC+", "NC3"],
+  "properties": [
+    { "key": "model", "labelKey": "component.opamp_single.model.label", "type": "select",
+      "options": ["LM741", "LM308"], "default": "LM741",
+      "hintKey": "component.opamp_single.model.hint" }
+  ],
+  "model_params": {
+    "LM741": { "aol": 200000, "output_swing_headroom": 1.5, "supply_min": 4, "supply_max": 30 },
+    "LM308": { "aol": 300000, "output_swing_headroom": 1.5, "supply_min": 5, "supply_max": 30 }
+  },
+  "behavior": { "type": "opamp_single" },
+  "failure_modes": {
+    "over_voltage": { "result": "burn", "messageKey": "component.opamp_single.failure.over_voltage" }
+  },
+  "visual": {
+    "body_color": "#1a1a1a",
+    "body_width": 60,
+    "body_height": 33,
+    "lead_length": 10
+  }
+}

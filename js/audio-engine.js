@@ -793,6 +793,16 @@ const AudioEngine = (() => {
           [inst.legs[5], inst.legs[6]], // unit 1: 2IN- -> 2OUT
         ];
       }
+      case 'opamp_single': {
+        // Same pattern as opamp_dual, but one real unit: legs per
+        // opamp_single.json are [NC1,IN-,IN+,VCC-,NC2,OUT,VCC+,NC3], so
+        // IN+/IN- are legs 2/1 and OUT is leg 5.
+        if (inst.legs.length < 8) return [];
+        return [
+          [inst.legs[2], inst.legs[5]], // IN+ -> OUT
+          [inst.legs[1], inst.legs[5]], // IN- -> OUT
+        ];
+      }
       case 'pt2399_delay': {
         // One hop, OP1-IN -> OP2-OUT: a real PT2399 pedal circuit's signal
         // enters at OP1's input (leg 9) and the delayed/dry-mixed result
@@ -1363,13 +1373,16 @@ const AudioEngine = (() => {
         pre.connect(sh); sh.connect(post);
         return { in: pre, out: post, nodes: [pre, sh, post] };
       }
-      case 'opamp_dual': {
+      case 'opamp_dual':
+      case 'opamp_single': {
         // Same net-gain-from-the-real-solve pattern as potentiometer/JFET/
         // MOSFET above — entryNet is whichever input (IN+ or IN-) the walk
         // actually matched, exitNet is that unit's OUT net, so netGain()
         // already returns the real solved gain (verified against the AC
         // solve in simulation.js) without needing to know inverting vs
-        // non-inverting here.
+        // non-inverting here. opamp_single shares this whole block with
+        // opamp_dual — the only real difference between the two is pinout
+        // (handled in signalLegPairs) and the model-name fallback below.
         const gain = netGain(entryNet, exitNet);
         // Real asymmetric rail distance, the same idea as a BJT's
         // setOutputSwing (real volts to each rail, not a symmetric guess),
@@ -1382,7 +1395,7 @@ const AudioEngine = (() => {
           ? Simulation.getVoltageAt(exitLeg.row, exitLeg.col) : null;
         const supplyV = (typeof WorkbenchStrip !== 'undefined')
           ? parseFloat(WorkbenchStrip.getPermanentState()?.power?.voltage) : NaN;
-        const mk = inst.props.model || 'JRC4558';
+        const mk = inst.props.model || (def.behavior.type === 'opamp_single' ? 'LM741' : 'JRC4558');
         const pm = def.model_params?.[mk] || {};
         // See simulation.js's matching split for why low/high headroom differ
         // (e.g. LM358 swings near ground but not near V+) — same fallback

@@ -317,6 +317,32 @@ const Simulation = (() => {
     Board.redraw();
   }
 
+  // Real per-unit pin-index map for the two op-amp package shapes this app
+  // models, keyed by leg array index (matches each component JSON's own
+  // leg_labels order). Shared by every op-amp call site (solveNetVoltages'
+  // opampEdges build, solveSmallSignal, solveAcNetwork) so there is exactly
+  // ONE place that knows which leg is which — this was a real, deliberate
+  // design decision, not an oversight: those three call sites already carry
+  // a near-identical block each for the dual-only case (a pattern this
+  // file's own comments call out as intentional, mirroring
+  // solveSmallSignal/solveAcNetwork's own "near-duplicate, not a refactor"
+  // relationship elsewhere), and duplicating unitDefs a 4th/5th time here
+  // for the single case would have made an already-recognized duplication
+  // pattern worse rather than following it consistently. Real pinouts:
+  // dual (JRC4558/TL072/LM358, opamp.json's leg_labels
+  // [1OUT,1IN-,1IN+,VCC-,2IN+,2IN-,2OUT,VCC+]) has two independent VCVS
+  // units; single (LM741/LM308, opamp_single.json's leg_labels
+  // [NC1,IN-,IN+,VCC-,NC2,OUT,VCC+,NC3], the real DIP-8 op-amp pinout pins
+  // 1-8) has exactly one — LM741 and LM308 are NOT pin-compatible with each
+  // other on pins 1/5/8 (offset-null vs compensation), but this app models
+  // neither offset trim nor frequency compensation at all, so those pins
+  // are correctly unused by BOTH real parts here, and the two share this
+  // one unitDefs entry safely.
+  function opampUnitDefs(behaviorType) {
+    if (behaviorType === 'opamp_single') return [ { unit: 0, outIdx: 5, mIdx: 1, pIdx: 2 } ];
+    return [ { unit: 0, outIdx: 0, mIdx: 1, pIdx: 2 }, { unit: 1, outIdx: 6, mIdx: 5, pIdx: 4 } ];
+  }
+
   // ── Component solver ─────────────────────────────────────────────────────────
   function solveComponent(inst, def, nets, netVoltage, placed, diodeCurrents, zenerCurrents, bjtCurrents, jfetCurrents, mosfetCurrents, opampStates) {
     const btype = def.behavior?.type;
@@ -327,11 +353,16 @@ const Simulation = (() => {
         inst._voltage = parseFloat(inst.props.voltage) || 9;
         break;
 
-      case 'opamp_dual': {
-        // Per-unit ['linear'|'sat_high'|'sat_low', ...], read by
+      case 'opamp_dual':
+      case 'opamp_single': {
+        // Per-unit ['linear'|'sat_high'|'sat_low', ...] for opamp_dual (2
+        // entries) or [state] for opamp_single (1 entry) — read by
         // audio-engine.js to pick the right small-signal/clip behavior per
         // unit — same "state set during the DC pass, read back later"
-        // pattern as _zenerState.
+        // pattern as _zenerState. This whole case is genuinely model-
+        // agnostic already: nothing here cares how many units the package
+        // has, only the model's own supply_max — see opampUnitDefs for
+        // where the real 1-vs-2-unit pinout difference actually lives.
         inst._opampState = opampStates?.get(inst) || null;
         // Supply over-voltage: the only failure mode that makes sense here,
         // since this app has no negative-rail concept (see opampEdges'
@@ -339,7 +370,7 @@ const Simulation = (() => {
         // voltage to exceed, only the chip's own rated max SINGLE supply
         // voltage (supply_max, already in volts in the component JSON,
         // unlike max_ic_ma elsewhere — no unit conversion needed here).
-        const mkV = inst.props.model || 'JRC4558';
+        const mkV = inst.props.model || (btype==='opamp_single' ? 'LM741' : 'JRC4558');
         const pmV = def.model_params?.[mkV] || {};
         const supplyMax = pmV.supply_max || 18;
         if ((_activeSupplyV ?? 0) > supplyMax) fail(inst, def, 'over_voltage');
@@ -875,19 +906,20 @@ const Simulation = (() => {
         const vdsSatM = 0.1; // volts — floor for Vds once fully into triode, same role as BJT's VCESAT_FALLBACK
         mosfetEdges.push({ inst, gateNet: gateNetM, sourceNet: sourceNetM, drainNet: drainNetM, vgsTh, k, vdsSat: vdsSatM });
 
-      } else if (btype === 'opamp_dual') {
-        // DIP-8 dual op-amp: legs (per opamp.json's leg_labels) are
-        // [1OUT, 1IN-, 1IN+, VCC-, 2IN+, 2IN-, 2OUT, VCC+] — the real JRC4558/
-        // TL072 pinout. Two independent VCVS units sharing one package, each
-        // gets its own opampEdges entry (own V+/V-/Vout nets, own relaxation
-        // state), since nothing about the ideal-op-amp model couples them
+      } else if (btype === 'opamp_dual' || btype === 'opamp_single') {
+        // DIP-8 op-amp, one or two independent VCVS units sharing one
+        // package (see opampUnitDefs for the real per-type pinout — dual is
+        // JRC4558/TL072/LM358's [1OUT,1IN-,1IN+,VCC-,2IN+,2IN-,2OUT,VCC+],
+        // single is LM741/LM308's real DIP-8 pinout). Each unit gets its own
+        // opampEdges entry (own V+/V-/Vout nets, own relaxation state),
+        // since nothing about the ideal-op-amp model couples multiple units
         // beyond sharing physical supply pins, which aren't part of the
         // signal stamp at all — this app has no negative-rail concept
         // anywhere (see the single-supply assumption baked into BJT/JFET/
         // MOSFET bias throughout), so VCC- is simply not used as a solver
         // node: the clamp uses ground (0V) and _activeSupplyV as the rails,
         // same convention as every other active device here.
-        const mk = inst.props.model || 'JRC4558';
+        const mk = inst.props.model || (btype==='opamp_single' ? 'LM741' : 'JRC4558');
         const pm = def.model_params?.[mk] || {};
         const aol = pm.aol || 100000;
         // Separate low/high headroom, not one symmetric value — a real op-amp's
@@ -896,14 +928,11 @@ const Simulation = (() => {
         // but still sit ~1.5V short of V+ (headroom_hi, ordinary NPN pull-up
         // headroom) — genuinely asymmetric, not a symmetric rail-to-rail part.
         // Each falls back to the single legacy output_swing_headroom field
-        // (then 1.5) so JRC4558/TL072 are unaffected by this split.
+        // (then 1.5) so JRC4558/TL072/LM741/LM308 are unaffected by this split.
         const headroomLo = pm.output_swing_headroom_lo ?? pm.output_swing_headroom ?? 1.5;
         const headroomHi = pm.output_swing_headroom_hi ?? pm.output_swing_headroom ?? 1.5;
         const railLo = 0, railHi = _activeSupplyV ?? 9;
-        const unitDefs = [
-          { unit: 0, outIdx: 0, mIdx: 1, pIdx: 2 },
-          { unit: 1, outIdx: 6, mIdx: 5, pIdx: 4 }
-        ];
+        const unitDefs = opampUnitDefs(btype);
         for (const { unit, outIdx, mIdx, pIdx } of unitDefs) {
           const voutNet = netOf(inst.legs[outIdx].row, inst.legs[outIdx].col);
           const vmNet   = netOf(inst.legs[mIdx].row, inst.legs[mIdx].col);
@@ -1909,8 +1938,8 @@ const Simulation = (() => {
         const dN = netOf(L[dIdx].row, L[dIdx].col);
         vccs.push({ p: gN, q: sN, src: dN, sink: sN, gm });
 
-      } else if (bt === 'opamp_dual' && L.length >= 8) {
-        // An ideal op-amp's gain (Aol, ~1e5-2e5) swamps any transistor gm in
+      } else if ((bt === 'opamp_dual' || bt === 'opamp_single') && L.length >= 8) {
+        // An ideal op-amp's gain (Aol, ~1e5-3e5) swamps any transistor gm in
         // this network, so it CANNOT be modeled as a vccs-style gm-controlled
         // current source the way a BJT/JFET/MOSFET is above — that shape
         // assumes the controlled quantity is a current injected against the
@@ -1918,7 +1947,8 @@ const Simulation = (() => {
         // (effectively) zero output impedance. It needs the same branch-
         // current MNA extension used in solveNetVoltages' stampOpamp: see
         // opampBranches below, stamped after indexing exactly like the DC
-        // solve's opampEdges are appended after netCount.
+        // solve's opampEdges are appended after netCount. opampUnitDefs
+        // gives the real per-package-type pin mapping (1 or 2 units).
         //
         // A unit saturated in the DC operating point contributes NOTHING to
         // small-signal gain — its output is pinned to a fixed rail-adjacent
@@ -1928,11 +1958,11 @@ const Simulation = (() => {
         // net still exists (from other edges touching it) but sees no gm/Aol
         // contribution, matching a real saturated op-amp's near-zero
         // incremental gain right at the rail.
-        const mk = inst.props.model || 'JRC4558';
+        const mk = inst.props.model || (bt==='opamp_single' ? 'LM741' : 'JRC4558');
         const pm = def.model_params?.[mk] || {};
         const aol = pm.aol || 100000;
         const states = inst._opampState || [null, null];
-        const unitDefs = [ { unit:0, outIdx:0, mIdx:1, pIdx:2 }, { unit:1, outIdx:6, mIdx:5, pIdx:4 } ];
+        const unitDefs = opampUnitDefs(bt);
         for (const { unit, outIdx, mIdx, pIdx } of unitDefs) {
           if (states[unit] && states[unit] !== 'linear') continue; // saturated: no small-signal contribution
           const voutN = netOf(L[outIdx].row, L[outIdx].col);
@@ -2210,17 +2240,18 @@ const Simulation = (() => {
         const dN = netOf(L[dIdx].row, L[dIdx].col);
         vccs.push({ p: gN, q: sN, src: dN, sink: sN, gm });
 
-      } else if (bt === 'opamp_dual' && L.length >= 8) {
-        // Same reasoning as solveSmallSignal's opamp_dual case: an ideal
+      } else if ((bt === 'opamp_dual' || bt === 'opamp_single') && L.length >= 8) {
+        // Same reasoning as solveSmallSignal's opamp case above: an ideal
         // op-amp needs the branch-current MNA extension, not the vccs
         // gm-current shape, and a unit saturated in the DC operating point
         // (per _opampState, set by the DC pass) contributes no small-signal
-        // gain at all here either.
-        const mk = inst.props.model || 'JRC4558';
+        // gain at all here either. opampUnitDefs gives the real per-
+        // package-type pin mapping.
+        const mk = inst.props.model || (bt==='opamp_single' ? 'LM741' : 'JRC4558');
         const pm = def.model_params?.[mk] || {};
         const aol = pm.aol || 100000;
         const states = inst._opampState || [null, null];
-        const unitDefs = [ { unit:0, outIdx:0, mIdx:1, pIdx:2 }, { unit:1, outIdx:6, mIdx:5, pIdx:4 } ];
+        const unitDefs = opampUnitDefs(bt);
         for (const { unit, outIdx, mIdx, pIdx } of unitDefs) {
           if (states[unit] && states[unit] !== 'linear') continue;
           const voutN = netOf(L[outIdx].row, L[outIdx].col);

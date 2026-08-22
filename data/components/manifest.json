@@ -4,6 +4,7 @@
   "diode.json",
   "led.json",
   "opamp.json",
+  "opamp_single.json",
   "potentiometer.json",
   "power_supply.json",
   "pt2399.json",
